@@ -37,7 +37,7 @@ interface FormState {
   bairro: string; cidade: string; uf: string;
   tem_responsavel: boolean;
   responsavel_nome: string; responsavel_telefone: string; responsavel_email: string;
-  whatsapp_notificacoes: boolean; observacoes: string;
+  whatsapp_notificacoes: boolean; observacoes: string; objetivo: string;
 }
 
 const initial: FormState = {
@@ -46,8 +46,18 @@ const initial: FormState = {
   cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
   tem_responsavel: false,
   responsavel_nome: "", responsavel_telefone: "", responsavel_email: "",
-  whatsapp_notificacoes: true, observacoes: "",
+  whatsapp_notificacoes: true, observacoes: "", objetivo: "",
 };
+
+const OBJETIVOS = [
+  "Emagrecimento",
+  "Hipertrofia / Ganho de massa",
+  "Condicionamento físico",
+  "Saúde e bem-estar",
+  "Reabilitação",
+  "Performance esportiva",
+  "Outro",
+];
 
 // ── sub-componente de campo ─────────────────────────────────
 const lbl = "block text-xs font-semibold mb-1.5 text-primary";
@@ -158,6 +168,7 @@ export default function AlunoFormPage() {
           responsavel_email:    (d.responsavel_email as string) ?? "",
           whatsapp_notificacoes: Boolean(d.whatsapp_notificacoes ?? true),
           observacoes:          (d.observacoes as string) ?? "",
+          objetivo:             (d.objetivo as string) ?? "",
         });
 
         const rawExtras = d.contatos_extras as { type: string; value: string }[] | null;
@@ -224,6 +235,7 @@ export default function AlunoFormPage() {
       contatos_extras:        extras.filter(e => e.value.trim()) as unknown as import("@/integrations/supabase/types").Json,
       whatsapp_notificacoes:  form.whatsapp_notificacoes,
       observacoes:            form.observacoes || null,
+      objetivo:               form.objetivo || null,
     };
 
     const { error: dbError } = isEdit
@@ -317,6 +329,14 @@ export default function AlunoFormPage() {
                     <option value="ativo">Ativo</option>
                     <option value="inativo">Inativo</option>
                     <option value="cancelado">Cancelado</option>
+                  </select>
+                </Field>
+
+                <Field label="Objetivo">
+                  <select className={sel} value={form.objetivo}
+                    onChange={e => set("objetivo", e.target.value)}>
+                    <option value="">Selecionar</option>
+                    {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </Field>
               </div>

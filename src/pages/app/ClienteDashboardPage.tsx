@@ -22,6 +22,7 @@ interface StudentDetail {
   email: string | null;
   foto_url: string | null;
   observacoes: string | null;
+  objetivo: string | null;
   cidade: string | null;
   uf: string | null;
   created_at: string;
@@ -107,7 +108,7 @@ export default function ClienteDashboardPage() {
     async function load() {
       const { data } = await supabase
         .from("students")
-        .select("id, nome_completo, cpf, data_nascimento, sexo, status, telefone, email, foto_url, observacoes, cidade, uf, created_at")
+        .select("id, nome_completo, cpf, data_nascimento, sexo, status, telefone, email, foto_url, observacoes, objetivo, cidade, uf, created_at")
         .eq("id", id!)
         .eq("contractor_id", user!.contractorId!)
         .maybeSingle();
@@ -183,12 +184,17 @@ export default function ClienteDashboardPage() {
                   {STATUS_LABEL[student.status]}
                 </span>
               </div>
-              <p className="text-sm text-gray-500 mb-3">
+              <p className="text-sm text-gray-500 mb-2">
                 {age !== null ? `${age} anos` : ""}
                 {age !== null && student.sexo ? ", " : ""}
                 {student.sexo ? SEX_LABEL[student.sexo] : ""}
                 {!age && !student.sexo && "—"}
               </p>
+              {student.objetivo && (
+                <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary mb-3">
+                  🎯 {student.objetivo}
+                </span>
+              )}
 
               {/* Action buttons */}
               <div className="flex flex-wrap items-center gap-2">

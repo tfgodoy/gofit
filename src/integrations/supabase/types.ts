@@ -192,6 +192,7 @@ export interface Database {
           whatsapp_notificacoes: boolean;
           observacoes: string | null;
           foto_url: string | null;
+          objetivo: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -220,6 +221,7 @@ export interface Database {
           whatsapp_notificacoes?: boolean;
           observacoes?: string | null;
           foto_url?: string | null;
+          objetivo?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -248,6 +250,7 @@ export interface Database {
           whatsapp_notificacoes?: boolean;
           observacoes?: string | null;
           foto_url?: string | null;
+          objetivo?: string | null;
           created_at?: string;
           updated_at?: string;
         };

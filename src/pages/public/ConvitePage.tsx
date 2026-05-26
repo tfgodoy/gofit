@@ -226,7 +226,8 @@ export default function ConvitePage() {
         responsavel_telefone:isResp ? (form.telefone.replace(/\D/g, "") || null) : null,
         responsavel_email:   isResp ? (form.email.trim() || null)             : null,
         status:              "lead" as const,
-        observacoes:         form.objetivo ? `Objetivo: ${form.objetivo}` : null,
+        objetivo:            form.objetivo || null,
+        observacoes:         null,
       }])
       .select("id")
       .single();
