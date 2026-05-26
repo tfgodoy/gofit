@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
@@ -99,7 +99,75 @@ export default function AlunoFormPage() {
   const [form, setForm] = useState<FormState>(initial);
   const [extras, setExtras] = useState<ExtraContact[]>([{ type: "instagram", value: "" }]);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingData, setLoadingData] = useState(isEdit);
   const [error, setError] = useState("");
+
+  // Load existing student data when editing
+  useEffect(() => {
+    if (!id || !user?.contractorId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("students")
+        .select("*")
+        .eq("id", id)
+        .eq("contractor_id", user.contractorId!)
+        .maybeSingle();
+
+      if (data) {
+        const d = data as Record<string, unknown>;
+        const maskPhone = (v: string | null) => {
+          if (!v) return "";
+          const n = v.replace(/\D/g, "").slice(0, 11);
+          if (n.length <= 2) return n;
+          if (n.length <= 7) return `(${n.slice(0,2)}) ${n.slice(2)}`;
+          if (n.length <= 10) return `(${n.slice(0,2)}) ${n.slice(2,6)}-${n.slice(6)}`;
+          return `(${n.slice(0,2)}) ${n.slice(2,7)}-${n.slice(7)}`;
+        };
+        const maskCPF = (v: string | null) => {
+          if (!v) return "";
+          const n = v.replace(/\D/g, "").slice(0, 11);
+          if (n.length <= 3) return n;
+          if (n.length <= 6) return `${n.slice(0,3)}.${n.slice(3)}`;
+          if (n.length <= 9) return `${n.slice(0,3)}.${n.slice(3,6)}.${n.slice(6)}`;
+          return `${n.slice(0,3)}.${n.slice(3,6)}.${n.slice(6,9)}-${n.slice(9)}`;
+        };
+        const maskCEP = (v: string | null) => {
+          if (!v) return "";
+          const n = v.replace(/\D/g, "").slice(0, 8);
+          return n.length <= 5 ? n : `${n.slice(0,5)}-${n.slice(5)}`;
+        };
+
+        setForm({
+          nome_completo:        (d.nome_completo as string) ?? "",
+          cpf:                  maskCPF(d.cpf as string | null),
+          data_nascimento:      (d.data_nascimento as string) ?? "",
+          sexo:                 (d.sexo as string) ?? "",
+          status:               (d.status as string) ?? "lead",
+          telefone:             maskPhone(d.telefone as string | null),
+          email:                (d.email as string) ?? "",
+          cep:                  maskCEP(d.cep as string | null),
+          logradouro:           (d.logradouro as string) ?? "",
+          numero:               (d.numero as string) ?? "",
+          complemento:          (d.complemento as string) ?? "",
+          bairro:               (d.bairro as string) ?? "",
+          cidade:               (d.cidade as string) ?? "",
+          uf:                   (d.uf as string) ?? "",
+          tem_responsavel:      Boolean(d.responsavel_nome),
+          responsavel_nome:     (d.responsavel_nome as string) ?? "",
+          responsavel_telefone: maskPhone(d.responsavel_telefone as string | null),
+          responsavel_email:    (d.responsavel_email as string) ?? "",
+          whatsapp_notificacoes: Boolean(d.whatsapp_notificacoes ?? true),
+          observacoes:          (d.observacoes as string) ?? "",
+        });
+
+        const rawExtras = d.contatos_extras as { type: string; value: string }[] | null;
+        if (Array.isArray(rawExtras) && rawExtras.length > 0) {
+          setExtras(rawExtras as ExtraContact[]);
+        }
+      }
+      setLoadingData(false);
+    })();
+  }, [id, user]);
 
   function set(field: keyof FormState, value: string | boolean) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -170,6 +238,16 @@ export default function AlunoFormPage() {
     navigate("/app/clientes");
   }
 
+  if (loadingData) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="w-7 h-7 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="p-8 max-w-4xl">
@@ -182,10 +260,10 @@ export default function AlunoFormPage() {
             <ArrowLeft className="w-4 h-4" /> Voltar para lista
           </Link>
           <h1 className="text-2xl font-extrabold text-gray-900">
-            {isEdit ? "Editar aluno" : "Novo Cadastro"}
+            {isEdit ? "Editar cliente" : "Novo Cliente"}
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            Preencha os dados para cadastrar um novo aluno ou lead
+            {isEdit ? "Atualize os dados do cliente" : "Preencha os dados para cadastrar um novo cliente ou lead"}
           </p>
         </div>
 
