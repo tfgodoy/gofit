@@ -6,10 +6,166 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type StaffRole =
+  | "teacher"
+  | "receptionist"
+  | "sales"
+  | "nutritionist"
+  | "physiotherapist"
+  | "evaluator";
+
+export type ContractorStatus = "active" | "inactive" | "suspended" | "trial";
+export type ContractorPlan = "trial" | "starter" | "profissional" | "empresarial";
+
 export interface Database {
   public: {
     Tables: {
-      [_ in never]: never;
+      contractors: {
+        Row: {
+          id: string;
+          razao_social: string;
+          nome_fantasia: string;
+          cnpj: string | null;
+          email: string;
+          fone: string | null;
+          fuso_horario: string;
+          site: string | null;
+          instagram: string | null;
+          cep: string | null;
+          logradouro: string | null;
+          numero: string | null;
+          bairro: string | null;
+          complemento: string | null;
+          cidade: string | null;
+          uf: string | null;
+          status: ContractorStatus;
+          plan: ContractorPlan;
+          trial_ends_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          razao_social: string;
+          nome_fantasia: string;
+          cnpj?: string | null;
+          email: string;
+          fone?: string | null;
+          fuso_horario?: string;
+          site?: string | null;
+          instagram?: string | null;
+          cep?: string | null;
+          logradouro?: string | null;
+          numero?: string | null;
+          bairro?: string | null;
+          complemento?: string | null;
+          cidade?: string | null;
+          uf?: string | null;
+          status?: ContractorStatus;
+          plan?: ContractorPlan;
+          trial_ends_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          razao_social?: string;
+          nome_fantasia?: string;
+          cnpj?: string | null;
+          email?: string;
+          fone?: string | null;
+          fuso_horario?: string;
+          site?: string | null;
+          instagram?: string | null;
+          cep?: string | null;
+          logradouro?: string | null;
+          numero?: string | null;
+          bairro?: string | null;
+          complemento?: string | null;
+          cidade?: string | null;
+          uf?: string | null;
+          status?: ContractorStatus;
+          plan?: ContractorPlan;
+          trial_ends_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      contractor_auth: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          password_hash: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          password_hash: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          password_hash?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contractor_auth_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      staff: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          name: string;
+          email: string;
+          role: StaffRole;
+          password_hash: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          name: string;
+          email: string;
+          role: StaffRole;
+          password_hash: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          name?: string;
+          email?: string;
+          role?: StaffRole;
+          password_hash?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -18,7 +174,7 @@ export interface Database {
       [_ in never]: never;
     };
     Enums: {
-      [_ in never]: never;
+      staff_role: StaffRole;
     };
     CompositeTypes: {
       [_ in never]: never;
