@@ -53,16 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {};
     }
 
-    const cnpjOrEmail = credential.replace(/\D/g, "").length === 14
-      ? `cnpj.eq.${credential.replace(/\D/g, "")}`
-      : `email.eq.${credential}`;
-
-    const { data: contractor, error: contractorError } = await supabase
+    const isCNPJ = credential.replace(/\D/g, "").length === 14;
+    const query = supabase
       .from("contractors")
       .select("id, razao_social, email, cnpj, status")
-      .or(cnpjOrEmail)
-      .eq("status", "active")
-      .single();
+      .eq("status", "active");
+
+    const { data: contractor, error: contractorError } = isCNPJ
+      ? await query.eq("cnpj", credential.replace(/\D/g, "")).maybeSingle()
+      : await query.eq("email", credential).maybeSingle();
 
     if (contractorError || !contractor) {
       return { error: "Credenciais inválidas ou empresa não encontrada." };

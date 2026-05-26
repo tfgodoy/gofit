@@ -166,6 +166,143 @@ export interface Database {
           }
         ];
       };
+      students: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          nome_completo: string;
+          cpf: string | null;
+          data_nascimento: string | null;
+          sexo: "masculino" | "feminino" | "outro" | null;
+          status: "lead" | "ativo" | "inativo" | "cancelado";
+          telefone: string | null;
+          email: string | null;
+          cep: string | null;
+          logradouro: string | null;
+          numero: string | null;
+          complemento: string | null;
+          bairro: string | null;
+          cidade: string | null;
+          uf: string | null;
+          responsavel_nome: string | null;
+          responsavel_telefone: string | null;
+          responsavel_email: string | null;
+          staff_id: string | null;
+          contatos_extras: Json;
+          whatsapp_notificacoes: boolean;
+          observacoes: string | null;
+          foto_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          nome_completo: string;
+          cpf?: string | null;
+          data_nascimento?: string | null;
+          sexo?: "masculino" | "feminino" | "outro" | null;
+          status?: "lead" | "ativo" | "inativo" | "cancelado";
+          telefone?: string | null;
+          email?: string | null;
+          cep?: string | null;
+          logradouro?: string | null;
+          numero?: string | null;
+          complemento?: string | null;
+          bairro?: string | null;
+          cidade?: string | null;
+          uf?: string | null;
+          responsavel_nome?: string | null;
+          responsavel_telefone?: string | null;
+          responsavel_email?: string | null;
+          staff_id?: string | null;
+          contatos_extras?: Json;
+          whatsapp_notificacoes?: boolean;
+          observacoes?: string | null;
+          foto_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          nome_completo?: string;
+          cpf?: string | null;
+          data_nascimento?: string | null;
+          sexo?: "masculino" | "feminino" | "outro" | null;
+          status?: "lead" | "ativo" | "inativo" | "cancelado";
+          telefone?: string | null;
+          email?: string | null;
+          cep?: string | null;
+          logradouro?: string | null;
+          numero?: string | null;
+          complemento?: string | null;
+          bairro?: string | null;
+          cidade?: string | null;
+          uf?: string | null;
+          responsavel_nome?: string | null;
+          responsavel_telefone?: string | null;
+          responsavel_email?: string | null;
+          staff_id?: string | null;
+          contatos_extras?: Json;
+          whatsapp_notificacoes?: boolean;
+          observacoes?: string | null;
+          foto_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "students_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      invites: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          email: string | null;
+          telefone: string | null;
+          nome: string | null;
+          status: "pending" | "used" | "expired";
+          student_id: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          email?: string | null;
+          telefone?: string | null;
+          nome?: string | null;
+          status?: "pending" | "used" | "expired";
+          student_id?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          email?: string | null;
+          telefone?: string | null;
+          nome?: string | null;
+          status?: "pending" | "used" | "expired";
+          student_id?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invites_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
