@@ -39,8 +39,22 @@ export default function InviteModal({ onClose }: Props) {
   }
 
   function handleWhatsApp() {
+    const empresa = user?.contractorName ?? "nossa academia";
     const msg = encodeURIComponent(
-      `Você recebeu um convite especial! 🎉\n\nAcesse o link abaixo para fazer seu cadastro:\n${inviteLink}\n\nO link expira em 7 dias.`
+`🏆 *Seu convite exclusivo chegou!*
+
+Você foi selecionado(a) para fazer parte de algo incrível. *${empresa}* tem uma oportunidade especial esperando por você! 💎
+
+✅ Acesso exclusivo por convite
+✅ Cadastro rápido e sem complicação
+✅ Sua transformação começa AGORA
+
+👉 *Acesse seu link exclusivo:*
+${inviteLink}
+
+⚠️ _Este link é pessoal e expira em 7 dias. Não perca!_
+
+Te esperamos! Vamos juntos nessa jornada 🚀💪`
     );
     window.open(`https://wa.me/?text=${msg}`, "_blank");
   }
