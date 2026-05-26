@@ -167,7 +167,7 @@ export default function AlunoFormPage() {
       setSubmitting(false);
       return;
     }
-    navigate("/app/alunos");
+    navigate("/app/clientes");
   }
 
   return (
@@ -176,7 +176,7 @@ export default function AlunoFormPage() {
         {/* Header */}
         <div className="mb-6">
           <Link
-            to="/app/alunos"
+            to="/app/clientes"
             className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary transition-colors mb-4"
           >
             <ArrowLeft className="w-4 h-4" /> Voltar para lista
@@ -406,7 +406,7 @@ export default function AlunoFormPage() {
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 mt-6">
             <Link
-              to="/app/alunos"
+              to="/app/clientes"
               className="px-6 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               Cancelar

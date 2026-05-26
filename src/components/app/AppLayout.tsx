@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 
 const navItems = [
   { icon: BarChart2,     label: "Dashboard",    to: "/app/dashboard" },
-  { icon: Users,         label: "Alunos",        to: "/app/alunos" },
+  { icon: Users,         label: "Clientes",      to: "/app/clientes" },
   { icon: Calendar,      label: "Agendamentos",  to: "/app/agenda" },
   { icon: ClipboardList, label: "Avaliações",    to: "/app/avaliacoes" },
   { icon: Activity,      label: "Treinos",       to: "/app/treinos" },

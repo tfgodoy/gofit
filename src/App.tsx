@@ -11,6 +11,7 @@ import OwnerDashboard         from "@/pages/OwnerDashboard";
 import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
+import ClienteDashboardPage   from "@/pages/app/ClienteDashboardPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 
 const queryClient = new QueryClient();
@@ -41,9 +42,10 @@ export default function App() {
 
             {/* App — empresa contratante */}
             <Route path="/app/dashboard" element={<AppGuard><ContractorDashboard /></AppGuard>} />
-            <Route path="/app/alunos"    element={<AppGuard><AlunosPage /></AppGuard>} />
-            <Route path="/app/alunos/novo" element={<AppGuard><AlunoFormPage /></AppGuard>} />
-            <Route path="/app/alunos/:id"  element={<AppGuard><AlunoFormPage /></AppGuard>} />
+            <Route path="/app/clientes"                    element={<AppGuard><AlunosPage /></AppGuard>} />
+            <Route path="/app/clientes/novo"               element={<AppGuard><AlunoFormPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/cadastro"       element={<AppGuard><AlunoFormPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
