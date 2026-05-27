@@ -101,8 +101,10 @@ const mainNav: NavItem[] = [
     icon: Dumbbell, label: "Treino", to: "/app/treinos",
     iconColor: "text-red-400",
     children: [
-      { icon: ClipboardList, label: "Fichas de treino", to: "/app/treinos/fichas",     iconColor: "text-red-400" },
-      { icon: Dumbbell,      label: "Exercícios",        to: "/app/treinos/exercicios", iconColor: "text-red-400" },
+      { icon: Dumbbell,      label: "Exercícios",          to: "/app/treinos/exercicios", iconColor: "text-red-400" },
+      { icon: ClipboardList, label: "Grupos de exercícios", to: "/app/treinos/grupos",     iconColor: "text-red-400" },
+      { icon: CalendarCheck, label: "Sessões",              to: "/app/treinos/sessoes",    iconColor: "text-red-400" },
+      { icon: FileText,      label: "Treinos",              to: "/app/treinos/treinos",    iconColor: "text-red-400" },
     ],
   },
   { icon: Zap,      label: "WOD",       to: "/app/wod",       iconColor: "text-gray-600" },

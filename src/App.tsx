@@ -13,6 +13,8 @@ import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
 import ClienteDashboardPage   from "@/pages/app/ClienteDashboardPage";
 import PlaceholderPage        from "@/pages/app/PlaceholderPage";
+import WodPage                from "@/pages/app/WodPage";
+import RelatoriosPage         from "@/pages/app/RelatoriosPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 
 const queryClient = new QueryClient();
@@ -53,8 +55,9 @@ export default function App() {
             <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
             <Route path="/app/estoque/*"         element={<AppGuard><PlaceholderPage title="Estoque" /></AppGuard>} />
             <Route path="/app/treinos/*"         element={<AppGuard><PlaceholderPage title="Treino" /></AppGuard>} />
-            <Route path="/app/wod"               element={<AppGuard><PlaceholderPage title="WOD" /></AppGuard>} />
-            <Route path="/app/relatorios"        element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
+            <Route path="/app/wod"               element={<AppGuard><WodPage /></AppGuard>} />
+            <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
+            <Route path="/app/relatorios/*"      element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
             <Route path="/app/administrativo/*"  element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />
