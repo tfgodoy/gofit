@@ -7,6 +7,7 @@ import {
   MoreVertical, X, Sparkles, Users, BookOpen, Wand2,
   Trash2, Copy, Eye, Mail, Link2, Printer,
   DollarSign, Coins, CalendarDays, ScrollText, Gift, FlaskConical, FileText, MessageSquare,
+  UploadCloud,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -1236,14 +1237,318 @@ function TreinosTab({ studentId, studentName, contractorId }: {
   );
 }
 
+/* ── Validade options ─────────────────────────────────────── */
+
+const VALIDADE_OPTS: { label: string; meses: number | null }[] = [
+  { label: "Sem validade", meses: null },
+  { label: "1 mês",        meses: 1   },
+  { label: "3 meses",      meses: 3   },
+  { label: "6 meses",      meses: 6   },
+  { label: "12 meses",     meses: 12  },
+  { label: "24 meses",     meses: 24  },
+];
+
+/* ── Documento Modal ──────────────────────────────────────── */
+
+function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
+  studentId:    string;
+  contractorId: string;
+  onClose:  () => void;
+  onSaved:  () => void;
+}) {
+  const [titulo,   setTitulo]   = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [file,     setFile]     = useState<File | null>(null);
+  const [saving,   setSaving]   = useState(false);
+
+  async function handleSave() {
+    if (!titulo.trim()) return;
+    setSaving(true);
+
+    let arquivo_url:  string | null = null;
+    let arquivo_nome: string | null = null;
+
+    if (file) {
+      const ext  = file.name.split(".").pop() ?? "bin";
+      const path = `documents/${contractorId}/${studentId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("student-files").upload(path, file);
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from("student-files").getPublicUrl(path);
+        arquivo_url  = urlData.publicUrl;
+        arquivo_nome = file.name;
+      }
+    }
+
+    const { error } = await supabase.from("student_documents").insert({
+      contractor_id: contractorId,
+      student_id:    studentId,
+      titulo:        titulo.trim(),
+      descricao:     descricao.trim() || null,
+      arquivo_url,
+      arquivo_nome,
+    });
+
+    setSaving(false);
+    if (error) { toast.error("Erro ao salvar documento."); return; }
+    toast.success("Documento salvo!");
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-800">Cadastrar documento</h2>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Título <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+              placeholder="Nome do documento"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Descrição</label>
+            <textarea
+              value={descricao}
+              onChange={e => setDescricao(e.target.value)}
+              rows={3}
+              placeholder="Descrição opcional"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Arquivo</label>
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center space-y-2">
+              {file ? (
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-left">
+                  <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                  <button onClick={() => setFile(null)} className="ml-2 text-gray-400 hover:text-red-500 flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Nenhum documento adicionado</p>
+              )}
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary border border-primary rounded-lg px-4 py-1.5 hover:bg-primary/5 transition-colors">
+                <UploadCloud className="w-3.5 h-3.5" />
+                ADICIONAR DOCUMENTO
+                <input type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:text-gray-700 px-4 py-2">
+            CANCELAR
+          </button>
+          <button
+            disabled={!titulo.trim() || saving}
+            onClick={handleSave}
+            className="px-5 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            {saving ? "Salvando..." : "SALVAR"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Exame Modal ──────────────────────────────────────────── */
+
+function ExameModal({ studentId, contractorId, onClose, onSaved }: {
+  studentId:    string;
+  contractorId: string;
+  onClose:  () => void;
+  onSaved:  () => void;
+}) {
+  const [dataExame,     setDataExame]     = useState("");
+  const [validadeMeses, setValidadeMeses] = useState<number | null>(null);
+  const [dataValidade,  setDataValidade]  = useState("");
+  const [medicoNome,    setMedicoNome]    = useState("");
+  const [crm,           setCrm]           = useState("");
+  const [file,          setFile]          = useState<File | null>(null);
+  const [saving,        setSaving]        = useState(false);
+
+  useEffect(() => {
+    if (!dataExame || validadeMeses === null) return;
+    const d = new Date(dataExame);
+    d.setMonth(d.getMonth() + validadeMeses);
+    setDataValidade(d.toISOString().split("T")[0]);
+  }, [dataExame, validadeMeses]);
+
+  async function handleSave() {
+    setSaving(true);
+
+    let arquivo_url:  string | null = null;
+    let arquivo_nome: string | null = null;
+
+    if (file) {
+      const ext  = file.name.split(".").pop() ?? "bin";
+      const path = `exams/${contractorId}/${studentId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("student-files").upload(path, file);
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from("student-files").getPublicUrl(path);
+        arquivo_url  = urlData.publicUrl;
+        arquivo_nome = file.name;
+      }
+    }
+
+    const { error } = await supabase.from("student_exams").insert({
+      contractor_id: contractorId,
+      student_id:    studentId,
+      data_exame:    dataExame    || null,
+      validade_meses: validadeMeses,
+      data_validade: dataValidade || null,
+      medico_nome:   medicoNome.trim() || null,
+      crm:           crm.trim()        || null,
+      arquivo_url,
+      arquivo_nome,
+    });
+
+    setSaving(false);
+    if (error) { toast.error("Erro ao salvar exame."); return; }
+    toast.success("Exame salvo!");
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-800">Adicionar exame</h2>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Data do exame</label>
+              <input
+                type="date"
+                value={dataExame}
+                onChange={e => setDataExame(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Validade</label>
+              <select
+                value={validadeMeses ?? ""}
+                onChange={e => setValidadeMeses(e.target.value === "" ? null : Number(e.target.value))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+              >
+                {VALIDADE_OPTS.map(o => (
+                  <option key={String(o.meses)} value={o.meses ?? ""}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Data de validade</label>
+            <input
+              type="date"
+              value={dataValidade}
+              onChange={e => setDataValidade(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Nome do médico</label>
+              <input
+                type="text"
+                value={medicoNome}
+                onChange={e => setMedicoNome(e.target.value)}
+                placeholder="Dr. Nome"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">CRM</label>
+              <input
+                type="text"
+                value={crm}
+                onChange={e => setCrm(e.target.value)}
+                placeholder="000000"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Arquivo</label>
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center space-y-2">
+              {file ? (
+                <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-left">
+                  <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                  <button onClick={() => setFile(null)} className="ml-2 text-gray-400 hover:text-red-500 flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Nenhum exame adicionado</p>
+              )}
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary border border-primary rounded-lg px-4 py-1.5 hover:bg-primary/5 transition-colors">
+                <UploadCloud className="w-3.5 h-3.5" />
+                ADICIONAR EXAME
+                <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:text-gray-700 px-4 py-2">
+            CANCELAR
+          </button>
+          <button
+            disabled={saving}
+            onClick={handleSave}
+            className="px-5 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            {saving ? "Salvando..." : "SALVAR"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Page ────────────────────────────────────────────── */
 
 export default function ClienteDashboardPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [student, setStudent] = useState<StudentDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("Resumo");
+  const [student,    setStudent]    = useState<StudentDetail | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [activeTab,  setActiveTab]  = useState<Tab>("Resumo");
+  const [docModal,   setDocModal]   = useState(false);
+  const [exameModal, setExameModal] = useState(false);
+  const [documentos, setDocumentos] = useState<any[]>([]);
+  const [exames,     setExames]     = useState<any[]>([]);
 
   useEffect(() => {
     if (!id || !user?.contractorId) return;
@@ -1259,6 +1564,20 @@ export default function ClienteDashboardPage() {
     }
     load();
   }, [id, user]);
+
+  const loadResumo = useCallback(async () => {
+    if (!id || !user?.contractorId) return;
+    const [{ data: docs }, { data: exms }] = await Promise.all([
+      supabase.from("student_documents").select("*").eq("student_id", id).eq("contractor_id", user.contractorId).order("created_at", { ascending: false }),
+      supabase.from("student_exams").select("*").eq("student_id", id).eq("contractor_id", user.contractorId).order("created_at", { ascending: false }),
+    ]);
+    setDocumentos(docs ?? []);
+    setExames(exms ?? []);
+  }, [id, user]);
+
+  useEffect(() => {
+    if (activeTab === "Resumo") loadResumo();
+  }, [activeTab, loadResumo]);
 
   if (loading) {
     return (
@@ -1464,13 +1783,60 @@ export default function ClienteDashboardPage() {
                     icon={<FlaskConical className="w-3.5 h-3.5 text-purple-500" />}
                     iconBg="bg-purple-50"
                   >
-                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <button
+                      onClick={() => setExameModal(true)}
+                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </CardHeader>
-                  <EmptyCard message="Nenhum resultado encontrado" />
+                  {exames.length === 0 ? (
+                    <EmptyCard message="Nenhum resultado encontrado" />
+                  ) : (
+                    <div className="divide-y divide-gray-50">
+                      {exames.map((ex: any) => (
+                        <div key={ex.id} className="px-4 py-3 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                            <FlaskConical className="w-4 h-4 text-purple-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">
+                              {ex.medico_nome ? `Dr. ${ex.medico_nome}` : "Exame"}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {ex.data_exame ? new Date(ex.data_exame).toLocaleDateString("pt-BR") : "—"}
+                              {ex.data_validade ? ` · Val: ${new Date(ex.data_validade).toLocaleDateString("pt-BR")}` : ""}
+                            </p>
+                          </div>
+                          {ex.arquivo_url && (
+                            <a href={ex.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Modals */}
+              {docModal && (
+                <DocumentoModal
+                  studentId={student.id}
+                  contractorId={user!.contractorId!}
+                  onClose={() => setDocModal(false)}
+                  onSaved={loadResumo}
+                />
+              )}
+              {exameModal && (
+                <ExameModal
+                  studentId={student.id}
+                  contractorId={user!.contractorId!}
+                  onClose={() => setExameModal(false)}
+                  onSaved={loadResumo}
+                />
+              )}
 
               {/* Bottom grid — 2 colunas */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1482,11 +1848,37 @@ export default function ClienteDashboardPage() {
                     icon={<FileText className="w-3.5 h-3.5 text-blue-500" />}
                     iconBg="bg-blue-50"
                   >
-                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <button
+                      onClick={() => setDocModal(true)}
+                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </CardHeader>
-                  <EmptyCard message="Nenhum resultado encontrado" />
+                  {documentos.length === 0 ? (
+                    <EmptyCard message="Nenhum resultado encontrado" />
+                  ) : (
+                    <div className="divide-y divide-gray-50">
+                      {documentos.map((doc: any) => (
+                        <div key={doc.id} className="px-4 py-3 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-4 h-4 text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{doc.titulo}</p>
+                            {doc.descricao && (
+                              <p className="text-xs text-gray-400 truncate">{doc.descricao}</p>
+                            )}
+                          </div>
+                          {doc.arquivo_url && (
+                            <a href={doc.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Observações */}

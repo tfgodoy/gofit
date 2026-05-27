@@ -858,6 +858,81 @@ export interface Database {
         };
         Relationships: [];
       };
+      student_documents: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          student_id:    string;
+          titulo:        string;
+          descricao:     string | null;
+          arquivo_url:   string | null;
+          arquivo_nome:  string | null;
+          created_at:    string;
+        };
+        Insert: {
+          id?:           string;
+          contractor_id: string;
+          student_id:    string;
+          titulo:        string;
+          descricao?:    string | null;
+          arquivo_url?:  string | null;
+          arquivo_nome?: string | null;
+          created_at?:   string;
+        };
+        Update: {
+          id?:           string;
+          contractor_id?: string;
+          student_id?:   string;
+          titulo?:       string;
+          descricao?:    string | null;
+          arquivo_url?:  string | null;
+          arquivo_nome?: string | null;
+          created_at?:   string;
+        };
+        Relationships: [];
+      };
+      student_exams: {
+        Row: {
+          id:             string;
+          contractor_id:  string;
+          student_id:     string;
+          data_exame:     string | null;
+          validade_meses: number | null;
+          data_validade:  string | null;
+          medico_nome:    string | null;
+          crm:            string | null;
+          arquivo_url:    string | null;
+          arquivo_nome:   string | null;
+          created_at:     string;
+        };
+        Insert: {
+          id?:             string;
+          contractor_id:   string;
+          student_id:      string;
+          data_exame?:     string | null;
+          validade_meses?: number | null;
+          data_validade?:  string | null;
+          medico_nome?:    string | null;
+          crm?:            string | null;
+          arquivo_url?:    string | null;
+          arquivo_nome?:   string | null;
+          created_at?:     string;
+        };
+        Update: {
+          id?:             string;
+          contractor_id?:  string;
+          student_id?:     string;
+          data_exame?:     string | null;
+          validade_meses?: number | null;
+          data_validade?:  string | null;
+          medico_nome?:    string | null;
+          crm?:            string | null;
+          arquivo_url?:    string | null;
+          arquivo_nome?:   string | null;
+          created_at?:     string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
