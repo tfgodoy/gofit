@@ -7,8 +7,8 @@ import {
   Building2, BarChart2, PieChart, Activity, GraduationCap,
   UserPlus, Lightbulb, CheckSquare, Bot, Search, Gift,
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
-  ArrowUpCircle, ArrowDownCircle, CreditCard, Truck,
-  ClipboardList, Shield, PlayCircle,
+  ArrowUpCircle, ArrowDownCircle, CreditCard,
+  Tags, Scale, ClipboardList, Shield, PlayCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReactNode } from "react";
@@ -93,8 +93,9 @@ const mainNav: NavItem[] = [
     icon: Package, label: "Estoque", to: "/app/estoque",
     iconColor: "text-sky-500",
     children: [
-      { icon: Package, label: "Produtos",     to: "/app/estoque/produtos",     iconColor: "text-sky-500" },
-      { icon: Truck,   label: "Fornecedores", to: "/app/estoque/fornecedores", iconColor: "text-sky-500" },
+      { icon: Package, label: "Produtos",              to: "/app/estoque/produtos",    iconColor: "text-sky-500" },
+      { icon: Tags,    label: "Categorias de produtos", to: "/app/estoque/categorias",  iconColor: "text-sky-500" },
+      { icon: Scale,   label: "Unidades de medida",    to: "/app/estoque/unidades",    iconColor: "text-sky-500" },
     ],
   },
   {
