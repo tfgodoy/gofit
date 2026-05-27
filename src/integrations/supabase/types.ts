@@ -469,6 +469,190 @@ export interface Database {
           }
         ];
       };
+      workouts: {
+        Row: {
+          id:                       string;
+          contractor_id:            string;
+          nome:                     string;
+          responsavel_id:           string | null;
+          responsavel_nome:         string | null;
+          tipo_treino:              string;
+          nivel:                    string | null;
+          sexo:                     string | null;
+          frequencia_semanal:       number;
+          idade_minima:             number | null;
+          idade_maxima:             number | null;
+          imprimir_automaticamente: boolean;
+          controla_treino:          boolean;
+          tipo_controle:            string | null;
+          quantidade:               number | null;
+          data_vencimento:          string | null;
+          observacoes:              string | null;
+          created_at:               string;
+          updated_at:               string;
+        };
+        Insert: {
+          id?:                       string;
+          contractor_id:             string;
+          nome:                      string;
+          responsavel_id?:           string | null;
+          responsavel_nome?:         string | null;
+          tipo_treino?:              string;
+          nivel?:                    string | null;
+          sexo?:                     string | null;
+          frequencia_semanal?:       number;
+          idade_minima?:             number | null;
+          idade_maxima?:             number | null;
+          imprimir_automaticamente?: boolean;
+          controla_treino?:          boolean;
+          tipo_controle?:            string | null;
+          quantidade?:               number | null;
+          data_vencimento?:          string | null;
+          observacoes?:              string | null;
+          created_at?:               string;
+          updated_at?:               string;
+        };
+        Update: {
+          id?:                       string;
+          contractor_id?:            string;
+          nome?:                     string;
+          responsavel_id?:           string | null;
+          responsavel_nome?:         string | null;
+          tipo_treino?:              string;
+          nivel?:                    string | null;
+          sexo?:                     string | null;
+          frequencia_semanal?:       number;
+          idade_minima?:             number | null;
+          idade_maxima?:             number | null;
+          imprimir_automaticamente?: boolean;
+          controla_treino?:          boolean;
+          tipo_controle?:            string | null;
+          quantidade?:               number | null;
+          data_vencimento?:          string | null;
+          observacoes?:              string | null;
+          created_at?:               string;
+          updated_at?:               string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workouts_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      workout_sessions: {
+        Row: {
+          id:         string;
+          workout_id: string;
+          nome:       string;
+          ordem:      number;
+          created_at: string;
+        };
+        Insert: {
+          id?:        string;
+          workout_id: string;
+          nome?:      string;
+          ordem?:     number;
+          created_at?: string;
+        };
+        Update: {
+          id?:        string;
+          workout_id?: string;
+          nome?:      string;
+          ordem?:     number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workout_sessions_workout_id_fkey";
+            columns: ["workout_id"];
+            referencedRelation: "workouts";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      workout_session_exercises: {
+        Row: {
+          id:             string;
+          session_id:     string;
+          exercise_id:    string | null;
+          exercise_nome:  string;
+          ordem:          number;
+          series:         number;
+          tipo_metrica:   string;
+          intervalo_seg:  number | null;
+          observacao:     string | null;
+          bi_set_grupo:   number | null;
+          created_at:     string;
+        };
+        Insert: {
+          id?:            string;
+          session_id:     string;
+          exercise_id?:   string | null;
+          exercise_nome:  string;
+          ordem?:         number;
+          series?:        number;
+          tipo_metrica?:  string;
+          intervalo_seg?: number | null;
+          observacao?:    string | null;
+          bi_set_grupo?:  number | null;
+          created_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          session_id?:    string;
+          exercise_id?:   string | null;
+          exercise_nome?: string;
+          ordem?:         number;
+          series?:        number;
+          tipo_metrica?:  string;
+          intervalo_seg?: number | null;
+          observacao?:    string | null;
+          bi_set_grupo?:  number | null;
+          created_at?:    string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workout_session_exercises_session_id_fkey";
+            columns: ["session_id"];
+            referencedRelation: "workout_sessions";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      workout_session_exercise_series: {
+        Row: {
+          id:                 string;
+          exercise_sessao_id: string;
+          numero_serie:       number;
+          valor:              string;
+          carga_kg:           number | null;
+        };
+        Insert: {
+          id?:                string;
+          exercise_sessao_id: string;
+          numero_serie:       number;
+          valor?:             string;
+          carga_kg?:          number | null;
+        };
+        Update: {
+          id?:                string;
+          exercise_sessao_id?: string;
+          numero_serie?:      number;
+          valor?:             string;
+          carga_kg?:          number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workout_session_exercise_series_exercise_sessao_id_fkey";
+            columns: ["exercise_sessao_id"];
+            referencedRelation: "workout_session_exercises";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       rewards: {
         Row: {
           id:            string;
