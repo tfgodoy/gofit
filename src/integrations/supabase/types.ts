@@ -312,21 +312,18 @@ export interface Database {
           contractor_id: string;
           nome:          string;
           created_at:    string;
-          updated_at:    string;
         };
         Insert: {
           id?:           string;
           contractor_id: string;
           nome:          string;
           created_at?:   string;
-          updated_at?:   string;
         };
         Update: {
           id?:           string;
           contractor_id?: string;
           nome?:         string;
           created_at?:   string;
-          updated_at?:   string;
         };
         Relationships: [
           {
@@ -341,30 +338,45 @@ export interface Database {
         Row: {
           id:                string;
           contractor_id:     string;
-          exercise_group_id: string | null;
           nome:              string;
+          grupo_id:          string | null;
           intensidade:       "facil" | "intermediario" | "dificil" | null;
+          nome_impressao:    string | null;
+          equipamento:       string | null;
+          descricao:         string | null;
+          demonstracao_tipo: "imagem" | "video" | null;
           demonstracao_url:  string | null;
+          criado_por:        string;
           created_at:        string;
           updated_at:        string;
         };
         Insert: {
           id?:               string;
           contractor_id:     string;
-          exercise_group_id?: string | null;
           nome:              string;
+          grupo_id?:         string | null;
           intensidade?:      "facil" | "intermediario" | "dificil" | null;
+          nome_impressao?:   string | null;
+          equipamento?:      string | null;
+          descricao?:        string | null;
+          demonstracao_tipo?: "imagem" | "video" | null;
           demonstracao_url?: string | null;
+          criado_por?:       string;
           created_at?:       string;
           updated_at?:       string;
         };
         Update: {
           id?:               string;
           contractor_id?:    string;
-          exercise_group_id?: string | null;
           nome?:             string;
+          grupo_id?:         string | null;
           intensidade?:      "facil" | "intermediario" | "dificil" | null;
+          nome_impressao?:   string | null;
+          equipamento?:      string | null;
+          descricao?:        string | null;
+          demonstracao_tipo?: "imagem" | "video" | null;
           demonstracao_url?: string | null;
+          criado_por?:       string;
           created_at?:       string;
           updated_at?:       string;
         };
@@ -376,8 +388,8 @@ export interface Database {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "exercises_exercise_group_id_fkey";
-            columns: ["exercise_group_id"];
+            foreignKeyName: "exercises_grupo_id_fkey";
+            columns: ["grupo_id"];
             referencedRelation: "exercise_groups";
             referencedColumns: ["id"];
           }
