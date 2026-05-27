@@ -1,45 +1,201 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   Dumbbell, Users, Calendar, DollarSign, Package, FileText,
   Settings, LogOut, Home, Filter, SlidersHorizontal,
   ShoppingCart, HelpCircle, ChevronDown, Zap, TrendingUp,
-  Building2, BarChart2,
+  Building2, BarChart2, PieChart, Activity, GraduationCap,
+  UserPlus, Lightbulb, CheckSquare, Bot, Search, Gift,
+  LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
+  ArrowUpCircle, ArrowDownCircle, CreditCard, Truck,
+  ClipboardList, Shield, PlayCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReactNode } from "react";
+
+interface SubNavItem {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  to: string;
+  iconColor: string;
+}
 
 interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   to: string;
   iconColor: string;
-  hasDropdown?: boolean;
   end?: boolean;
+  children?: SubNavItem[];
 }
 
 const mainNav: NavItem[] = [
-  { icon: Home,         label: "Início",             to: "/app/dashboard",    iconColor: "text-orange-400",  end: true },
-  { icon: TrendingUp,   label: "Dashboards",         to: "/app/dashboards",   iconColor: "text-teal-500",    hasDropdown: true },
-  { icon: Users,        label: "Clientes",            to: "/app/clientes",     iconColor: "text-blue-500" },
-  { icon: Filter,       label: "CRM",                 to: "/app/crm",          iconColor: "text-orange-500",  hasDropdown: true },
-  { icon: Calendar,     label: "Agenda",              to: "/app/agenda",       iconColor: "text-teal-400",    hasDropdown: true },
-  { icon: DollarSign,   label: "Financeiro",          to: "/app/financeiro",   iconColor: "text-green-500",   hasDropdown: true },
-  { icon: Package,      label: "Estoque",             to: "/app/estoque",      iconColor: "text-sky-500",     hasDropdown: true },
-  { icon: Dumbbell,     label: "Treino",              to: "/app/treinos",      iconColor: "text-red-400",     hasDropdown: true },
-  { icon: Zap,          label: "WOD",                 to: "/app/wod",          iconColor: "text-gray-600" },
-  { icon: FileText,     label: "Relatórios",          to: "/app/relatorios",   iconColor: "text-gray-500" },
+  {
+    icon: Home, label: "Início", to: "/app/dashboard",
+    iconColor: "text-orange-400", end: true,
+  },
+  {
+    icon: TrendingUp, label: "Dashboards", to: "/app/dashboards",
+    iconColor: "text-teal-500",
+    children: [
+      { icon: PieChart,      label: "CRM",         to: "/app/dashboards/crm",         iconColor: "text-primary" },
+      { icon: BarChart2,     label: "Gerencial",   to: "/app/dashboards/gerencial",   iconColor: "text-primary" },
+      { icon: Activity,      label: "Operacional", to: "/app/dashboards/operacional", iconColor: "text-primary" },
+      { icon: GraduationCap, label: "Professores", to: "/app/dashboards/professores", iconColor: "text-primary" },
+      { icon: Users,         label: "Clientes",    to: "/app/dashboards/clientes",    iconColor: "text-primary" },
+      { icon: DollarSign,    label: "Financeiro",  to: "/app/dashboards/financeiro",  iconColor: "text-primary" },
+      { icon: Calendar,      label: "Agenda",      to: "/app/dashboards/agenda",      iconColor: "text-primary" },
+      { icon: Dumbbell,      label: "Treino",      to: "/app/dashboards/treino",      iconColor: "text-primary" },
+      { icon: Zap,           label: "Wod",         to: "/app/dashboards/wod",         iconColor: "text-primary" },
+    ],
+  },
+  {
+    icon: Users, label: "Clientes", to: "/app/clientes",
+    iconColor: "text-blue-500",
+  },
+  {
+    icon: Filter, label: "CRM", to: "/app/crm",
+    iconColor: "text-orange-500",
+    children: [
+      { icon: UserPlus,    label: "Leads",              to: "/app/crm/leads",        iconColor: "text-orange-500" },
+      { icon: Lightbulb,   label: "Oportunidades",      to: "/app/crm/oportunidades",iconColor: "text-orange-500" },
+      { icon: CheckSquare, label: "Atividades",          to: "/app/crm/atividades",   iconColor: "text-orange-500" },
+      { icon: Bot,         label: "Automações",          to: "/app/crm/automacoes",   iconColor: "text-orange-500" },
+      { icon: Search,      label: "Pesquisas",           to: "/app/crm/pesquisas",    iconColor: "text-orange-500" },
+      { icon: Gift,        label: "Clube de recompensa", to: "/app/crm/clube",        iconColor: "text-orange-500" },
+    ],
+  },
+  {
+    icon: Calendar, label: "Agenda", to: "/app/agenda",
+    iconColor: "text-teal-400",
+    children: [
+      { icon: Calendar,      label: "Agenda",             to: "/app/agenda/agenda",  iconColor: "text-teal-400" },
+      { icon: LayoutGrid,    label: "Grades de horários", to: "/app/agenda/grades",  iconColor: "text-teal-400" },
+      { icon: CalendarCheck, label: "Ocupação",            to: "/app/agenda/ocupacao",iconColor: "text-teal-400" },
+    ],
+  },
+  {
+    icon: DollarSign, label: "Financeiro", to: "/app/financeiro",
+    iconColor: "text-green-500",
+    children: [
+      { icon: Wallet,          label: "Caixa",              to: "/app/financeiro/caixa",              iconColor: "text-green-500" },
+      { icon: TrendingUp,      label: "Comissão",           to: "/app/financeiro/comissao",           iconColor: "text-green-500" },
+      { icon: ArrowUpCircle,   label: "Contas a pagar",     to: "/app/financeiro/contas-a-pagar",     iconColor: "text-green-500" },
+      { icon: ArrowDownCircle, label: "Contas a receber",   to: "/app/financeiro/contas-a-receber",   iconColor: "text-green-500" },
+      { icon: Landmark,        label: "Contas financeiras", to: "/app/financeiro/contas-financeiras", iconColor: "text-green-500" },
+      { icon: CreditCard,      label: "FitCore Pay",        to: "/app/financeiro/pay",                iconColor: "text-green-500" },
+      { icon: FileText,        label: "NFS-e",              to: "/app/financeiro/nfs-e",              iconColor: "text-green-500" },
+      { icon: FileText,        label: "NFC-e",              to: "/app/financeiro/nfc-e",              iconColor: "text-green-500" },
+      { icon: ShoppingBag,     label: "Vendas",             to: "/app/financeiro/vendas",             iconColor: "text-green-500" },
+    ],
+  },
+  {
+    icon: Package, label: "Estoque", to: "/app/estoque",
+    iconColor: "text-sky-500",
+    children: [
+      { icon: Package, label: "Produtos",     to: "/app/estoque/produtos",     iconColor: "text-sky-500" },
+      { icon: Truck,   label: "Fornecedores", to: "/app/estoque/fornecedores", iconColor: "text-sky-500" },
+    ],
+  },
+  {
+    icon: Dumbbell, label: "Treino", to: "/app/treinos",
+    iconColor: "text-red-400",
+    children: [
+      { icon: ClipboardList, label: "Fichas de treino", to: "/app/treinos/fichas",     iconColor: "text-red-400" },
+      { icon: Dumbbell,      label: "Exercícios",        to: "/app/treinos/exercicios", iconColor: "text-red-400" },
+    ],
+  },
+  { icon: Zap,      label: "WOD",       to: "/app/wod",       iconColor: "text-gray-600" },
+  { icon: FileText, label: "Relatórios", to: "/app/relatorios", iconColor: "text-gray-500" },
 ];
 
 const bottomNav: NavItem[] = [
-  { icon: Building2,         label: "Administrativo",      to: "/app/administrativo", iconColor: "text-gray-500", hasDropdown: true },
-  { icon: Settings,          label: "Configurações",       to: "/app/empresa",        iconColor: "text-gray-500" },
-  { icon: SlidersHorizontal, label: "Recursos do sistema", to: "/app/recursos",       iconColor: "text-gray-500" },
-  { icon: ShoppingCart,      label: "Loja",                to: "/app/loja",           iconColor: "text-gray-500" },
-  { icon: HelpCircle,        label: "Ajuda",               to: "/app/ajuda",          iconColor: "text-gray-500", hasDropdown: true },
+  {
+    icon: Building2, label: "Administrativo", to: "/app/administrativo",
+    iconColor: "text-gray-500",
+    children: [
+      { icon: Users,  label: "Equipe",     to: "/app/administrativo/equipe",     iconColor: "text-gray-500" },
+      { icon: Shield, label: "Permissões", to: "/app/administrativo/permissoes", iconColor: "text-gray-500" },
+    ],
+  },
+  { icon: Settings,          label: "Configurações",       to: "/app/empresa",  iconColor: "text-gray-500" },
+  { icon: SlidersHorizontal, label: "Recursos do sistema", to: "/app/recursos", iconColor: "text-gray-500" },
+  { icon: ShoppingCart,      label: "Loja",                to: "/app/loja",     iconColor: "text-gray-500" },
+  {
+    icon: HelpCircle, label: "Ajuda", to: "/app/ajuda",
+    iconColor: "text-gray-500",
+    children: [
+      { icon: HelpCircle, label: "Central de ajuda", to: "/app/ajuda/central",   iconColor: "text-gray-500" },
+      { icon: PlayCircle, label: "Tutoriais",          to: "/app/ajuda/tutoriais", iconColor: "text-gray-500" },
+    ],
+  },
 ];
 
-function NavItemLink({ item }: { item: NavItem }) {
+function NavItemLink({
+  item,
+  expandedKey,
+  onToggle,
+}: {
+  item: NavItem;
+  expandedKey: string | null;
+  onToggle: (key: string) => void;
+}) {
   const Icon = item.icon;
+  const isExpanded = expandedKey === item.to;
+
+  if (item.children) {
+    return (
+      <div>
+        <button
+          onClick={() => onToggle(item.to)}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+            isExpanded
+              ? "bg-primary/10 text-primary"
+              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+          }`}
+        >
+          <Icon className={`w-4 h-4 flex-shrink-0 ${isExpanded ? "text-primary" : item.iconColor}`} />
+          <span className="flex-1 truncate text-left">{item.label}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 opacity-40 flex-shrink-0 transition-transform duration-200 ${
+              isExpanded ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+
+        {isExpanded && (
+          <div className="ml-3 mt-0.5 mb-1 pl-3 border-l-2 border-gray-100 space-y-0.5">
+            {item.children.map(child => {
+              const SubIcon = child.icon;
+              return (
+                <NavLink
+                  key={child.to}
+                  to={child.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+                      isActive
+                        ? "text-primary"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <SubIcon
+                        className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? "text-primary" : child.iconColor}`}
+                      />
+                      <span className="truncate">{child.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <NavLink
       to={item.to}
@@ -56,9 +212,6 @@ function NavItemLink({ item }: { item: NavItem }) {
         <>
           <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-primary" : item.iconColor}`} />
           <span className="flex-1 truncate">{item.label}</span>
-          {item.hasDropdown && (
-            <ChevronDown className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
-          )}
         </>
       )}
     </NavLink>
@@ -68,8 +221,27 @@ function NavItemLink({ item }: { item: NavItem }) {
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  function handleLogout() { logout(); navigate("/login"); }
+  useEffect(() => {
+    const all = [...mainNav, ...bottomNav];
+    for (const item of all) {
+      if (item.children?.some(c => location.pathname.startsWith(c.to))) {
+        setExpandedKey(item.to);
+        return;
+      }
+    }
+  }, [location.pathname]);
+
+  function handleToggle(key: string) {
+    setExpandedKey(prev => (prev === key ? null : key));
+  }
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -94,14 +266,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         {/* Main nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {mainNav.map(item => (
-            <NavItemLink key={item.to} item={item} />
+            <NavItemLink
+              key={item.to}
+              item={item}
+              expandedKey={expandedKey}
+              onToggle={handleToggle}
+            />
           ))}
 
-          {/* Separator */}
           <div className="my-2 border-t border-gray-100" />
 
           {bottomNav.map(item => (
-            <NavItemLink key={item.to} item={item} />
+            <NavItemLink
+              key={item.to}
+              item={item}
+              expandedKey={expandedKey}
+              onToggle={handleToggle}
+            />
           ))}
         </nav>
 
