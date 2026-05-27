@@ -507,7 +507,7 @@ export default function AlunoFormPage() {
               disabled={submitting}
               className="inline-flex items-center gap-2 bg-primary text-white font-semibold px-8 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-60 shadow-lg shadow-primary/20"
             >
-              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</> : "Cadastrar"}
+              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</> : isEdit ? "Salvar" : "Cadastrar"}
             </button>
           </div>
         </form>
