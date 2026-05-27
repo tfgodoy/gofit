@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import AppShell from "@/components/layout/AppShell";
+import AppLayout from "@/components/app/AppLayout";
 import { toast } from "sonner";
 
 /* ─── Types ──────────────────────────────────────────────────── */
@@ -200,12 +200,12 @@ export default function TreinoFormPage() {
   useEffect(() => { if (!isNew) triggerSave(); }, [form, sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function persistAll() {
-    if (!user?.contractor_id) return;
+    if (!user?.contractorId) return;
     if (!form.nome.trim()) return;
     setSaving(true);
 
     const payload = {
-      contractor_id: user.contractor_id,
+      contractor_id: user.contractorId,
       nome: form.nome.trim(),
       responsavel_nome: form.responsavel_nome || null,
       tipo_treino: form.tipo_treino,
@@ -401,7 +401,7 @@ export default function TreinoFormPage() {
   const currentSession = sessions[activeTab];
 
   return (
-    <AppShell>
+    <AppLayout>
       <div className="flex flex-col h-[calc(100vh-4rem)]">
         {/* Top bar */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 bg-white">
@@ -634,7 +634,7 @@ export default function TreinoFormPage() {
       {/* Exercise modal */}
       {exerciseModal && (
         <ExerciseModal
-          contractorId={user?.contractor_id ?? ""}
+          contractorId={user?.contractorId ?? ""}
           initial={exerciseModal.initial}
           onClose={() => setExerciseModal(null)}
           onSave={(ex) => {
@@ -659,7 +659,7 @@ export default function TreinoFormPage() {
         .input-base { @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white; }
         .select-base { @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white; }
       `}</style>
-    </AppShell>
+    </AppLayout>
   );
 }
 
@@ -703,12 +703,6 @@ function SessionExercises({
   }, []);
 
   const exercises = session.exercises;
-
-  function groupColor(g: number | null) {
-    if (g == null) return "";
-    const colors = ["bg-primary", "bg-green-500", "bg-orange-500", "bg-blue-500", "bg-pink-500"];
-    return colors[g % colors.length];
-  }
 
   function toggleBiSet(exKey: string, currentGroup: number | null) {
     if (currentGroup != null) {

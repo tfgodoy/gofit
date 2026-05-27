@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, MoreVertical, Pencil, Trash2, Copy, Dumbbell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import AppShell from "@/components/layout/AppShell";
+import AppLayout from "@/components/app/AppLayout";
 
 type Workout = {
   id: string;
@@ -75,13 +75,13 @@ export default function TreinosPage() {
   useEffect(() => { setPage(0); }, [query]);
 
   useEffect(() => {
-    if (!user?.contractor_id) return;
+    if (!user?.contractorId) return;
     setLoading(true);
     (async () => {
       let q = supabase
         .from("workouts")
         .select("id, nome, responsavel_nome, tipo_treino, nivel, sexo, idade_minima, idade_maxima", { count: "exact" })
-        .eq("contractor_id", user.contractor_id)
+        .eq("contractor_id", user.contractorId!)
         .order("nome")
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
       if (query) q = q.ilike("nome", `%${query}%`);
@@ -113,11 +113,11 @@ export default function TreinosPage() {
   }
 
   async function handleDuplicate(w: Workout) {
-    if (!user?.contractor_id) return;
+    if (!user?.contractorId) return;
     const { data: newW } = await supabase
       .from("workouts")
       .insert({
-        contractor_id: user.contractor_id,
+        contractor_id: user.contractorId,
         nome: `${w.nome} (cópia)`,
         responsavel_nome: w.responsavel_nome,
         tipo_treino: w.tipo_treino,
@@ -135,7 +135,7 @@ export default function TreinosPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <AppShell>
+    <AppLayout>
       <div className="p-6 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -268,6 +268,6 @@ export default function TreinosPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </AppLayout>
   );
 }
