@@ -1250,23 +1250,25 @@ const VALIDADE_OPTS: { label: string; meses: number | null }[] = [
 
 /* ── Documento Modal ──────────────────────────────────────── */
 
-function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
+function DocumentoModal({ studentId, contractorId, initialData, onClose, onSaved }: {
   studentId:    string;
   contractorId: string;
+  initialData?: any;
   onClose:  () => void;
   onSaved:  () => void;
 }) {
-  const [titulo,   setTitulo]   = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [file,     setFile]     = useState<File | null>(null);
-  const [saving,   setSaving]   = useState(false);
+  const isEdit = !!initialData?.id;
+  const [titulo,    setTitulo]    = useState(initialData?.titulo    ?? "");
+  const [descricao, setDescricao] = useState(initialData?.descricao ?? "");
+  const [file,      setFile]      = useState<File | null>(null);
+  const [saving,    setSaving]    = useState(false);
 
   async function handleSave() {
     if (!titulo.trim()) return;
     setSaving(true);
 
-    let arquivo_url:  string | null = null;
-    let arquivo_nome: string | null = null;
+    let arquivo_url:  string | null = initialData?.arquivo_url  ?? null;
+    let arquivo_nome: string | null = initialData?.arquivo_nome ?? null;
 
     if (file) {
       const ext  = file.name.split(".").pop() ?? "bin";
@@ -1279,18 +1281,20 @@ function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
       }
     }
 
-    const { error } = await supabase.from("student_documents").insert({
-      contractor_id: contractorId,
-      student_id:    studentId,
-      titulo:        titulo.trim(),
-      descricao:     descricao.trim() || null,
+    const payload = {
+      titulo:      titulo.trim(),
+      descricao:   descricao.trim() || null,
       arquivo_url,
       arquivo_nome,
-    });
+    };
+
+    const { error } = isEdit
+      ? await supabase.from("student_documents").update(payload).eq("id", initialData.id)
+      : await supabase.from("student_documents").insert({ contractor_id: contractorId, student_id: studentId, ...payload });
 
     setSaving(false);
     if (error) { toast.error("Erro ao salvar documento."); return; }
-    toast.success("Documento salvo!");
+    toast.success(isEdit ? "Documento atualizado!" : "Documento salvo!");
     onSaved();
     onClose();
   }
@@ -1300,7 +1304,7 @@ function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-800">Cadastrar documento</h2>
+          <h2 className="font-semibold text-gray-800">{isEdit ? "Editar documento" : "Cadastrar documento"}</h2>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -1341,12 +1345,14 @@ function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : initialData?.arquivo_nome ? (
+                <p className="text-xs text-gray-500 truncate">Arquivo atual: <span className="font-medium">{initialData.arquivo_nome}</span></p>
               ) : (
                 <p className="text-xs text-gray-400">Nenhum documento adicionado</p>
               )}
               <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary border border-primary rounded-lg px-4 py-1.5 hover:bg-primary/5 transition-colors">
                 <UploadCloud className="w-3.5 h-3.5" />
-                ADICIONAR DOCUMENTO
+                {isEdit ? "SUBSTITUIR ARQUIVO" : "ADICIONAR DOCUMENTO"}
                 <input type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] ?? null)} />
               </label>
             </div>
@@ -1372,32 +1378,35 @@ function DocumentoModal({ studentId, contractorId, onClose, onSaved }: {
 
 /* ── Exame Modal ──────────────────────────────────────────── */
 
-function ExameModal({ studentId, contractorId, onClose, onSaved }: {
+function ExameModal({ studentId, contractorId, initialData, onClose, onSaved }: {
   studentId:    string;
   contractorId: string;
+  initialData?: any;
   onClose:  () => void;
   onSaved:  () => void;
 }) {
-  const [dataExame,     setDataExame]     = useState("");
-  const [validadeMeses, setValidadeMeses] = useState<number | null>(null);
-  const [dataValidade,  setDataValidade]  = useState("");
-  const [medicoNome,    setMedicoNome]    = useState("");
-  const [crm,           setCrm]           = useState("");
+  const isEdit = !!initialData?.id;
+  const [dataExame,     setDataExame]     = useState(initialData?.data_exame     ?? "");
+  const [validadeMeses, setValidadeMeses] = useState<number | null>(initialData?.validade_meses ?? null);
+  const [dataValidade,  setDataValidade]  = useState(initialData?.data_validade  ?? "");
+  const [medicoNome,    setMedicoNome]    = useState(initialData?.medico_nome    ?? "");
+  const [crm,           setCrm]           = useState(initialData?.crm            ?? "");
   const [file,          setFile]          = useState<File | null>(null);
   const [saving,        setSaving]        = useState(false);
-
-  useEffect(() => {
-    if (!dataExame || validadeMeses === null) return;
-    const d = new Date(dataExame);
-    d.setMonth(d.getMonth() + validadeMeses);
+  const autoCalc = useCallback((exam: string, meses: number | null) => {
+    if (!exam || meses === null) return;
+    const d = new Date(exam);
+    d.setMonth(d.getMonth() + meses);
     setDataValidade(d.toISOString().split("T")[0]);
-  }, [dataExame, validadeMeses]);
+  }, []);
+
+  useEffect(() => { autoCalc(dataExame, validadeMeses); }, [dataExame, validadeMeses, autoCalc]);
 
   async function handleSave() {
     setSaving(true);
 
-    let arquivo_url:  string | null = null;
-    let arquivo_nome: string | null = null;
+    let arquivo_url:  string | null = initialData?.arquivo_url  ?? null;
+    let arquivo_nome: string | null = initialData?.arquivo_nome ?? null;
 
     if (file) {
       const ext  = file.name.split(".").pop() ?? "bin";
@@ -1410,9 +1419,7 @@ function ExameModal({ studentId, contractorId, onClose, onSaved }: {
       }
     }
 
-    const { error } = await supabase.from("student_exams").insert({
-      contractor_id: contractorId,
-      student_id:    studentId,
+    const payload = {
       data_exame:    dataExame    || null,
       validade_meses: validadeMeses,
       data_validade: dataValidade || null,
@@ -1420,11 +1427,15 @@ function ExameModal({ studentId, contractorId, onClose, onSaved }: {
       crm:           crm.trim()        || null,
       arquivo_url,
       arquivo_nome,
-    });
+    };
+
+    const { error } = isEdit
+      ? await supabase.from("student_exams").update(payload).eq("id", initialData.id)
+      : await supabase.from("student_exams").insert({ contractor_id: contractorId, student_id: studentId, ...payload });
 
     setSaving(false);
     if (error) { toast.error("Erro ao salvar exame."); return; }
-    toast.success("Exame salvo!");
+    toast.success(isEdit ? "Exame atualizado!" : "Exame salvo!");
     onSaved();
     onClose();
   }
@@ -1434,7 +1445,7 @@ function ExameModal({ studentId, contractorId, onClose, onSaved }: {
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-800">Adicionar exame</h2>
+          <h2 className="font-semibold text-gray-800">{isEdit ? "Editar exame" : "Adicionar exame"}</h2>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -1508,12 +1519,14 @@ function ExameModal({ studentId, contractorId, onClose, onSaved }: {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : initialData?.arquivo_nome ? (
+                <p className="text-xs text-gray-500 truncate">Arquivo atual: <span className="font-medium">{initialData.arquivo_nome}</span></p>
               ) : (
                 <p className="text-xs text-gray-400">Nenhum exame adicionado</p>
               )}
               <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary border border-primary rounded-lg px-4 py-1.5 hover:bg-primary/5 transition-colors">
                 <UploadCloud className="w-3.5 h-3.5" />
-                ADICIONAR EXAME
+                {isEdit ? "SUBSTITUIR ARQUIVO" : "ADICIONAR EXAME"}
                 <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
               </label>
             </div>
@@ -1545,10 +1558,12 @@ export default function ClienteDashboardPage() {
   const [student,    setStudent]    = useState<StudentDetail | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [activeTab,  setActiveTab]  = useState<Tab>("Resumo");
-  const [docModal,   setDocModal]   = useState(false);
-  const [exameModal, setExameModal] = useState(false);
-  const [documentos, setDocumentos] = useState<any[]>([]);
-  const [exames,     setExames]     = useState<any[]>([]);
+  const [docModalData,        setDocModalData]        = useState<any | null>(null);
+  const [exameModalData,      setExameModalData]      = useState<any | null>(null);
+  const [deleteDocConfirm,    setDeleteDocConfirm]    = useState<string | null>(null);
+  const [deleteExameConfirm,  setDeleteExameConfirm]  = useState<string | null>(null);
+  const [documentos,          setDocumentos]          = useState<any[]>([]);
+  const [exames,              setExames]              = useState<any[]>([]);
 
   useEffect(() => {
     if (!id || !user?.contractorId) return;
@@ -1578,6 +1593,20 @@ export default function ClienteDashboardPage() {
   useEffect(() => {
     if (activeTab === "Resumo") loadResumo();
   }, [activeTab, loadResumo]);
+
+  async function handleDeleteDoc(docId: string) {
+    await supabase.from("student_documents").delete().eq("id", docId);
+    setDeleteDocConfirm(null);
+    toast.success("Documento excluído.");
+    loadResumo();
+  }
+
+  async function handleDeleteExame(exameId: string) {
+    await supabase.from("student_exams").delete().eq("id", exameId);
+    setDeleteExameConfirm(null);
+    toast.success("Exame excluído.");
+    loadResumo();
+  }
 
   if (loading) {
     return (
@@ -1784,7 +1813,7 @@ export default function ClienteDashboardPage() {
                     iconBg="bg-purple-50"
                   >
                     <button
-                      onClick={() => setExameModal(true)}
+                      onClick={() => setExameModalData({})}
                       className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1795,7 +1824,7 @@ export default function ClienteDashboardPage() {
                   ) : (
                     <div className="divide-y divide-gray-50">
                       {exames.map((ex: any) => (
-                        <div key={ex.id} className="px-4 py-3 flex items-center gap-3">
+                        <div key={ex.id} className="px-4 py-3 flex items-center gap-3 group">
                           <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
                             <FlaskConical className="w-4 h-4 text-purple-400" />
                           </div>
@@ -1808,11 +1837,19 @@ export default function ClienteDashboardPage() {
                               {ex.data_validade ? ` · Val: ${new Date(ex.data_validade).toLocaleDateString("pt-BR")}` : ""}
                             </p>
                           </div>
-                          {ex.arquivo_url && (
-                            <a href={ex.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {ex.arquivo_url && (
+                              <a href={ex.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            <button onClick={() => setExameModalData(ex)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeleteExameConfirm(ex.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1820,22 +1857,53 @@ export default function ClienteDashboardPage() {
                 </div>
               </div>
 
-              {/* Modals */}
-              {docModal && (
+              {/* Modals — Documento */}
+              {docModalData !== null && (
                 <DocumentoModal
                   studentId={student.id}
                   contractorId={user!.contractorId!}
-                  onClose={() => setDocModal(false)}
+                  initialData={docModalData.id ? docModalData : undefined}
+                  onClose={() => setDocModalData(null)}
                   onSaved={loadResumo}
                 />
               )}
-              {exameModal && (
+              {/* Modals — Exame */}
+              {exameModalData !== null && (
                 <ExameModal
                   studentId={student.id}
                   contractorId={user!.contractorId!}
-                  onClose={() => setExameModal(false)}
+                  initialData={exameModalData.id ? exameModalData : undefined}
+                  onClose={() => setExameModalData(null)}
                   onSaved={loadResumo}
                 />
+              )}
+              {/* Confirmar exclusão — Documento */}
+              {deleteDocConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteDocConfirm(null)} />
+                  <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+                    <h3 className="text-base font-bold text-gray-900 mb-2">Excluir documento</h3>
+                    <p className="text-sm text-gray-500 mb-5">Tem certeza que deseja excluir este documento? Esta ação não pode ser desfeita.</p>
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => setDeleteDocConfirm(null)} className="text-sm font-bold text-gray-500 hover:underline">Cancelar</button>
+                      <button onClick={() => handleDeleteDoc(deleteDocConfirm)} className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700">Excluir</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Confirmar exclusão — Exame */}
+              {deleteExameConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteExameConfirm(null)} />
+                  <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+                    <h3 className="text-base font-bold text-gray-900 mb-2">Excluir exame</h3>
+                    <p className="text-sm text-gray-500 mb-5">Tem certeza que deseja excluir este exame? Esta ação não pode ser desfeita.</p>
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => setDeleteExameConfirm(null)} className="text-sm font-bold text-gray-500 hover:underline">Cancelar</button>
+                      <button onClick={() => handleDeleteExame(deleteExameConfirm)} className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700">Excluir</button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Bottom grid — 2 colunas */}
@@ -1849,7 +1917,7 @@ export default function ClienteDashboardPage() {
                     iconBg="bg-blue-50"
                   >
                     <button
-                      onClick={() => setDocModal(true)}
+                      onClick={() => setDocModalData({})}
                       className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1860,7 +1928,7 @@ export default function ClienteDashboardPage() {
                   ) : (
                     <div className="divide-y divide-gray-50">
                       {documentos.map((doc: any) => (
-                        <div key={doc.id} className="px-4 py-3 flex items-center gap-3">
+                        <div key={doc.id} className="px-4 py-3 flex items-center gap-3 group">
                           <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                             <FileText className="w-4 h-4 text-blue-400" />
                           </div>
@@ -1870,11 +1938,19 @@ export default function ClienteDashboardPage() {
                               <p className="text-xs text-gray-400 truncate">{doc.descricao}</p>
                             )}
                           </div>
-                          {doc.arquivo_url && (
-                            <a href={doc.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {doc.arquivo_url && (
+                              <a href={doc.arquivo_url} target="_blank" rel="noreferrer" className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Baixar arquivo">
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            <button onClick={() => setDocModalData(doc)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setDeleteDocConfirm(doc.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
