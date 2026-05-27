@@ -24,6 +24,7 @@ import GruposExerciciosPage   from "@/pages/app/GruposExerciciosPage";
 import SessoesPage            from "@/pages/app/SessoesPage";
 import TreinosPage            from "@/pages/app/TreinosPage";
 import TreinoFormPage         from "@/pages/app/TreinoFormPage";
+import WodFormPage            from "@/pages/app/WodFormPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -74,6 +75,8 @@ export default function App() {
             <Route path="/app/treinos/sessoes"   element={<AppGuard><SessoesPage /></AppGuard>} />
             <Route path="/app/treinos/*"         element={<AppGuard><PlaceholderPage title="Treino" /></AppGuard>} />
             <Route path="/app/wod"               element={<AppGuard><WodPage /></AppGuard>} />
+            <Route path="/app/wod/novo"          element={<AppGuard><WodFormPage /></AppGuard>} />
+            <Route path="/app/wod/:id"           element={<AppGuard><WodFormPage /></AppGuard>} />
             <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
             <Route path="/app/relatorios/*"      element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
             <Route path="/app/administrativo/*"  element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
