@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search, SlidersHorizontal, Pencil, Trash2,
   ChevronDown, X, ImageIcon, Info, Loader2, HelpCircle,
-  ChevronLeft, ChevronRight, Dumbbell, Play,
+  ChevronLeft, ChevronRight, Dumbbell, Play, PlayCircle,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -481,6 +481,7 @@ export default function ExerciciosPage() {
   const [editExercise, setEditExercise] = useState<Exercise | null>(null);
   const [showModal,    setShowModal]    = useState(false);
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
 
   const loadGroups = useCallback(async () => {
     if (!user?.contractorId) return;
@@ -591,7 +592,18 @@ export default function ExerciciosPage() {
                   key={ex.id}
                   className="grid grid-cols-[1fr_180px_120px_120px_80px] px-4 py-2.5 items-center hover:bg-gray-50 transition-colors"
                 >
-                  <span className="text-sm text-gray-800 truncate pr-3">{ex.nome}</span>
+                  <div className="flex items-center gap-1.5 min-w-0 pr-3">
+                    <span className="text-sm text-gray-800 truncate">{ex.nome}</span>
+                    {ex.demonstracao_tipo === "video" && ex.demonstracao_url && (
+                      <button
+                        onClick={() => setVideoPreview(ex.demonstracao_url)}
+                        className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
+                        title="Ver vídeo"
+                      >
+                        <PlayCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                   <span>
                     {ex.exercise_groups?.nome ? (
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full truncate max-w-[160px] inline-block">
@@ -629,6 +641,34 @@ export default function ExerciciosPage() {
           />
         </div>
       </div>
+
+      {/* Video preview modal */}
+      {videoPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setVideoPreview(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Play className="w-4 h-4 text-red-500" />
+                <span className="text-sm font-bold text-gray-900">Preview do exercício</span>
+              </div>
+              <button onClick={() => setVideoPreview(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div style={{ aspectRatio: "16/9" }}>
+              <iframe
+                key={videoPreview}
+                src={videoPreview}
+                className="w-full h-full"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                title="Preview vídeo exercício"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Exercise modal */}
       {showModal && (
