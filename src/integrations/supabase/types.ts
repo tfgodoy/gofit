@@ -306,6 +306,49 @@ export interface Database {
           }
         ];
       };
+      rewards: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          descricao:     string;
+          observacoes:   string | null;
+          pontos:        number;
+          foto_url:      string | null;
+          ativo:         boolean;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:           string;
+          contractor_id: string;
+          descricao:     string;
+          observacoes?:  string | null;
+          pontos?:       number;
+          foto_url?:     string | null;
+          ativo?:        boolean;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Update: {
+          id?:           string;
+          contractor_id?: string;
+          descricao?:    string;
+          observacoes?:  string | null;
+          pontos?:       number;
+          foto_url?:     string | null;
+          ativo?:        boolean;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rewards_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

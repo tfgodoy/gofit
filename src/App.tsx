@@ -12,7 +12,8 @@ import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
 import ClienteDashboardPage   from "@/pages/app/ClienteDashboardPage";
-import PlaceholderPage        from "@/pages/app/PlaceholderPage";
+import PlaceholderPage           from "@/pages/app/PlaceholderPage";
+import ClubeRecompensasPage      from "@/pages/app/ClubeRecompensasPage";
 import WodPage                from "@/pages/app/WodPage";
 import RelatoriosPage         from "@/pages/app/RelatoriosPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
@@ -50,6 +51,7 @@ export default function App() {
             <Route path="/app/clientes/:id/cadastro"       element={<AppGuard><AlunoFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
             <Route path="/app/dashboards/*"      element={<AppGuard><PlaceholderPage title="Dashboards" /></AppGuard>} />
+            <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
             <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
             <Route path="/app/agenda/*"          element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
             <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
