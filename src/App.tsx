@@ -17,6 +17,7 @@ import ClubeRecompensasPage      from "@/pages/app/ClubeRecompensasPage";
 import WodPage                from "@/pages/app/WodPage";
 import RelatoriosPage         from "@/pages/app/RelatoriosPage";
 import ExerciciosPage         from "@/pages/app/ExerciciosPage";
+import GruposExerciciosPage   from "@/pages/app/GruposExerciciosPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
             <Route path="/app/estoque/*"         element={<AppGuard><PlaceholderPage title="Estoque" /></AppGuard>} />
             <Route path="/app/treinos/exercicios" element={<AppGuard><ExerciciosPage /></AppGuard>} />
+            <Route path="/app/treinos/grupos"    element={<AppGuard><GruposExerciciosPage /></AppGuard>} />
             <Route path="/app/treinos/*"         element={<AppGuard><PlaceholderPage title="Treino" /></AppGuard>} />
             <Route path="/app/wod"               element={<AppGuard><WodPage /></AppGuard>} />
             <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
