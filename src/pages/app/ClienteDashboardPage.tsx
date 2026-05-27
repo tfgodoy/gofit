@@ -5,7 +5,7 @@ import {
   Plus, Folder, Download, Pencil, CheckCircle2,
   Loader2, MessageCircle, ClipboardList, Dumbbell,
   MoreVertical, X, Sparkles, Users, BookOpen, Wand2,
-  Trash2, Copy, Eye, Mail, Link2,
+  Trash2, Copy, Eye, Mail, Link2, Printer,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -682,6 +682,60 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
     return new Date(iso).toLocaleDateString("pt-BR");
   }
 
+  function handlePrint(resposta: any, respostaItens: any[]) {
+    const parqData  = (resposta.parq as Record<string, string>) ?? {};
+    const nomeModelo = (resposta.anamnese_modelos as any)?.descricao ?? "Anamnese";
+    const dataResp   = resposta.respondido_at ? new Date(resposta.respondido_at).toLocaleDateString("pt-BR") : "—";
+
+    const questoesHtml = respostaItens.map((item, i) => {
+      const pergunta = (item.anamnese_questoes as any)?.pergunta ?? "—";
+      const tipo     = (item.anamnese_questoes as any)?.tipo     ?? "";
+      let display: string;
+      if (tipo === "checkbox" && Array.isArray(item.valor)) display = item.valor.join(", ");
+      else if (item.valor !== null && item.valor !== undefined) display = String(item.valor);
+      else display = "—";
+      return `<div class="q"><p class="ql">${i + 1}. ${pergunta}</p><p class="qr">${display}</p></div>`;
+    }).join("");
+
+    const parqHtml = PARQ_PERGUNTAS.map((p, i) => {
+      const resp  = parqData[String(i)];
+      const isSim = resp === "Sim";
+      return `<div class="q ${isSim ? "alert" : ""}">
+        <p class="ql ${isSim ? "alabel" : ""}">${i + 1}. ${p}</p>
+        <p class="qr ${isSim ? "aval" : ""}">${isSim ? "⚠ Sim" : (resp ?? "—")}</p>
+      </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>${nomeModelo}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;color:#111;padding:32px;max-width:820px;margin:0 auto}
+h1{font-size:20px;font-weight:700;margin-bottom:4px}
+.sub{font-size:12px;color:#666;margin-bottom:24px}
+h2{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #ddd;padding-bottom:5px;margin:24px 0 10px}
+.q{background:#f8f8f8;border-radius:8px;padding:10px 14px;margin-bottom:7px}
+.q.alert{background:#fff0f0;border:1px solid #fca5a5}
+.ql{font-size:11px;color:#777;margin-bottom:3px}
+.alabel{color:#dc2626;font-weight:600}
+.qr{font-size:13px;font-weight:600;color:#111}
+.aval{color:#b91c1c}
+.footer{margin-top:28px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px}
+@media print{body{padding:16px}}
+</style></head><body>
+<h1>${nomeModelo}</h1>
+<p class="sub">${studentName ? `Aluno: <strong>${studentName}</strong> &nbsp;·&nbsp; ` : ""}Respondida em: ${dataResp} &nbsp;·&nbsp; Aceite: ${resposta.aceite ? "Sim" : "Não"}</p>
+${respostaItens.length > 0 ? `<h2>Perguntas</h2>${questoesHtml}` : ""}
+<h2>PAR-Q — Prontidão para Atividade Física</h2>
+${parqHtml}
+<div class="footer">FitCoreSys &nbsp;·&nbsp; Documento gerado em ${new Date().toLocaleDateString("pt-BR")}</div>
+<script>window.onload=function(){window.print()}<\/script>
+</body></html>`;
+
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  }
+
   return (
     <div className="space-y-4">
 
@@ -892,9 +946,18 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
               <h2 className="font-semibold text-gray-800">
                 Anamnese — {(verModal.anamnese_modelos as any)?.descricao ?? "Sem modelo"}
               </h2>
-              <button onClick={() => setVerModal(null)} className="p-1.5 rounded hover:bg-gray-100">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePrint(verModal, itens)}
+                  title="Imprimir / Salvar PDF"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Imprimir / PDF
+                </button>
+                <button onClick={() => setVerModal(null)} className="p-1.5 rounded hover:bg-gray-100">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
