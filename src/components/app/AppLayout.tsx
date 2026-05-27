@@ -9,15 +9,24 @@ import {
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
+  BookOpen, LayoutTemplate,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReactNode } from "react";
+
+interface GrandNavItem {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  to: string;
+  iconColor: string;
+}
 
 interface SubNavItem {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   to: string;
   iconColor: string;
+  children?: GrandNavItem[];
 }
 
 interface NavItem {
@@ -121,7 +130,20 @@ const bottomNav: NavItem[] = [
       { icon: Shield, label: "Permissões", to: "/app/administrativo/permissoes", iconColor: "text-gray-500" },
     ],
   },
-  { icon: Settings,          label: "Configurações",       to: "/app/empresa",  iconColor: "text-gray-500" },
+  {
+    icon: Settings, label: "Configurações", to: "/app/configuracoes",
+    iconColor: "text-gray-500",
+    children: [
+      {
+        icon: ClipboardList, label: "Anamnese", to: "/app/configuracoes/anamnese",
+        iconColor: "text-gray-500",
+        children: [
+          { icon: BookOpen,       label: "Biblioteca de perguntas", to: "/app/configuracoes/anamnese/biblioteca", iconColor: "text-gray-500" },
+          { icon: LayoutTemplate, label: "Modelos de Anamnese",     to: "/app/configuracoes/anamnese/modelos",    iconColor: "text-gray-500" },
+        ],
+      },
+    ],
+  },
   { icon: SlidersHorizontal, label: "Recursos do sistema", to: "/app/recursos", iconColor: "text-gray-500" },
   { icon: ShoppingCart,      label: "Loja",                to: "/app/loja",     iconColor: "text-gray-500" },
   {
@@ -144,7 +166,18 @@ function NavItemLink({
   onToggle: (key: string) => void;
 }) {
   const Icon = item.icon;
+  const location = useLocation();
   const isExpanded = expandedKey === item.to;
+
+  /* auto-detect which child sub-dropdown to open based on current path */
+  const [expandedSub, setExpandedSub] = useState<string | null>(() => {
+    for (const child of item.children ?? []) {
+      if (child.children?.some(gc => location.pathname.startsWith(gc.to))) {
+        return child.to;
+      }
+    }
+    return null;
+  });
 
   if (item.children) {
     return (
@@ -167,9 +200,58 @@ function NavItemLink({
         </button>
 
         {isExpanded && (
-          <div className="ml-3 mt-0.5 mb-1 pl-3 border-l-2 border-gray-100 space-y-0.5">
+          <div className="ml-1 mt-0.5 mb-1 pl-2 border-l-2 border-gray-100 space-y-0.5">
             {item.children.map(child => {
               const SubIcon = child.icon;
+
+              /* child with nested grandchildren → render as collapsible group */
+              if (child.children) {
+                const isSubExpanded = expandedSub === child.to;
+                return (
+                  <div key={child.to}>
+                    <button
+                      onClick={() => setExpandedSub(isSubExpanded ? null : child.to)}
+                      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+                        isSubExpanded
+                          ? "text-primary"
+                          : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                      }`}
+                    >
+                      <SubIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isSubExpanded ? "text-primary" : child.iconColor}`} />
+                      <span className="flex-1 text-left leading-tight">{child.label}</span>
+                      <ChevronDown className={`w-3 h-3 opacity-40 flex-shrink-0 transition-transform duration-200 ${isSubExpanded ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isSubExpanded && (
+                      <div className="ml-1 mt-0.5 mb-0.5 pl-2 border-l-2 border-gray-100 space-y-0.5">
+                        {child.children.map(gc => {
+                          const GcIcon = gc.icon;
+                          return (
+                            <NavLink
+                              key={gc.to}
+                              to={gc.to}
+                              className={({ isActive }) =>
+                                `flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                                  isActive ? "text-primary" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                                }`
+                              }
+                            >
+                              {({ isActive }) => (
+                                <>
+                                  <GcIcon className={`w-3 h-3 flex-shrink-0 ${isActive ? "text-primary" : gc.iconColor}`} />
+                                  <span className="leading-tight">{gc.label}</span>
+                                </>
+                              )}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              /* regular child link */
               return (
                 <NavLink
                   key={child.to}
@@ -184,9 +266,7 @@ function NavItemLink({
                 >
                   {({ isActive }) => (
                     <>
-                      <SubIcon
-                        className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? "text-primary" : child.iconColor}`}
-                      />
+                      <SubIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? "text-primary" : child.iconColor}`} />
                       <span className="truncate">{child.label}</span>
                     </>
                   )}

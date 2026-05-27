@@ -473,7 +473,6 @@ export interface Database {
         Row: {
           id:                       string;
           contractor_id:            string;
-          student_id:               string | null;
           nome:                     string;
           responsavel_id:           string | null;
           responsavel_nome:         string | null;
@@ -489,15 +488,12 @@ export interface Database {
           quantidade:               number | null;
           data_vencimento:          string | null;
           observacoes:              string | null;
-          status:                   string;
-          treinos_realizados:       number;
           created_at:               string;
           updated_at:               string;
         };
         Insert: {
           id?:                       string;
           contractor_id:             string;
-          student_id?:               string | null;
           nome:                      string;
           responsavel_id?:           string | null;
           responsavel_nome?:         string | null;
@@ -513,15 +509,12 @@ export interface Database {
           quantidade?:               number | null;
           data_vencimento?:          string | null;
           observacoes?:              string | null;
-          status?:                   string;
-          treinos_realizados?:       number;
           created_at?:               string;
           updated_at?:               string;
         };
         Update: {
           id?:                       string;
           contractor_id?:            string;
-          student_id?:               string | null;
           nome?:                     string;
           responsavel_id?:           string | null;
           responsavel_nome?:         string | null;
@@ -537,8 +530,6 @@ export interface Database {
           quantidade?:               number | null;
           data_vencimento?:          string | null;
           observacoes?:              string | null;
-          status?:                   string;
-          treinos_realizados?:       number;
           created_at?:               string;
           updated_at?:               string;
         };

@@ -2,12 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search, SlidersHorizontal, Pencil, Trash2,
   ChevronDown, X, ImageIcon, Info, Loader2, HelpCircle,
-  ChevronLeft, ChevronRight, Dumbbell, Play, PlayCircle, Plus, Check,
+  ChevronLeft, ChevronRight, Dumbbell, Play, PlayCircle,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toTitleCase } from "@/lib/text";
 
 /* ── Types ───────────────────────────────────────────── */
 interface ExGroup { id: string; nome: string }
@@ -87,123 +86,38 @@ function IntensidadeSelect({ value, onChange }: { value: string; onChange: (v: s
 }
 
 /* ── Custom Grupo Select ─────────────────────────────── */
-function GrupoSelect({ value, onChange, groups, onAdd }: {
-  value: string;
-  onChange: (v: string) => void;
-  groups: ExGroup[];
-  onAdd: (nome: string) => Promise<void>;
+function GrupoSelect({ value, onChange, groups }: {
+  value: string; onChange: (v: string) => void; groups: ExGroup[]
 }) {
-  const [open, setOpen]           = useState(false);
-  const [creating, setCreating]   = useState(false);
-  const [newNome, setNewNome]     = useState("");
-  const [saving, setSaving]       = useState(false);
-  const containerRef              = useRef<HTMLDivElement>(null);
-
+  const [open, setOpen] = useState(false);
   const filtered = groups.filter(g => g.nome.toLowerCase().includes(value.toLowerCase()));
 
-  useEffect(() => {
-    function outside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setCreating(false);
-        setNewNome("");
-      }
-    }
-    document.addEventListener("mousedown", outside);
-    return () => document.removeEventListener("mousedown", outside);
-  }, []);
-
-  async function handleCreate() {
-    const nome = toTitleCase(newNome.trim());
-    if (!nome) return;
-    setSaving(true);
-    await onAdd(nome);
-    onChange(nome);
-    setNewNome("");
-    setCreating(false);
-    setSaving(false);
-    setOpen(false);
-  }
-
   return (
-    <div className="relative" ref={containerRef}>
-      <div className="flex items-center border-b border-gray-300 pb-2 gap-1">
+    <div className="relative">
+      <div className="flex items-center border-b border-gray-300 pb-2">
         <input
           value={value}
           onChange={e => { onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Grupo de exercícios *"
-          className="flex-1 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent min-w-0"
+          className="flex-1 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent"
         />
-        <button
-          type="button"
-          title="Criar novo grupo"
-          onClick={() => { setCreating(true); setOpen(true); setNewNome(value); }}
-          className="flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-        <ChevronDown
-          className={`w-4 h-4 text-gray-400 cursor-pointer flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-          onClick={() => setOpen(v => !v)}
-        />
+        <ChevronDown className="w-4 h-4 text-gray-400 cursor-pointer" onClick={() => setOpen(v => !v)} />
       </div>
-
-      {open && (
-        <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-30 mt-1 overflow-hidden">
-          {/* Lista de grupos existentes */}
-          <div className="max-h-36 overflow-y-auto">
-            {filtered.length > 0 ? filtered.map(g => (
-              <div
-                key={g.id}
-                onMouseDown={() => { onChange(g.nome); setOpen(false); setCreating(false); }}
-                className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
-                  value === g.nome ? "bg-red-50 text-red-600" : "text-gray-700 hover:bg-red-50"
-                }`}
-              >
-                {g.nome}
-              </div>
-            )) : (
-              <p className="px-4 py-3 text-xs text-gray-400">Nenhum grupo encontrado</p>
-            )}
-          </div>
-
-          {/* Criação inline */}
-          {creating ? (
-            <div className="border-t border-gray-100 px-3 py-2.5 space-y-2">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Novo grupo</p>
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={newNome}
-                  onChange={e => setNewNome(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") { setCreating(false); setNewNome(""); } }}
-                  placeholder="Nome do grupo..."
-                  className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-red-300"
-                />
-                <button
-                  onMouseDown={handleCreate}
-                  disabled={saving || !newNome.trim()}
-                  className="flex-shrink-0 bg-red-500 text-white rounded p-1.5 hover:bg-red-600 disabled:opacity-40"
-                >
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                  onMouseDown={() => { setCreating(false); setNewNome(""); }}
-                  className="flex-shrink-0 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onMouseDown={() => { setCreating(true); setNewNome(""); }}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-red-500 font-semibold border-t border-gray-100 hover:bg-red-50 transition-colors"
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-30 mt-1 max-h-40 overflow-y-auto">
+          {filtered.map(g => (
+            <div
+              key={g.id}
+              onMouseDown={() => { onChange(g.nome); setOpen(false); }}
+              className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
+                value === g.nome ? "bg-red-50 text-red-600" : "text-gray-700 hover:bg-red-50"
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" /> Criar novo grupo
-            </button>
-          )}
+              {g.nome}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -262,16 +176,6 @@ function ExercicioModal({
   const [showHelp,       setShowHelp]       = useState(false);
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState("");
-  const [localGroups,    setLocalGroups]    = useState<ExGroup[]>(groups);
-
-  async function handleAddGroup(nome: string) {
-    if (!user?.contractorId) return;
-    const { data } = await supabase
-      .from("exercise_groups")
-      .insert({ contractor_id: user.contractorId, nome })
-      .select("id, nome").single();
-    if (data) setLocalGroups(prev => [...prev, data as ExGroup].sort((a, b) => a.nome.localeCompare(b.nome)));
-  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -308,11 +212,11 @@ function ExercicioModal({
 
     const payload = {
       contractor_id:     user.contractorId!,
-      nome:              toTitleCase(nome.trim()),
+      nome:              nome.trim(),
       grupo_id:          grupoId,
       intensidade:       (intensidade || null) as Exercise["intensidade"],
-      nome_impressao:    toTitleCase(nomeImpressao.trim()) || null,
-      equipamento:       toTitleCase(equipamento.trim()) || null,
+      nome_impressao:    nomeImpressao.trim() || null,
+      equipamento:       equipamento.trim() || null,
       descricao:         descricao.trim() || null,
       demonstracao_tipo: (demoUrl ? demoTipo : null) as Exercise["demonstracao_tipo"],
       demonstracao_url:  demoUrl || null,
@@ -342,7 +246,7 @@ function ExercicioModal({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
         <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl my-4">
 
           {/* Header */}
@@ -374,7 +278,6 @@ function ExercicioModal({
                     <input
                       value={nome}
                       onChange={e => setNome(e.target.value)}
-                      onBlur={e => setNome(toTitleCase(e.target.value))}
                       placeholder="Nome *"
                       className="flex-1 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent"
                     />
@@ -388,12 +291,11 @@ function ExercicioModal({
 
               {/* Row 2: Grupo | Nome impressão */}
               <div className="grid grid-cols-2 gap-4">
-                <GrupoSelect value={grupoNome} onChange={setGrupoNome} groups={localGroups} onAdd={handleAddGroup} />
+                <GrupoSelect value={grupoNome} onChange={setGrupoNome} groups={groups} />
                 <div>
                   <input
                     value={nomeImpressao}
                     onChange={e => setNomeImpressao(e.target.value)}
-                    onBlur={e => setNomeImpressao(toTitleCase(e.target.value))}
                     placeholder="Nome de impressão"
                     className="w-full border-b border-gray-300 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent"
                   />
@@ -405,7 +307,6 @@ function ExercicioModal({
                 <input
                   value={equipamento}
                   onChange={e => setEquipamento(e.target.value)}
-                  onBlur={e => setEquipamento(toTitleCase(e.target.value))}
                   placeholder="Equipamento"
                   className="border-b border-gray-300 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none bg-transparent"
                 />
@@ -582,14 +483,6 @@ export default function ExerciciosPage() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
 
-  /* Filtros */
-  const [filterOpen,        setFilterOpen]        = useState(false);
-  const [filterGrupoId,     setFilterGrupoId]     = useState("");
-  const [filterIntensidade, setFilterIntensidade] = useState("");
-  /* Applied (só muda ao clicar APLICAR) */
-  const [appliedGrupoId,     setAppliedGrupoId]     = useState("");
-  const [appliedIntensidade, setAppliedIntensidade] = useState("");
-
   const loadGroups = useCallback(async () => {
     if (!user?.contractorId) return;
     const { data } = await supabase
@@ -611,15 +504,13 @@ export default function ExerciciosPage() {
       .select("*, exercise_groups(nome)", { count: "exact" })
       .eq("contractor_id", user.contractorId!);
 
-    if (search.trim())        query = query.ilike("nome", `%${search.trim()}%`);
-    if (appliedGrupoId)       query = query.eq("grupo_id", appliedGrupoId);
-    if (appliedIntensidade)   query = query.eq("intensidade", appliedIntensidade as "facil" | "intermediario" | "dificil");
+    if (search.trim()) query = query.ilike("nome", `%${search.trim()}%`);
 
     const { data, count } = await query.order("nome").range(from, to);
     setExercises((data as Exercise[]) ?? []);
     setTotal(count ?? 0);
     setLoading(false);
-  }, [user, page, perPage, search, appliedGrupoId, appliedIntensidade]);
+  }, [user, page, perPage, search]);
 
   useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { setPage(1); }, [search]);
@@ -643,33 +534,21 @@ export default function ExerciciosPage() {
     }
   }
 
-  const INTENSIDADE_BADGE: Record<string, string> = {
-    facil:         "text-green-600 bg-green-50 border border-green-200",
-    intermediario: "text-orange-500 bg-orange-50 border border-orange-200",
-    dificil:       "text-red-500 bg-red-50 border border-red-200",
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-col min-h-screen bg-gray-50">
 
         {/* Toolbar */}
-        <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-6">
-          {/* Title + Search */}
-          <div className="flex items-center gap-4">
-            <h1 className="text-sm font-bold text-gray-800 whitespace-nowrap">Exercícios</h1>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-gray-400 leading-none mb-1">Pesquisar</span>
-              <div className="flex items-center gap-2 border-b border-gray-300 pb-0.5">
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Pesquisar exercício"
-                  className="text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent w-52"
-                />
-                <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              </div>
-            </div>
+        <div className="bg-white border-b border-gray-100 px-8 py-4 flex items-center gap-3">
+          <h1 className="text-base font-bold text-gray-800 mr-2">Exercícios</h1>
+          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Pesquisar"
+              className="text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent w-44"
+            />
+            <Search className="w-4 h-4 text-gray-400" />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -679,32 +558,20 @@ export default function ExerciciosPage() {
             >
               + EXERCÍCIO
             </button>
-            <button
-              onClick={() => { setFilterGrupoId(appliedGrupoId); setFilterIntensidade(appliedIntensidade); setFilterOpen(true); }}
-              className={`inline-flex items-center gap-1.5 border text-xs font-semibold px-3 py-2 rounded-lg transition-colors relative ${
-                appliedGrupoId || appliedIntensidade
-                  ? "border-red-400 text-red-600 bg-red-50 hover:bg-red-100"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}
-            >
+            <button className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-xs font-semibold px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <SlidersHorizontal className="w-3.5 h-3.5" /> FILTROS
-              {(appliedGrupoId || appliedIntensidade) && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
-                  {(appliedGrupoId ? 1 : 0) + (appliedIntensidade ? 1 : 0)}
-                </span>
-              )}
             </button>
           </div>
         </div>
 
         {/* Table */}
-        <div className="flex-1 mx-4 my-4 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
+        <div className="flex-1 mx-6 my-4 bg-white rounded-xl border border-gray-100 overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_190px_140px_130px_72px] border-b border-gray-200 px-6 py-3">
-            <span className="text-xs font-semibold text-gray-600">Descrição</span>
-            <span className="text-xs font-semibold text-gray-600">Grupo de exercício</span>
-            <span className="text-xs font-semibold text-gray-600">Intensidade</span>
-            <span className="text-xs font-semibold text-gray-600">Criado por</span>
+          <div className="grid grid-cols-[1fr_180px_120px_120px_80px] border-b border-gray-100 px-4 py-2.5 text-xs font-semibold text-gray-500">
+            <span>Descrição</span>
+            <span>Grupo de exercício</span>
+            <span>Intensidade</span>
+            <span>Criado por</span>
             <span />
           </div>
 
@@ -719,14 +586,13 @@ export default function ExerciciosPage() {
               <p className="text-sm text-gray-400">Nenhum exercício encontrado</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
               {exercises.map(ex => (
                 <div
                   key={ex.id}
-                  className="grid grid-cols-[1fr_190px_140px_130px_72px] px-6 py-3.5 items-center hover:bg-gray-50 transition-colors"
+                  className="grid grid-cols-[1fr_180px_120px_120px_80px] px-4 py-2.5 items-center hover:bg-gray-50 transition-colors"
                 >
-                  {/* Descrição */}
-                  <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                  <div className="flex items-center gap-1.5 min-w-0 pr-3">
                     <span className="text-sm text-gray-800 truncate">{ex.nome}</span>
                     {ex.demonstracao_tipo === "video" && ex.demonstracao_url && (
                       <button
@@ -738,41 +604,27 @@ export default function ExerciciosPage() {
                       </button>
                     )}
                   </div>
-
-                  {/* Grupo */}
-                  <div>
+                  <span>
                     {ex.exercise_groups?.nome ? (
-                      <span className="text-xs text-gray-600 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full whitespace-nowrap">
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full truncate max-w-[160px] inline-block">
                         {ex.exercise_groups.nome}
                       </span>
-                    ) : <span className="text-gray-300 text-sm">-</span>}
-                  </div>
-
-                  {/* Intensidade */}
-                  <div>
-                    {ex.intensidade ? (
-                      <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${INTENSIDADE_BADGE[ex.intensidade] ?? ""}`}>
-                        {INTENSIDADE_LABEL[ex.intensidade]}
-                      </span>
-                    ) : <span className="text-gray-300 text-sm">-</span>}
-                  </div>
-
-                  {/* Criado por */}
-                  <span className="text-sm text-gray-600">
-                    {ex.criado_por === "usuario" ? "Usuário" : ex.criado_por}
+                    ) : <span className="text-gray-300">—</span>}
                   </span>
-
-                  {/* Ações */}
-                  <div className="flex items-center gap-1 justify-end">
+                  <span className="text-xs text-gray-600">
+                    {ex.intensidade ? INTENSIDADE_LABEL[ex.intensidade] : "—"}
+                  </span>
+                  <span className="text-xs text-gray-500 capitalize">{ex.criado_por === "usuario" ? "Usuário" : ex.criado_por}</span>
+                  <div className="flex items-center gap-2 justify-end">
                     <button
                       onClick={() => { setEditExercise(ex); setShowModal(true); }}
-                      className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setDeleteId(ex.id)}
-                      className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -826,91 +678,6 @@ export default function ExerciciosPage() {
           onClose={() => { setShowModal(false); setEditExercise(null); }}
           onSaved={handleSaved}
         />
-      )}
-
-      {/* Filter panel */}
-      {filterOpen && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setFilterOpen(false)} />
-          <div className="fixed top-0 right-0 h-full w-72 bg-white shadow-2xl z-50 flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <SlidersHorizontal className="w-4 h-4" /> Filtros
-              </div>
-              <button onClick={() => setFilterOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Filters */}
-            <div className="flex-1 px-5 py-5 space-y-5 overflow-y-auto">
-              {/* Grupo de exercícios */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Grupo de exercícios</label>
-                <div className="relative">
-                  <select
-                    value={filterGrupoId}
-                    onChange={e => setFilterGrupoId(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-300 appearance-none bg-white"
-                  >
-                    <option value="">Todos os grupos</option>
-                    {groups.map(g => (
-                      <option key={g.id} value={g.id}>{g.nome}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Intensidade */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1.5">Intensidade</label>
-                <div className="relative">
-                  <select
-                    value={filterIntensidade}
-                    onChange={e => setFilterIntensidade(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-300 appearance-none bg-white"
-                  >
-                    <option value="">Todas</option>
-                    <option value="facil">Fácil</option>
-                    <option value="intermediario">Intermediário</option>
-                    <option value="dificil">Difícil</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-100">
-              <button
-                onClick={() => {
-                  setFilterGrupoId("");
-                  setFilterIntensidade("");
-                  setAppliedGrupoId("");
-                  setAppliedIntensidade("");
-                  setPage(1);
-                  setFilterOpen(false);
-                }}
-                className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-700"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" /> LIMPAR
-              </button>
-              <button
-                onClick={() => {
-                  setAppliedGrupoId(filterGrupoId);
-                  setAppliedIntensidade(filterIntensidade);
-                  setPage(1);
-                  setFilterOpen(false);
-                }}
-                className="bg-red-600 text-white text-xs font-bold px-5 py-2 rounded-lg hover:bg-red-700 transition-colors"
-              >
-                APLICAR
-              </button>
-            </div>
-          </div>
-        </>
       )}
 
       {/* Delete confirmation */}

@@ -65,7 +65,6 @@ export default function TreinosPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,7 +82,6 @@ export default function TreinosPage() {
         .from("workouts")
         .select("id, nome, responsavel_nome, tipo_treino, nivel, sexo, idade_minima, idade_maxima", { count: "exact" })
         .eq("contractor_id", user.contractorId!)
-        .is("student_id", null)
         .order("nome")
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
       if (query) q = q.ilike("nome", `%${query}%`);
@@ -209,18 +207,36 @@ export default function TreinosPage() {
                     <td className="px-4 py-3 text-gray-600">{sexoLabel(w.sexo)}</td>
                     <td className="px-4 py-3 text-gray-600">{idadeLabel(w.idade_minima, w.idade_maxima)}</td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          if (openMenu === w.id) { setOpenMenu(null); return; }
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                          setOpenMenu(w.id);
-                        }}
-                        className="p-1.5 rounded hover:bg-gray-100"
-                      >
-                        <MoreVertical className="w-4 h-4 text-gray-500" />
-                      </button>
+                      <div className="relative inline-block" ref={openMenu === w.id ? menuRef : null}>
+                        <button
+                          onClick={() => setOpenMenu(openMenu === w.id ? null : w.id)}
+                          className="p-1.5 rounded hover:bg-gray-100"
+                        >
+                          <MoreVertical className="w-4 h-4 text-gray-500" />
+                        </button>
+                        {openMenu === w.id && (
+                          <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[140px] py-1">
+                            <button
+                              onClick={() => { setOpenMenu(null); navigate(`/app/treinos/treinos/${w.id}`); }}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Editar
+                            </button>
+                            <button
+                              onClick={() => handleDuplicate(w)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Copy className="w-3.5 h-3.5" /> Duplicar
+                            </button>
+                            <button
+                              onClick={() => handleDelete(w.id)}
+                              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Excluir
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -228,35 +244,6 @@ export default function TreinosPage() {
             </tbody>
           </table>
         </div>
-
-        {/* Dropdown menu — rendered via fixed position outside table overflow */}
-        {openMenu && (
-          <div
-            ref={menuRef}
-            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
-            className="bg-white border border-gray-200 rounded-xl shadow-xl min-w-[160px] py-1"
-          >
-            <button
-              onClick={() => { setOpenMenu(null); navigate(`/app/treinos/treinos/${openMenu}`); }}
-              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-            >
-              <Pencil className="w-3.5 h-3.5" /> Editar
-            </button>
-            <button
-              onClick={() => { const w = workouts.find(x => x.id === openMenu); if (w) handleDuplicate(w); }}
-              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
-            >
-              <Copy className="w-3.5 h-3.5" /> Duplicar
-            </button>
-            <div className="border-t border-gray-100 my-0.5" />
-            <button
-              onClick={() => { if (openMenu) handleDelete(openMenu); }}
-              className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Excluir
-            </button>
-          </div>
-        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
