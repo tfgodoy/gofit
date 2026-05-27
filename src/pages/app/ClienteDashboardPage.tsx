@@ -568,6 +568,7 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
   const [enviando,          setEnviando]          = useState(false);
   const [itens,             setItens]             = useState<any[]>([]);
   const [loadingItens,      setLoadingItens]      = useState(false);
+  const [deleteConfirmId,   setDeleteConfirmId]   = useState<string | null>(null);
 
   useEffect(() => { load(); }, [studentId, contractorId]);
 
@@ -575,7 +576,7 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
     setLoading(true);
     const { data } = await supabase
       .from("anamnese_respostas")
-      .select("id, token, status, created_at, respondido_at, aceite, parq, anamnese_modelos(descricao)")
+      .select("id, token, status, created_at, respondido_at, aceite, parq, anamnese_modelos(descricao, respondido_pelo_cliente)")
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
@@ -599,6 +600,25 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
     setSelecionarModal(false);
     setModalStep("selecting");
     setCreatedToken("");
+  }
+
+  function handleEditAnamnese(r: any) {
+    const respondidoPeloCliente = (r.anamnese_modelos as any)?.respondido_pelo_cliente ?? true;
+    setCreatedToken(r.token ?? "");
+    setCreatedRespondidoPeloCliente(respondidoPeloCliente);
+    setModalStep("sending");
+    setSelecionarModal(true);
+  }
+
+  async function handleDeleteAnamnese(id: string) {
+    const { error } = await supabase
+      .from("anamnese_respostas")
+      .delete()
+      .eq("id", id);
+    if (error) { toast.error("Erro ao excluir anamnese."); return; }
+    toast.success("Anamnese excluída.");
+    setDeleteConfirmId(null);
+    load();
   }
 
   function anamneseUrl(token: string) {
@@ -705,22 +725,39 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {!respondida && r.token && (
+                  {respondida ? (
                     <button
-                      onClick={() => copyLink(r.token)}
-                      title="Copiar link"
+                      onClick={() => handleVerRespostas(r)}
+                      title="Ver respostas"
                       className="p-1.5 rounded hover:bg-gray-100"
                     >
-                      <Link2 className="w-4 h-4 text-gray-500" />
+                      <Eye className="w-4 h-4 text-gray-500" />
                     </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => copyLink(r.token)}
+                        title="Copiar link"
+                        className="p-1.5 rounded hover:bg-gray-100"
+                      >
+                        <Link2 className="w-4 h-4 text-gray-500" />
+                      </button>
+                      <button
+                        onClick={() => handleEditAnamnese(r)}
+                        title="Opções de envio"
+                        className="p-1.5 rounded hover:bg-gray-100"
+                      >
+                        <Pencil className="w-4 h-4 text-gray-500" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(r.id)}
+                        title="Excluir anamnese"
+                        className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
                   )}
-                  <button
-                    onClick={() => respondida && handleVerRespostas(r)}
-                    title="Ver respostas"
-                    className={`p-1.5 rounded hover:bg-gray-100 ${!respondida ? "opacity-40 cursor-not-allowed" : ""}`}
-                  >
-                    <Eye className="w-4 h-4 text-gray-500" />
-                  </button>
                 </div>
               </div>
             );
@@ -921,6 +958,33 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
                 Aceite do cliente:{" "}
                 <span className="font-semibold">{verModal.aceite ? "Sim" : "Não"}</span>
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — confirmar exclusão */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteConfirmId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Excluir anamnese</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Tem certeza que deseja excluir esta anamnese pendente? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="text-sm font-bold text-gray-500 hover:underline"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteAnamnese(deleteConfirmId)}
+                className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700"
+              >
+                Excluir
+              </button>
             </div>
           </div>
         </div>
