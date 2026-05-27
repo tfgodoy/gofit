@@ -306,6 +306,83 @@ export interface Database {
           }
         ];
       };
+      exercise_groups: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          nome:          string;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:           string;
+          contractor_id: string;
+          nome:          string;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Update: {
+          id?:           string;
+          contractor_id?: string;
+          nome?:         string;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "exercise_groups_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      exercises: {
+        Row: {
+          id:                string;
+          contractor_id:     string;
+          exercise_group_id: string | null;
+          nome:              string;
+          intensidade:       "facil" | "intermediario" | "dificil" | null;
+          demonstracao_url:  string | null;
+          created_at:        string;
+          updated_at:        string;
+        };
+        Insert: {
+          id?:               string;
+          contractor_id:     string;
+          exercise_group_id?: string | null;
+          nome:              string;
+          intensidade?:      "facil" | "intermediario" | "dificil" | null;
+          demonstracao_url?: string | null;
+          created_at?:       string;
+          updated_at?:       string;
+        };
+        Update: {
+          id?:               string;
+          contractor_id?:    string;
+          exercise_group_id?: string | null;
+          nome?:             string;
+          intensidade?:      "facil" | "intermediario" | "dificil" | null;
+          demonstracao_url?: string | null;
+          created_at?:       string;
+          updated_at?:       string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "exercises_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "exercises_exercise_group_id_fkey";
+            columns: ["exercise_group_id"];
+            referencedRelation: "exercise_groups";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       rewards: {
         Row: {
           id:            string;
