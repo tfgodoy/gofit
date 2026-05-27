@@ -25,6 +25,7 @@ import SessoesPage            from "@/pages/app/SessoesPage";
 import TreinosPage            from "@/pages/app/TreinosPage";
 import TreinoFormPage         from "@/pages/app/TreinoFormPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
+import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
 const queryClient = new QueryClient();
 
@@ -45,7 +46,8 @@ export default function App() {
             <Route path="/"        element={<LandingPage />} />
             <Route path="/login"   element={<LoginPage />} />
             <Route path="/cadastro" element={<ContractorRegisterPage />} />
-            <Route path="/convite/:token" element={<ConvitePage />} />
+            <Route path="/convite/:token"   element={<ConvitePage />} />
+            <Route path="/anamnese/:token"  element={<AnamnesePublicPage />} />
 
             {/* Owner */}
             <Route path="/owner/dashboard" element={

@@ -562,7 +562,8 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
   const [modalStep,         setModalStep]         = useState<"selecting" | "sending">("selecting");
   const [createdToken,      setCreatedToken]      = useState("");
   const [verModal,          setVerModal]          = useState<any | null>(null);
-  const [modelos,           setModelos]           = useState<{ id: string; descricao: string }[]>([]);
+  const [modelos,           setModelos]           = useState<{ id: string; descricao: string; respondido_pelo_cliente: boolean }[]>([]);
+  const [createdRespondidoPeloCliente, setCreatedRespondidoPeloCliente] = useState(true);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [enviando,          setEnviando]          = useState(false);
   const [itens,             setItens]             = useState<any[]>([]);
@@ -585,10 +586,10 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
   async function openSelecionarModal() {
     const { data } = await supabase
       .from("anamnese_modelos")
-      .select("id, descricao")
+      .select("id, descricao, respondido_pelo_cliente")
       .eq("contractor_id", contractorId)
       .order("descricao");
-    setModelos((data ?? []) as { id: string; descricao: string }[]);
+    setModelos((data ?? []) as { id: string; descricao: string; respondido_pelo_cliente: boolean }[]);
     setModeloSelecionado(null);
     setModalStep("selecting");
     setSelecionarModal(true);
@@ -637,9 +638,11 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
       .single();
     if (error) { toast.error("Erro ao criar anamnese."); setEnviando(false); return; }
     toast.success("Anamnese criada com sucesso!");
+    const selecionado = modelos.find(m => m.id === modeloSelecionado);
     setEnviando(false);
     setModeloSelecionado(null);
     setCreatedToken((created as any).token ?? "");
+    setCreatedRespondidoPeloCliente(selecionado?.respondido_pelo_cliente ?? true);
     setModalStep("sending");
     load();
   }
@@ -791,32 +794,47 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
             {/* Etapa 2 — opções de envio */}
             {modalStep === "sending" && (
               <div className="p-6 space-y-4">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2">
-                  <p className="text-sm text-gray-700">
-                    Esta anamnese foi configurada para ser respondida diretamente <strong>pelo cliente</strong>.
-                  </p>
-                  <p className="text-sm text-gray-600">Envie para o cliente clicando em uma das opções abaixo:</p>
-                  <div className="flex items-center gap-5 pt-2">
+                {createdRespondidoPeloCliente ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2">
+                    <p className="text-sm text-gray-700">
+                      Esta anamnese foi configurada para ser respondida diretamente <strong>pelo cliente</strong>.
+                    </p>
+                    <p className="text-sm text-gray-600">Envie para o cliente clicando em uma das opções abaixo:</p>
+                    <div className="flex items-center gap-5 pt-2">
+                      <button
+                        onClick={() => sendEmail(createdToken)}
+                        className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:underline"
+                      >
+                        <Mail className="w-4 h-4" /> E-MAIL
+                      </button>
+                      <button
+                        onClick={() => sendWhatsApp(createdToken)}
+                        className="flex items-center gap-1.5 text-sm font-semibold text-green-600 hover:underline"
+                      >
+                        <MessageCircle className="w-4 h-4" /> WHATSAPP
+                      </button>
+                      <button
+                        onClick={() => copyLink(createdToken)}
+                        className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:underline"
+                      >
+                        <Link2 className="w-4 h-4" /> COPIAR LINK
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                    <p className="text-sm text-gray-700">
+                      Esta anamnese será respondida pelo <strong>profissional</strong> durante o atendimento, com a presença do cliente.
+                    </p>
+                    <p className="text-sm text-gray-600">Clique abaixo para abrir o formulário:</p>
                     <button
-                      onClick={() => sendEmail(createdToken)}
-                      className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:underline"
+                      onClick={() => window.open(anamneseUrl(createdToken), "_blank")}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
                     >
-                      <Mail className="w-4 h-4" /> E-MAIL
-                    </button>
-                    <button
-                      onClick={() => sendWhatsApp(createdToken)}
-                      className="flex items-center gap-1.5 text-sm font-semibold text-green-600 hover:underline"
-                    >
-                      <MessageCircle className="w-4 h-4" /> WHATSAPP
-                    </button>
-                    <button
-                      onClick={() => copyLink(createdToken)}
-                      className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:underline"
-                    >
-                      <Link2 className="w-4 h-4" /> COPIAR LINK
+                      <ExternalLink className="w-4 h-4" /> ABRIR FORMULÁRIO
                     </button>
                   </div>
-                </div>
+                )}
                 <div className="flex justify-end">
                   <button onClick={closeModal} className="text-xs text-gray-400 hover:underline">
                     Fechar
