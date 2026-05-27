@@ -705,6 +705,159 @@ export interface Database {
           }
         ];
       };
+      anamnese_questoes: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          pergunta:      string;
+          tipo:          string;
+          opcoes:        Json;
+          permite_outro: boolean;
+          tem_respostas: boolean;
+          created_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          pergunta:       string;
+          tipo:           string;
+          opcoes?:        Json;
+          permite_outro?: boolean;
+          tem_respostas?: boolean;
+          created_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          pergunta?:      string;
+          tipo?:          string;
+          opcoes?:        Json;
+          permite_outro?: boolean;
+          tem_respostas?: boolean;
+          created_at?:    string;
+        };
+        Relationships: [];
+      };
+      anamnese_modelos: {
+        Row: {
+          id:                      string;
+          contractor_id:           string;
+          descricao:               string;
+          respondido_pelo_cliente: boolean;
+          exigir_aceite:           boolean;
+          created_at:              string;
+        };
+        Insert: {
+          id?:                      string;
+          contractor_id:            string;
+          descricao:                string;
+          respondido_pelo_cliente?: boolean;
+          exigir_aceite?:           boolean;
+          created_at?:              string;
+        };
+        Update: {
+          id?:                      string;
+          contractor_id?:           string;
+          descricao?:               string;
+          respondido_pelo_cliente?: boolean;
+          exigir_aceite?:           boolean;
+          created_at?:              string;
+        };
+        Relationships: [];
+      };
+      anamnese_modelo_questoes: {
+        Row: {
+          id:          string;
+          modelo_id:   string;
+          questao_id:  string;
+          ordem:       number;
+          obrigatoria: boolean;
+        };
+        Insert: {
+          id?:          string;
+          modelo_id:    string;
+          questao_id:   string;
+          ordem?:       number;
+          obrigatoria?: boolean;
+        };
+        Update: {
+          id?:          string;
+          modelo_id?:   string;
+          questao_id?:  string;
+          ordem?:       number;
+          obrigatoria?: boolean;
+        };
+        Relationships: [];
+      };
+      anamnese_respostas: {
+        Row: {
+          id:                   string;
+          contractor_id:        string;
+          modelo_id:            string | null;
+          student_id:           string | null;
+          token:                string;
+          status:               string;
+          respondente_nome:     string | null;
+          respondente_email:    string | null;
+          respondente_telefone: string | null;
+          parq:                 Json;
+          aceite:               boolean;
+          created_at:           string;
+          respondido_at:        string | null;
+        };
+        Insert: {
+          id?:                   string;
+          contractor_id:         string;
+          modelo_id?:            string | null;
+          student_id?:           string | null;
+          token?:                string;
+          status?:               string;
+          respondente_nome?:     string | null;
+          respondente_email?:    string | null;
+          respondente_telefone?: string | null;
+          parq?:                 Json;
+          aceite?:               boolean;
+          created_at?:           string;
+          respondido_at?:        string | null;
+        };
+        Update: {
+          id?:                   string;
+          contractor_id?:        string;
+          modelo_id?:            string | null;
+          student_id?:           string | null;
+          token?:                string;
+          status?:               string;
+          respondente_nome?:     string | null;
+          respondente_email?:    string | null;
+          respondente_telefone?: string | null;
+          parq?:                 Json;
+          aceite?:               boolean;
+          created_at?:           string;
+          respondido_at?:        string | null;
+        };
+        Relationships: [];
+      };
+      anamnese_resposta_itens: {
+        Row: {
+          id:          string;
+          resposta_id: string;
+          questao_id:  string;
+          valor:       Json | null;
+        };
+        Insert: {
+          id?:          string;
+          resposta_id:  string;
+          questao_id:   string;
+          valor?:       Json | null;
+        };
+        Update: {
+          id?:          string;
+          resposta_id?: string;
+          questao_id?:  string;
+          valor?:       Json | null;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

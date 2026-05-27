@@ -5,11 +5,12 @@ import {
   Plus, Folder, Download, Pencil, CheckCircle2,
   Loader2, MessageCircle, ClipboardList, Dumbbell,
   MoreVertical, X, Sparkles, Users, BookOpen, Wand2,
-  Trash2, Copy,
+  Trash2, Copy, Eye, Mail, Link2,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 /* ── Types ────────────────────────────────────────────────── */
 
@@ -534,6 +535,382 @@ function WorkoutCard({ w, onStatusChange, onDelete, onEdit }: {
   );
 }
 
+/* ── PAR-Q ────────────────────────────────────────────────── */
+
+const PARQ_PERGUNTAS = [
+  "Algum médico já disse que você possui algum problema cardíaco e que deve realizar atividade física somente com supervisão?",
+  "Você sente dor no peito quando realiza atividade física?",
+  "No último mês, você teve dor no peito quando não estava realizando atividade física?",
+  "Você perde o equilíbrio por causa de tontura ou perde a consciência?",
+  "Você tem algum problema ósseo ou muscular que poderia ser agravado pela atividade física?",
+  "Algum médico está receitando atualmente medicamentos para pressão arterial ou condição cardíaca?",
+  "Você tem alguma outra razão pela qual não deve praticar atividade física?",
+];
+
+/* ── Anamnese Tab ─────────────────────────────────────────── */
+
+function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, studentName }: {
+  studentId:        string;
+  contractorId:     string;
+  studentEmail?:    string | null;
+  studentTelefone?: string | null;
+  studentName?:     string;
+}) {
+  const [respostas,         setRespostas]         = useState<any[]>([]);
+  const [loading,           setLoading]           = useState(true);
+  const [selecionarModal,   setSelecionarModal]   = useState(false);
+  const [modalStep,         setModalStep]         = useState<"selecting" | "sending">("selecting");
+  const [createdToken,      setCreatedToken]      = useState("");
+  const [verModal,          setVerModal]          = useState<any | null>(null);
+  const [modelos,           setModelos]           = useState<{ id: string; descricao: string }[]>([]);
+  const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
+  const [enviando,          setEnviando]          = useState(false);
+  const [itens,             setItens]             = useState<any[]>([]);
+  const [loadingItens,      setLoadingItens]      = useState(false);
+
+  useEffect(() => { load(); }, [studentId, contractorId]);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("anamnese_respostas")
+      .select("id, token, status, created_at, respondido_at, aceite, parq, anamnese_modelos(descricao)")
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    setRespostas((data ?? []) as any[]);
+    setLoading(false);
+  }
+
+  async function openSelecionarModal() {
+    const { data } = await supabase
+      .from("anamnese_modelos")
+      .select("id, descricao")
+      .eq("contractor_id", contractorId)
+      .order("descricao");
+    setModelos((data ?? []) as { id: string; descricao: string }[]);
+    setModeloSelecionado(null);
+    setModalStep("selecting");
+    setSelecionarModal(true);
+  }
+
+  function closeModal() {
+    setSelecionarModal(false);
+    setModalStep("selecting");
+    setCreatedToken("");
+  }
+
+  function anamneseUrl(token: string) {
+    return `${window.location.origin}/anamnese/${token}`;
+  }
+
+  function copyLink(token: string) {
+    navigator.clipboard.writeText(anamneseUrl(token));
+    toast.success("Link copiado!");
+  }
+
+  function sendEmail(token: string) {
+    if (!studentEmail) { toast.error("Aluno sem e-mail cadastrado."); return; }
+    const name = studentName ?? "você";
+    window.open(`mailto:${studentEmail}?subject=Anamnese&body=Olá ${name}! Acesse o link para preencher a anamnese: ${anamneseUrl(token)}`);
+  }
+
+  function sendWhatsApp(token: string) {
+    const raw = (studentTelefone ?? "").replace(/\D/g, "");
+    if (!raw) { toast.error("Aluno sem telefone cadastrado."); return; }
+    const name = studentName ?? "você";
+    window.open(`https://wa.me/55${raw}?text=Olá ${name}! Acesse o link para preencher a anamnese: ${anamneseUrl(token)}`);
+  }
+
+  async function handleEnviar() {
+    if (!modeloSelecionado) return;
+    setEnviando(true);
+    const { data: created, error } = await supabase
+      .from("anamnese_respostas")
+      .insert({
+        contractor_id: contractorId,
+        student_id:    studentId,
+        modelo_id:     modeloSelecionado,
+        status:        "pendente",
+      })
+      .select("token")
+      .single();
+    if (error) { toast.error("Erro ao criar anamnese."); setEnviando(false); return; }
+    toast.success("Anamnese criada com sucesso!");
+    setEnviando(false);
+    setModeloSelecionado(null);
+    setCreatedToken((created as any).token ?? "");
+    setModalStep("sending");
+    load();
+  }
+
+  async function handleVerRespostas(resposta: any) {
+    setVerModal(resposta);
+    setLoadingItens(true);
+    const { data } = await supabase
+      .from("anamnese_resposta_itens")
+      .select("questao_id, valor, anamnese_questoes(pergunta, tipo)")
+      .eq("resposta_id", resposta.id);
+    setItens((data ?? []) as any[]);
+    setLoadingItens(false);
+  }
+
+  function fmtBR(iso: string) {
+    return new Date(iso).toLocaleDateString("pt-BR");
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* Toolbar */}
+      <div className="flex justify-center">
+        <button
+          onClick={openSelecionarModal}
+          className="inline-flex items-center gap-2 bg-green-500 text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:bg-green-600 transition-colors"
+        >
+          ENVIAR ANAMNESE
+        </button>
+      </div>
+
+      {/* Lista */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      ) : respostas.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <ClipboardList className="w-10 h-10 text-gray-200" />
+          <p className="text-sm text-gray-400">Nenhuma anamnese enviada para este aluno</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {respostas.map(r => {
+            const nomeModelo = (r.anamnese_modelos as any)?.descricao ?? "Sem modelo";
+            const respondida = r.status === "respondido";
+            return (
+              <div key={r.id} className="bg-white rounded-xl border border-gray-100 shadow-sm px-6 py-4 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 mb-1">{nomeModelo}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+                      respondida ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                    }`}>
+                      {respondida ? "Respondido" : "Pendente"}
+                    </span>
+                    <span>Enviada em: {fmtBR(r.created_at)}</span>
+                    <span>Respondida em: {r.respondido_at ? fmtBR(r.respondido_at) : "—"}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {!respondida && r.token && (
+                    <button
+                      onClick={() => copyLink(r.token)}
+                      title="Copiar link"
+                      className="p-1.5 rounded hover:bg-gray-100"
+                    >
+                      <Link2 className="w-4 h-4 text-gray-500" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => respondida && handleVerRespostas(r)}
+                    title="Ver respostas"
+                    className={`p-1.5 rounded hover:bg-gray-100 ${!respondida ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    <Eye className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal — seleção de modelo / envio */}
+      {selecionarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800">
+                {modalStep === "selecting" ? "Selecionar modelo de anamnese" : "Anamnese criada"}
+              </h2>
+              <button onClick={closeModal} className="p-1.5 rounded hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Etapa 1 — escolher modelo */}
+            {modalStep === "selecting" && (
+              <>
+                <div className="p-6 max-h-72 overflow-y-auto space-y-2">
+                  {modelos.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-8">
+                      Nenhum modelo cadastrado. Crie um modelo em Configurações → Anamnese.
+                    </p>
+                  ) : (
+                    modelos.map(m => (
+                      <div
+                        key={m.id}
+                        onClick={() => setModeloSelecionado(m.id)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          modeloSelecionado === m.id
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                          modeloSelecionado === m.id ? "border-primary" : "border-gray-300"
+                        }`}>
+                          {modeloSelecionado === m.id && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                        </div>
+                        <span className="text-sm text-gray-800">{m.descricao}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+                  <button
+                    onClick={closeModal}
+                    className="text-sm font-semibold text-gray-500 hover:text-gray-700 px-4 py-2"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    disabled={!modeloSelecionado || enviando}
+                    onClick={handleEnviar}
+                    className="px-5 py-2 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                  >
+                    {enviando ? "Enviando..." : "ENVIAR"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Etapa 2 — opções de envio */}
+            {modalStep === "sending" && (
+              <div className="p-6 space-y-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2">
+                  <p className="text-sm text-gray-700">
+                    Esta anamnese foi configurada para ser respondida diretamente <strong>pelo cliente</strong>.
+                  </p>
+                  <p className="text-sm text-gray-600">Envie para o cliente clicando em uma das opções abaixo:</p>
+                  <div className="flex items-center gap-5 pt-2">
+                    <button
+                      onClick={() => sendEmail(createdToken)}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      <Mail className="w-4 h-4" /> E-MAIL
+                    </button>
+                    <button
+                      onClick={() => sendWhatsApp(createdToken)}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-green-600 hover:underline"
+                    >
+                      <MessageCircle className="w-4 h-4" /> WHATSAPP
+                    </button>
+                    <button
+                      onClick={() => copyLink(createdToken)}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:underline"
+                    >
+                      <Link2 className="w-4 h-4" /> COPIAR LINK
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={closeModal} className="text-xs text-gray-400 hover:underline">
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal — ver respostas */}
+      {verModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "85vh" }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+              <h2 className="font-semibold text-gray-800">
+                Anamnese — {(verModal.anamnese_modelos as any)?.descricao ?? "Sem modelo"}
+              </h2>
+              <button onClick={() => setVerModal(null)} className="p-1.5 rounded hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {loadingItens ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <>
+                  {/* Respostas */}
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 mb-3">Respostas</h3>
+                    {itens.length === 0 ? (
+                      <p className="text-sm text-gray-400">Nenhuma resposta registrada.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {itens.map((item, i) => {
+                          const pergunta = (item.anamnese_questoes as any)?.pergunta ?? "—";
+                          const tipo     = (item.anamnese_questoes as any)?.tipo ?? "";
+                          let display: string;
+                          if (tipo === "checkbox" && Array.isArray(item.valor)) {
+                            display = item.valor.join(", ");
+                          } else if (item.valor !== null && item.valor !== undefined) {
+                            display = String(item.valor);
+                          } else {
+                            display = "—";
+                          }
+                          return (
+                            <div key={i} className="bg-gray-50 rounded-xl px-4 py-3">
+                              <p className="text-xs text-gray-500 mb-1">{pergunta}</p>
+                              <p className="text-sm font-medium text-gray-800">{display}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PAR-Q */}
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 mb-3">PAR-Q</h3>
+                    <div className="space-y-2">
+                      {PARQ_PERGUNTAS.map((p, i) => {
+                        const parqData = (verModal.parq as Record<string, string>) ?? {};
+                        const resp = parqData[String(i)];
+                        return (
+                          <div key={i} className="bg-gray-50 rounded-xl px-4 py-3">
+                            <p className="text-xs text-gray-500 mb-1">{p}</p>
+                            <p className="text-sm font-medium text-gray-800">{resp ?? "—"}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0 rounded-b-2xl bg-gray-50">
+              <p className="text-sm text-gray-600">
+                Aceite do cliente:{" "}
+                <span className="font-semibold">{verModal.aceite ? "Sim" : "Não"}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Treinos Tab ──────────────────────────────────────────── */
 
 function TreinosTab({ studentId, studentName, contractorId }: {
@@ -854,6 +1231,14 @@ export default function ClienteDashboardPage() {
               studentId={student.id}
               studentName={student.nome_completo}
               contractorId={user!.contractorId!}
+            />
+          ) : activeTab === "Anamnese" ? (
+            <AnamneseTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
+              studentEmail={student.email}
+              studentTelefone={student.telefone}
+              studentName={student.nome_completo}
             />
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />

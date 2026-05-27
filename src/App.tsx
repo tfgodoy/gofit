@@ -15,6 +15,9 @@ import ClienteDashboardPage   from "@/pages/app/ClienteDashboardPage";
 import PlaceholderPage           from "@/pages/app/PlaceholderPage";
 import ClubeRecompensasPage      from "@/pages/app/ClubeRecompensasPage";
 import WodPage                from "@/pages/app/WodPage";
+import AnamneseBibliotecaPage  from "@/pages/app/AnamneseBibliotecaPage";
+import AnamneseModelosPage     from "@/pages/app/AnamneseModelosPage";
+import AnamneseModeloEditPage  from "@/pages/app/AnamneseModeloEditPage";
 import RelatoriosPage         from "@/pages/app/RelatoriosPage";
 import ExerciciosPage         from "@/pages/app/ExerciciosPage";
 import GruposExerciciosPage   from "@/pages/app/GruposExerciciosPage";
@@ -72,6 +75,10 @@ export default function App() {
             <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
             <Route path="/app/relatorios/*"      element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
             <Route path="/app/administrativo/*"  element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />
+            <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />
             <Route path="/app/loja"              element={<AppGuard><PlaceholderPage title="Loja" /></AppGuard>} />

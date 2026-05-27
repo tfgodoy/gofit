@@ -241,7 +241,6 @@ export default function AlunoFormPage() {
     const { error: dbError } = isEdit
       ? await supabase.from("students").update(payload).eq("id", id!)
       : await supabase.from("students").insert([payload]);
-
     if (dbError) {
       setError("Erro ao salvar. Tente novamente.");
       setSubmitting(false);
