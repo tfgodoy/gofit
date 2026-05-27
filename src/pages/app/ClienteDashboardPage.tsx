@@ -1343,13 +1343,6 @@ export default function ClienteDashboardPage() {
               </div>
             </div>
 
-            <Link
-              to={`/app/clientes/${student.id}/cadastro`}
-              className="p-2 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors flex-shrink-0"
-              title="Editar cadastro"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </Link>
           </div>
         </div>
 

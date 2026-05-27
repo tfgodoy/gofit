@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { useCEP } from "@/hooks/useCEP";
 import { supabase } from "@/integrations/supabase/client";
@@ -246,7 +246,7 @@ export default function AlunoFormPage() {
       setSubmitting(false);
       return;
     }
-    navigate("/app/clientes");
+    navigate(isEdit ? `/app/clientes/${id}/dashboard` : "/app/clientes");
   }
 
   if (loadingData) {
@@ -264,12 +264,6 @@ export default function AlunoFormPage() {
       <div className="p-8 max-w-4xl">
         {/* Header */}
         <div className="mb-6">
-          <Link
-            to="/app/clientes"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-primary transition-colors mb-4"
-          >
-            <ArrowLeft className="w-4 h-4" /> Voltar para lista
-          </Link>
           <h1 className="text-2xl font-extrabold text-gray-900">
             {isEdit ? "Editar cliente" : "Novo Cliente"}
           </h1>
@@ -503,7 +497,7 @@ export default function AlunoFormPage() {
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 mt-6">
             <Link
-              to="/app/clientes"
+              to={isEdit ? `/app/clientes/${id}/dashboard` : "/app/clientes"}
               className="px-6 py-2.5 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               Cancelar
