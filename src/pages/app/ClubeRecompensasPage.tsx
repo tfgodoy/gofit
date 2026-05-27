@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Search, SlidersHorizontal, MoreVertical, ArrowDownToLine,
+  Search, SlidersHorizontal, MoreVertical, Hand,
   ImageIcon, Info, X, Loader2, Plus, Users, Gift, Package,
+  Pencil, Trash2,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,26 +19,31 @@ interface Reward {
   created_at:  string;
 }
 
-/* ── Nova Recompensa Modal ───────────────────────────── */
-function NovaRecompensaModal({
+/* ── Recompensa Modal (create + edit) ───────────────────── */
+function RecompensaModal({
+  initial,
   onClose,
   onSaved,
 }: {
+  initial?: Reward;
   onClose: () => void;
   onSaved: (r: Reward) => void;
 }) {
-  const { user } = useAuth();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [descricao,   setDescricao]   = useState("");
-  const [observacoes, setObservacoes] = useState("");
-  const [pontos,      setPontos]      = useState("");
-  const [preview,     setPreview]     = useState<string | null>(null);
+  const { user }   = useAuth();
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const isEdit     = !!initial;
+
+  const [descricao,   setDescricao]   = useState(initial?.descricao   ?? "");
+  const [observacoes, setObservacoes] = useState(initial?.observacoes ?? "");
+  const [pontos,      setPontos]      = useState(initial ? String(initial.pontos) : "");
+  const [preview,     setPreview]     = useState<string | null>(initial?.foto_url ?? null);
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState("");
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { setError("Imagem muito grande (máx 3 MB)."); return; }
     const reader = new FileReader();
     reader.onload = ev => setPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
@@ -49,20 +55,35 @@ function NovaRecompensaModal({
     if (!user?.contractorId) return;
     setSaving(true);
     setError("");
-    const { data, error: dbError } = await supabase
-      .from("rewards")
-      .insert([{
-        contractor_id: user.contractorId!,
-        descricao:     descricao.trim(),
-        observacoes:   observacoes.trim() || null,
-        pontos:        Number(pontos),
-        foto_url:      null,
-      }])
-      .select()
-      .single();
-    setSaving(false);
-    if (dbError || !data) { setError("Erro ao salvar. Tente novamente."); return; }
-    onSaved(data as Reward);
+
+    const payload = {
+      contractor_id: user.contractorId!,
+      descricao:     descricao.trim(),
+      observacoes:   observacoes.trim() || null,
+      pontos:        Number(pontos),
+      foto_url:      preview,
+    };
+
+    if (isEdit) {
+      const { data, error: dbError } = await supabase
+        .from("rewards")
+        .update(payload)
+        .eq("id", initial!.id)
+        .select()
+        .single();
+      setSaving(false);
+      if (dbError || !data) { setError("Erro ao salvar. Tente novamente."); return; }
+      onSaved(data as Reward);
+    } else {
+      const { data, error: dbError } = await supabase
+        .from("rewards")
+        .insert([payload])
+        .select()
+        .single();
+      setSaving(false);
+      if (dbError || !data) { setError("Erro ao salvar. Tente novamente."); return; }
+      onSaved(data as Reward);
+    }
   }
 
   return (
@@ -75,7 +96,9 @@ function NovaRecompensaModal({
           <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
             <Gift className="w-4 h-4 text-orange-500" />
           </div>
-          <h2 className="text-base font-bold text-gray-900 flex-1">Nova recompensa</h2>
+          <h2 className="text-base font-bold text-gray-900 flex-1">
+            {isEdit ? "Editar recompensa" : "Nova recompensa"}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -86,47 +109,36 @@ function NovaRecompensaModal({
             <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
           )}
 
-          {/* Descrição */}
-          <div>
-            <input
-              value={descricao}
-              onChange={e => setDescricao(e.target.value)}
-              placeholder="Descrição *"
-              className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
-            />
-          </div>
+          <input
+            value={descricao}
+            onChange={e => setDescricao(e.target.value)}
+            placeholder="Descrição *"
+            className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
+          />
 
-          {/* Observações */}
-          <div>
-            <input
-              value={observacoes}
-              onChange={e => setObservacoes(e.target.value)}
-              placeholder="Observações"
-              className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
-            />
-          </div>
+          <input
+            value={observacoes}
+            onChange={e => setObservacoes(e.target.value)}
+            placeholder="Observações"
+            className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
+          />
 
-          {/* Pontos */}
-          <div>
-            <input
-              type="number"
-              value={pontos}
-              onChange={e => setPontos(e.target.value)}
-              placeholder="Pontos para resgate *"
-              className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
-            />
-          </div>
+          <input
+            type="number"
+            value={pontos}
+            onChange={e => setPontos(e.target.value)}
+            placeholder="Pontos para resgate *"
+            className="w-full border-0 border-b border-gray-200 pb-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-orange-400 transition-colors bg-transparent"
+          />
 
-          {/* Image tip */}
           <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5">
             <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-600 leading-relaxed">
-              Dica: Prefira utilizar imagens sem fundo, ou com fundo branco, mantendo um padrão
-              entre os produtos, recomendamos o uso de imagens com pelo menos 400x400 pixels.
+              Dica: Prefira imagens sem fundo ou com fundo branco, mantendo um padrão entre os produtos.
+              Recomendamos imagens com pelo menos 400×400 pixels.
             </p>
           </div>
 
-          {/* Image upload */}
           <div className="flex flex-col items-center gap-3">
             {preview ? (
               <img src={preview} alt="Preview" className="w-24 h-24 rounded-xl object-cover border border-gray-200" />
@@ -140,7 +152,7 @@ function NovaRecompensaModal({
               onClick={() => fileRef.current?.click()}
               className="bg-orange-500 text-white text-xs font-bold px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
             >
-              SELECIONAR IMAGEM
+              {preview ? "ALTERAR IMAGEM" : "SELECIONAR IMAGEM"}
             </button>
           </div>
         </div>
@@ -165,7 +177,27 @@ function NovaRecompensaModal({
 }
 
 /* ── Reward card ─────────────────────────────────────── */
-function RewardCard({ reward }: { reward: Reward }) {
+function RewardCard({
+  reward,
+  onEdit,
+  onDelete,
+}: {
+  reward:   Reward;
+  onEdit:   () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef         = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   return (
     <div className="bg-white border border-gray-100 rounded-xl overflow-hidden flex gap-3 p-3">
       {/* Image */}
@@ -176,21 +208,47 @@ function RewardCard({ reward }: { reward: Reward }) {
           <ImageIcon className="w-7 h-7 text-gray-300" />
         )}
       </div>
+
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-1">
           <p className="text-xs font-bold text-gray-900 uppercase leading-tight line-clamp-1">{reward.descricao}</p>
-          <button className="text-gray-400 hover:text-gray-600 flex-shrink-0">
-            <MoreVertical className="w-4 h-4" />
-          </button>
+
+          {/* 3-dot menu */}
+          <div className="relative flex-shrink-0" ref={menuRef}>
+            <button
+              onClick={() => setOpen(v => !v)}
+              className="text-gray-400 hover:text-gray-600 p-0.5 rounded"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {open && (
+              <div className="absolute right-0 top-6 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[120px]">
+                <button
+                  onClick={() => { setOpen(false); onEdit(); }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-gray-400" /> Editar
+                </button>
+                <button
+                  onClick={() => { setOpen(false); onDelete(); }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remover
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+
         {reward.observacoes && (
           <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{reward.observacoes}</p>
         )}
+
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs font-bold text-gray-700">{reward.pontos.toLocaleString("pt-BR")} FC</span>
           <button className="inline-flex items-center gap-1 text-xs font-bold text-orange-500 hover:underline">
-            <ArrowDownToLine className="w-3 h-3" /> RESGATAR
+            <Hand className="w-3 h-3" /> RESGATAR
           </button>
         </div>
       </div>
@@ -201,12 +259,11 @@ function RewardCard({ reward }: { reward: Reward }) {
 /* ── Visão Geral tab ─────────────────────────────────── */
 function VisaoGeral({ rewardCount }: { rewardCount: number }) {
   const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  const now = new Date();
+  const now    = new Date();
   const period = `${MONTHS[now.getMonth()]}/${now.getFullYear()}`;
 
   return (
     <div className="p-6">
-      {/* Period + filters */}
       <div className="flex items-center justify-end gap-3 mb-5">
         <span className="text-xs text-gray-500 font-medium">Período: <strong>{period}</strong></span>
         <button className="inline-flex items-center gap-1.5 border border-gray-200 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
@@ -214,13 +271,12 @@ function VisaoGeral({ rewardCount }: { rewardCount: number }) {
         </button>
       </div>
 
-      {/* KPI cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { label: "Clientes participantes", value: 0,           Icon: Users   },
-          { label: "Pontos distribuídos",    value: 0,           Icon: Gift    },
-          { label: "Resgates realizados",    value: 0,           Icon: Package },
-        ].map(({ label, value, Icon }) => (
+        {([
+          { label: "Clientes participantes", value: 0, Icon: Users   },
+          { label: "Pontos distribuídos",    value: 0, Icon: Gift    },
+          { label: "Resgates realizados",    value: 0, Icon: Package },
+        ] as const).map(({ label, value, Icon }) => (
           <div key={label} className="bg-white border border-gray-100 rounded-xl px-5 py-4 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
               <Icon className="w-5 h-5 text-orange-400" />
@@ -233,46 +289,26 @@ function VisaoGeral({ rewardCount }: { rewardCount: number }) {
         ))}
       </div>
 
-      {/* Top sections */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Top clientes */}
-        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-700">Top clientes</span>
+        {[
+          { label: "Top clientes",     Icon: Users },
+          { label: "Top gatilhos",     Icon: Gift  },
+          { label: "Top recompensas",  Icon: Gift  },
+        ].map(({ label, Icon }) => (
+          <div key={label} className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-700">{label}</span>
+            </div>
+            <div className="flex flex-col items-center justify-center py-10 gap-2">
+              <Icon className="w-8 h-8 text-gray-200" />
+              <p className="text-xs text-gray-400">
+                {label === "Top recompensas" && rewardCount === 0
+                  ? "Nenhuma recompensa cadastrada"
+                  : "Sem dados no período"}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col items-center justify-center py-10 gap-2">
-            <Users className="w-8 h-8 text-gray-200" />
-            <p className="text-xs text-gray-400">Sem dados no período</p>
-          </div>
-        </div>
-
-        {/* Top gatilhos */}
-        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-700">Top gatilhos</span>
-          </div>
-          <div className="flex flex-col items-center justify-center py-10 gap-2">
-            <Gift className="w-8 h-8 text-gray-200" />
-            <p className="text-xs text-gray-400">Sem dados no período</p>
-          </div>
-        </div>
-
-        {/* Top recompensas */}
-        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-700">Top recompensas</span>
-          </div>
-          <div className="flex flex-col items-center justify-center py-10 gap-2">
-            {rewardCount === 0 ? (
-              <>
-                <Gift className="w-8 h-8 text-gray-200" />
-                <p className="text-xs text-gray-400">Nenhuma recompensa cadastrada</p>
-              </>
-            ) : (
-              <p className="text-xs text-gray-400">Sem resgates no período</p>
-            )}
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -283,10 +319,14 @@ function RecompensasTab({
   rewards,
   loading,
   onAdd,
+  onEdit,
+  onDelete,
 }: {
-  rewards: Reward[];
-  loading: boolean;
-  onAdd: () => void;
+  rewards:  Reward[];
+  loading:  boolean;
+  onAdd:    () => void;
+  onEdit:   (r: Reward) => void;
+  onDelete: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -296,7 +336,6 @@ function RecompensasTab({
 
   return (
     <div className="p-6">
-      {/* Toolbar */}
       <div className="flex items-center gap-3 mb-5">
         <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 flex-1 max-w-xs bg-white">
           <input
@@ -328,16 +367,20 @@ function RecompensasTab({
         <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-xl border border-gray-100">
           <Gift className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-400">Nenhuma recompensa cadastrada</p>
-          <button
-            onClick={onAdd}
-            className="text-xs text-orange-500 font-semibold hover:underline"
-          >
+          <button onClick={onAdd} className="text-xs text-orange-500 font-semibold hover:underline">
             + Adicionar recompensa
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {filtered.map(r => <RewardCard key={r.id} reward={r} />)}
+          {filtered.map(r => (
+            <RewardCard
+              key={r.id}
+              reward={r}
+              onEdit={() => onEdit(r)}
+              onDelete={() => onDelete(r.id)}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -347,10 +390,11 @@ function RecompensasTab({
 /* ── Page ────────────────────────────────────────────── */
 export default function ClubeRecompensasPage() {
   const { user } = useAuth();
-  const [tab,       setTab]       = useState<Tab>("visao-geral");
-  const [rewards,   setRewards]   = useState<Reward[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [tab,        setTab]        = useState<Tab>("visao-geral");
+  const [rewards,    setRewards]    = useState<Reward[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showModal,  setShowModal]  = useState(false);
+  const [editTarget, setEditTarget] = useState<Reward | undefined>(undefined);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -366,6 +410,36 @@ export default function ClubeRecompensasPage() {
       });
   }, [user]);
 
+  function openAdd() {
+    setEditTarget(undefined);
+    setShowModal(true);
+  }
+
+  function openEdit(r: Reward) {
+    setEditTarget(r);
+    setShowModal(true);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Remover esta recompensa?")) return;
+    await supabase.from("rewards").update({ ativo: false }).eq("id", id);
+    setRewards(prev => prev.filter(r => r.id !== id));
+  }
+
+  function handleSaved(r: Reward) {
+    setRewards(prev => {
+      const idx = prev.findIndex(x => x.id === r.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = r;
+        return next;
+      }
+      return [r, ...prev];
+    });
+    setShowModal(false);
+    setTab("recompensas");
+  }
+
   const TABS: { key: Tab; label: string }[] = [
     { key: "visao-geral",   label: "VISÃO GERAL"   },
     { key: "configuracoes", label: "CONFIGURAÇÕES" },
@@ -375,15 +449,11 @@ export default function ClubeRecompensasPage() {
   return (
     <AppLayout>
       <div className="min-h-screen bg-gray-50">
-
-        {/* Page title */}
         <div className="bg-white border-b border-gray-100 px-8 py-5">
           <h1 className="text-lg font-bold text-gray-900">Clube de recompensas</h1>
         </div>
 
-        {/* Card */}
         <div className="m-6 bg-white rounded-xl border border-gray-100 overflow-hidden">
-
           {/* Tab bar */}
           <div className="border-b border-gray-200 flex">
             {TABS.map(t => (
@@ -401,10 +471,7 @@ export default function ClubeRecompensasPage() {
             ))}
           </div>
 
-          {/* Tab content */}
-          {tab === "visao-geral" && (
-            <VisaoGeral rewardCount={rewards.length} />
-          )}
+          {tab === "visao-geral" && <VisaoGeral rewardCount={rewards.length} />}
           {tab === "configuracoes" && (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
               <SlidersHorizontal className="w-10 h-10 text-gray-200" />
@@ -415,20 +482,19 @@ export default function ClubeRecompensasPage() {
             <RecompensasTab
               rewards={rewards}
               loading={loading}
-              onAdd={() => setShowModal(true)}
+              onAdd={openAdd}
+              onEdit={openEdit}
+              onDelete={handleDelete}
             />
           )}
         </div>
       </div>
 
       {showModal && (
-        <NovaRecompensaModal
+        <RecompensaModal
+          initial={editTarget}
           onClose={() => setShowModal(false)}
-          onSaved={r => {
-            setRewards(prev => [r, ...prev]);
-            setShowModal(false);
-            setTab("recompensas");
-          }}
+          onSaved={handleSaved}
         />
       )}
     </AppLayout>
