@@ -395,6 +395,80 @@ export interface Database {
           }
         ];
       };
+      sessions: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          nome:          string;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:           string;
+          contractor_id: string;
+          nome:          string;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Update: {
+          id?:           string;
+          contractor_id?: string;
+          nome?:         string;
+          created_at?:   string;
+          updated_at?:   string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sessions_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      session_exercises: {
+        Row: {
+          id:             string;
+          session_id:     string;
+          exercise_id:    string | null;
+          exercise_nome:  string;
+          ordem:          number;
+          tipo:           string;
+          series_data:    import("./types").Json;
+          compound_group: number | null;
+          created_at:     string;
+        };
+        Insert: {
+          id?:            string;
+          session_id:     string;
+          exercise_id?:   string | null;
+          exercise_nome:  string;
+          ordem?:         number;
+          tipo?:          string;
+          series_data?:   import("./types").Json;
+          compound_group?: number | null;
+          created_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          session_id?:    string;
+          exercise_id?:   string | null;
+          exercise_nome?: string;
+          ordem?:         number;
+          tipo?:          string;
+          series_data?:   import("./types").Json;
+          compound_group?: number | null;
+          created_at?:    string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "session_exercises_session_id_fkey";
+            columns: ["session_id"];
+            referencedRelation: "sessions";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       rewards: {
         Row: {
           id:            string;
