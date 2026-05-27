@@ -940,10 +940,13 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
                       {PARQ_PERGUNTAS.map((p, i) => {
                         const parqData = (verModal.parq as Record<string, string>) ?? {};
                         const resp = parqData[String(i)];
+                        const isSim = resp === "Sim";
                         return (
-                          <div key={i} className="bg-gray-50 rounded-xl px-4 py-3">
-                            <p className="text-xs text-gray-500 mb-1">{p}</p>
-                            <p className="text-sm font-medium text-gray-800">{resp ?? "—"}</p>
+                          <div key={i} className={`rounded-xl px-4 py-3 ${isSim ? "bg-red-50 border border-red-200" : "bg-gray-50"}`}>
+                            <p className={`text-xs mb-1 ${isSim ? "text-red-500 font-semibold" : "text-gray-500"}`}>{p}</p>
+                            <p className={`text-sm font-bold ${isSim ? "text-red-700" : "text-gray-800"}`}>
+                              {isSim ? "⚠ Sim" : (resp ?? "—")}
+                            </p>
                           </div>
                         );
                       })}
