@@ -6,6 +6,7 @@ import {
   Loader2, MessageCircle, ClipboardList, Dumbbell,
   MoreVertical, X, Sparkles, Users, BookOpen, Wand2,
   Trash2, Copy, Eye, Mail, Link2, Printer,
+  DollarSign, Coins, CalendarDays, ScrollText, Gift, FlaskConical, FileText, MessageSquare,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,11 +118,23 @@ function fmtDate(iso: string) {
 
 /* ── UI helpers ───────────────────────────────────────────── */
 
-function CardHeader({ title, children }: { title: string; children?: React.ReactNode }) {
+function CardHeader({ title, icon, iconBg, children }: {
+  title: string;
+  icon?: React.ReactNode;
+  iconBg?: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-      <span className="text-sm font-semibold text-gray-700">{title}</span>
-      <div className="flex items-center gap-2">{children}</div>
+    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <div className="flex items-center gap-2">
+        {icon && (
+          <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${iconBg ?? "bg-primary/10"}`}>
+            {icon}
+          </div>
+        )}
+        <span className="text-sm font-semibold text-gray-700">{title}</span>
+      </div>
+      <div className="flex items-center gap-1">{children}</div>
     </div>
   );
 }
@@ -1384,92 +1397,118 @@ export default function ClienteDashboardPage() {
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
 
               {/* KPI row */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {[
-                  { label: "Em atraso",       value: "R$ 0,00",   iconBg: "bg-red-50",     iconColor: "text-red-500",    icon: "R$" },
-                  { label: "Saldo devedor",    value: "R$ 0,00",   iconBg: "bg-teal-50",    iconColor: "text-teal-500",   icon: "R$" },
-                  { label: "Créditos",         value: "R$ 0,00",   iconBg: "bg-teal-50",    iconColor: "text-teal-500",   icon: "R$" },
-                  { label: "Saldo FitCoins",   value: "0 FC",      iconBg: "bg-yellow-50",  iconColor: "text-yellow-500", icon: "FC" },
-                  { label: "Próx. vencimento", value: "—",         iconBg: "bg-teal-50",    iconColor: "text-teal-500",   icon: "📅" },
-                ].map(({ label, value, iconBg, iconColor, icon }) => (
+                {([
+                  { label: "Em atraso",        value: "R$ 0,00", bg: "bg-red-500",     icon: <DollarSign className="w-4 h-4 text-white" /> },
+                  { label: "Saldo devedor",     value: "R$ 0,00", bg: "bg-emerald-500", icon: <DollarSign className="w-4 h-4 text-white" /> },
+                  { label: "Créditos",          value: "R$ 0,00", bg: "bg-emerald-500", icon: <DollarSign className="w-4 h-4 text-white" /> },
+                  { label: "Saldo FitCoins",    value: "0 FC",    bg: "bg-amber-400",   icon: <Coins className="w-4 h-4 text-white" /> },
+                  { label: "Próx. vencimento",  value: "—",       bg: "bg-emerald-500", icon: <CalendarDays className="w-4 h-4 text-white" /> },
+                ] as { label: string; value: string; bg: string; icon: React.ReactNode }[]).map(({ label, value, bg, icon }) => (
                   <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
-                      <span className={`text-xs font-bold ${iconColor}`}>{icon}</span>
+                    <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                      {icon}
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500 leading-tight">{label}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500 leading-tight truncate">{label}</p>
                       <p className="text-sm font-extrabold text-gray-900 mt-0.5">{value}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Main grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <div className="space-y-5">
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <CardHeader title="Contratos">
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5">
-                        <Folder className="w-4 h-4" />
-                      </button>
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </CardHeader>
-                    <EmptyCard message="Nenhum contrato encontrado" />
-                  </div>
+              {/* Top grid — 3 colunas */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <CardHeader title="Documentos">
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </CardHeader>
-                    <EmptyCard message="Nenhum resultado encontrado" />
-                  </div>
+                {/* Contratos */}
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <CardHeader
+                    title="Contratos"
+                    icon={<ScrollText className="w-3.5 h-3.5 text-blue-500" />}
+                    iconBg="bg-blue-50"
+                  >
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <Folder className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </CardHeader>
+                  <EmptyCard message="Nenhum contrato encontrado" />
                 </div>
 
-                <div className="space-y-5">
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <CardHeader title="Clube de recompensas">
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50">
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                    </CardHeader>
-                    <EmptyCard message="Nenhuma recompensa registrada" />
-                  </div>
+                {/* Clube de recompensas */}
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <CardHeader
+                    title="Clube de recompensas"
+                    icon={<Gift className="w-3.5 h-3.5 text-amber-500" />}
+                    iconBg="bg-amber-50"
+                  >
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                  </CardHeader>
+                  <EmptyCard message="Nenhuma recompensa registrada" />
+                </div>
 
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <CardHeader title="Exames">
-                      <button className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </CardHeader>
-                    <EmptyCard message="Nenhum resultado encontrado" />
-                  </div>
+                {/* Exames */}
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <CardHeader
+                    title="Exames"
+                    icon={<FlaskConical className="w-3.5 h-3.5 text-purple-500" />}
+                    iconBg="bg-purple-50"
+                  >
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </CardHeader>
+                  <EmptyCard message="Nenhum resultado encontrado" />
+                </div>
+              </div>
 
-                  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <CardHeader title="Observações">
-                      <Link
-                        to={`/app/clientes/${student.id}/cadastro`}
-                        className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Link>
-                    </CardHeader>
-                    <div className="px-5 py-4">
-                      {student.observacoes ? (
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{student.observacoes}</p>
-                      ) : (
-                        <p className="text-sm text-gray-400 italic">Sem observação informada</p>
-                      )}
-                    </div>
+              {/* Bottom grid — 2 colunas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                {/* Documentos */}
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <CardHeader
+                    title="Documentos"
+                    icon={<FileText className="w-3.5 h-3.5 text-blue-500" />}
+                    iconBg="bg-blue-50"
+                  >
+                    <button className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </CardHeader>
+                  <EmptyCard message="Nenhum resultado encontrado" />
+                </div>
+
+                {/* Observações */}
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <CardHeader
+                    title="Observações"
+                    icon={<MessageSquare className="w-3.5 h-3.5 text-blue-500" />}
+                    iconBg="bg-blue-50"
+                  >
+                    <Link
+                      to={`/app/clientes/${student.id}/cadastro`}
+                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Link>
+                  </CardHeader>
+                  <div className="px-5 py-4">
+                    {student.observacoes ? (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{student.observacoes}</p>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">Sem observação informada</p>
+                    )}
                   </div>
                 </div>
               </div>
