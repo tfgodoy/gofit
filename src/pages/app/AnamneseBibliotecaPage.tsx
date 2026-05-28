@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, MoreVertical, Pencil, Trash2, ClipboardList } from "lucide-react";
+import { Plus, Search, MoreVertical, Pencil, Trash2, ClipboardList, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -122,10 +122,6 @@ export default function AnamneseBibliotecaPage() {
   }
 
   function openEdit(q: Questao) {
-    if (q.tem_respostas) {
-      toast.warning("Esta pergunta já possui respostas e não pode ser alterada.");
-      return;
-    }
     setEditing(q);
     setForm({
       pergunta:     q.pergunta,
@@ -346,6 +342,16 @@ export default function AnamneseBibliotecaPage() {
 
           <div className="space-y-5 py-2">
 
+            {/* Banner: questão bloqueada */}
+            {editing?.tem_respostas && (
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  Esta questão <strong>não pode ser editada</strong> porque já obteve respostas.
+                </p>
+              </div>
+            )}
+
             {/* Pergunta */}
             <div className="space-y-1.5">
               <Label htmlFor="pergunta">Pergunta <span className="text-red-500">*</span></Label>
@@ -354,6 +360,7 @@ export default function AnamneseBibliotecaPage() {
                 placeholder="Digite a pergunta..."
                 value={form.pergunta}
                 onChange={e => setForm(f => ({ ...f, pergunta: e.target.value }))}
+                disabled={!!editing?.tem_respostas}
               />
             </div>
 
@@ -363,10 +370,15 @@ export default function AnamneseBibliotecaPage() {
               <div className="grid grid-cols-2 gap-2">
                 {TODOS_TIPOS.map(tipo => {
                   const selected = form.tipo === tipo;
+                  const locked = !!editing?.tem_respostas;
                   return (
                     <label
                       key={tipo}
-                      className={`flex items-center gap-2.5 border rounded-xl px-3 py-2.5 cursor-pointer transition-colors ${
+                      className={`flex items-center gap-2.5 border rounded-xl px-3 py-2.5 transition-colors ${
+                        locked
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer"
+                      } ${
                         selected
                           ? "border-primary bg-primary/5"
                           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
@@ -377,6 +389,7 @@ export default function AnamneseBibliotecaPage() {
                         name="tipo"
                         value={tipo}
                         checked={selected}
+                        disabled={locked}
                         onChange={() => handleTipoChange(tipo)}
                         className="sr-only"
                       />
@@ -401,7 +414,6 @@ export default function AnamneseBibliotecaPage() {
                 <div className="space-y-2">
                   {form.opcoes.map((op, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      {/* ícone visual por tipo */}
                       {form.tipo === "radio" && (
                         <div className="w-3.5 h-3.5 rounded-full border border-gray-400 flex-shrink-0" />
                       )}
@@ -418,8 +430,9 @@ export default function AnamneseBibliotecaPage() {
                         onChange={e => setOpcao(idx, e.target.value)}
                         placeholder={`Opção ${idx + 1}`}
                         className="h-8 text-sm"
+                        disabled={!!editing?.tem_respostas}
                       />
-                      {form.opcoes.length > 1 && (
+                      {form.opcoes.length > 1 && !editing?.tem_respostas && (
                         <button
                           type="button"
                           onClick={() => removeOpcao(idx)}
@@ -431,21 +444,24 @@ export default function AnamneseBibliotecaPage() {
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={addOpcao}
-                  className="text-sm text-primary hover:underline"
-                >
-                  + Adicionar opção
-                </button>
+                {!editing?.tem_respostas && (
+                  <button
+                    type="button"
+                    onClick={addOpcao}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    + Adicionar opção
+                  </button>
+                )}
 
                 <div className="flex items-center gap-2 pt-1">
                   <Checkbox
                     id="permite_outro"
                     checked={form.permite_outro}
                     onCheckedChange={v => setForm(f => ({ ...f, permite_outro: !!v }))}
+                    disabled={!!editing?.tem_respostas}
                   />
-                  <label htmlFor="permite_outro" className="text-sm text-gray-600 cursor-pointer">
+                  <label htmlFor="permite_outro" className={`text-sm text-gray-600 ${editing?.tem_respostas ? "opacity-60" : "cursor-pointer"}`}>
                     Permitir opção &quot;Outro&quot; com campo de texto
                   </label>
                 </div>
@@ -457,9 +473,11 @@ export default function AnamneseBibliotecaPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Salvando..." : editing ? "Salvar alterações" : "Criar pergunta"}
-            </Button>
+            {!editing?.tem_respostas && (
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? "Salvando..." : editing ? "Salvar alterações" : "Criar pergunta"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

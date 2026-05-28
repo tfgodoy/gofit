@@ -148,7 +148,15 @@ export default function AnamnesePublicPage() {
       valor,
     }));
 
-    if (itens.length > 0) await supabase.from("anamnese_resposta_itens").insert(itens);
+    if (itens.length > 0) {
+      await supabase.from("anamnese_resposta_itens").insert(itens);
+
+      const questaoIds = [...new Set(itens.map(i => i.questao_id))];
+      await supabase
+        .from("anamnese_questoes")
+        .update({ tem_respostas: true })
+        .in("id", questaoIds);
+    }
 
     await supabase
       .from("anamnese_respostas")
