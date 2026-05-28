@@ -625,11 +625,38 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
   }
 
   async function handleDeleteAnamnese(id: string) {
+    // Busca as questões desta anamnese antes de deletar (a FK vai cascadear os itens)
+    const { data: itens } = await supabase
+      .from("anamnese_resposta_itens")
+      .select("questao_id")
+      .eq("resposta_id", id);
+
+    const questaoIds = [...new Set((itens ?? []).map((i: any) => i.questao_id).filter(Boolean))];
+
     const { error } = await supabase
       .from("anamnese_respostas")
       .delete()
       .eq("id", id);
     if (error) { toast.error("Erro ao excluir anamnese."); return; }
+
+    // Verifica quais questões não têm mais respostas em nenhuma outra anamnese
+    if (questaoIds.length > 0) {
+      const { data: restantes } = await supabase
+        .from("anamnese_resposta_itens")
+        .select("questao_id")
+        .in("questao_id", questaoIds);
+
+      const aindaTemRespostas = new Set((restantes ?? []).map((i: any) => i.questao_id));
+      const liberar = questaoIds.filter(qid => !aindaTemRespostas.has(qid));
+
+      if (liberar.length > 0) {
+        await supabase
+          .from("anamnese_questoes")
+          .update({ tem_respostas: false })
+          .in("id", liberar);
+      }
+    }
+
     toast.success("Anamnese excluída.");
     setDeleteConfirmId(null);
     load();
