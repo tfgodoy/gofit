@@ -128,44 +128,79 @@ const EMPTY: FormState = {
   observacoes: "",
 };
 
-const INP = "w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:bg-gray-50 disabled:text-gray-400";
-const SEL = INP + " appearance-none cursor-pointer pr-8";
-const LBL = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
+// ── Estilos NextFit (linha) ──────────────────────────────────────────────────
+const INP = [
+  "w-full bg-transparent",
+  "border-0 border-b border-gray-300",
+  "py-2 px-0",
+  "text-sm text-gray-900 placeholder:text-gray-400",
+  "outline-none",
+  "focus:border-b-2 focus:border-primary",
+  "transition-colors",
+  "disabled:opacity-50 disabled:cursor-not-allowed",
+].join(" ");
 
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <div className="flex items-center gap-3 pt-1">
-      <span className="text-xs font-bold text-primary uppercase tracking-widest whitespace-nowrap">{title}</span>
-      <div className="flex-1 border-t border-gray-100" />
-    </div>
-  );
-}
+const SEL = [
+  "w-full bg-transparent",
+  "border-0 border-b border-gray-300",
+  "py-2 pl-0 pr-6",
+  "text-sm text-gray-900",
+  "outline-none appearance-none cursor-pointer",
+  "focus:border-b-2 focus:border-primary",
+  "transition-colors",
+].join(" ");
 
-function SelectWrap({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative">
-      {children}
-      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-    </div>
-  );
-}
+const LBL = "block text-xs text-gray-500 mb-0.5";
 
-function Toggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${active ? "bg-primary" : "bg-gray-200"}`}
-    >
-      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${active ? "translate-x-5" : ""}`} />
-    </button>
-  );
+// ── Sub-componentes ──────────────────────────────────────────────────────────
+
+function Req() {
+  return <span className="text-primary ml-0.5">*</span>;
 }
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="text-xs text-red-500 mt-1">{msg}</p>;
 }
+
+function SelectWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
+
+function Toggle({ active, onToggle, disabled }: { active: boolean; onToggle: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      className={`relative h-5 w-9 rounded-full transition-colors flex-shrink-0 ${
+        active ? "bg-primary" : "bg-gray-300"
+      } disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
+      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+        active ? "translate-x-4" : "translate-x-0"
+      }`} />
+    </button>
+  );
+}
+
+function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+      <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Componente principal ─────────────────────────────────────────────────────
 
 export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
   const { user } = useAuth();
@@ -181,7 +216,6 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
     if (errors[k]) setErrors(e => ({ ...e, [k]: undefined }));
   }
 
-  // Load data when editing
   const { data: staffData, isLoading: loadingData } = useQuery({
     queryKey: ["staff-member", editId],
     queryFn: async () => {
@@ -263,7 +297,6 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
     setCepLoading(false);
   }
 
-  // Períodos helpers
   function toggleDia(idx: number, dia: string) {
     setForm(f => ({
       ...f,
@@ -290,24 +323,21 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const errs: FormErrors = {};
-      if (!form.name.trim())          errs.name          = "Nome é obrigatório.";
-      if (!form.email.trim())         errs.email         = "E-mail é obrigatório.";
-      if (!form.data_nascimento)      errs.data_nascimento = "Data de nascimento é obrigatória.";
-      if (!form.telefone.trim())      errs.telefone      = "Telefone é obrigatório.";
-      if (!form.role)                 errs.role          = "Selecione o perfil de acesso.";
+      if (!form.name.trim())        errs.name          = "Nome é obrigatório.";
+      if (!form.email.trim())       errs.email         = "E-mail é obrigatório.";
+      if (!form.data_nascimento)    errs.data_nascimento = "Data de nascimento é obrigatória.";
+      if (!form.telefone.trim())    errs.telefone      = "Telefone é obrigatório.";
+      if (!form.role)               errs.role          = "Selecione o perfil de acesso.";
       if (!isEdit) {
-        if (!form.password.trim())        errs.password        = "Senha é obrigatória.";
-        else if (form.password.length < 6) errs.password       = "Mínimo 6 caracteres.";
+        if (!form.password.trim())         errs.password         = "Senha é obrigatória.";
+        else if (form.password.length < 6) errs.password         = "Mínimo 6 caracteres.";
         else if (form.password !== form.confirm_password)
-          errs.confirm_password = "Senhas não conferem.";
+                                           errs.confirm_password = "Senhas não conferem.";
       }
       if (Object.keys(errs).length > 0) { setErrors(errs); throw new Error("validation"); }
 
       const horarios_restricao = form.horarios_ativo
-        ? {
-            ativo: true,
-            periodos: form.horarios_periodos.map(({ _id: _, ...p }) => p),
-          }
+        ? { ativo: true, periodos: form.horarios_periodos.map(({ _id: _, ...p }) => p) }
         : null;
 
       const payload = {
@@ -353,6 +383,7 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
     },
     onError: (err) => {
       if ((err as Error).message !== "validation") {
+        console.error("staff save error:", err);
         toast.error("Erro ao salvar. Tente novamente.");
       }
     },
@@ -360,37 +391,34 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
 
   return (
     <>
+      {/* ── Overlay + modal ── */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <span className="bg-primary/10 rounded-full p-1.5">
                 <Users className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-bold text-gray-900">
-                  {isEdit ? "Editar membro" : "Novo membro"}
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {isEdit ? "Atualize os dados do profissional." : "Preencha os dados do novo profissional."}
-                </p>
-              </div>
+              </span>
+              <span className="font-bold text-gray-900">
+                {isEdit ? "Editar membro" : "Novo membro"}
+              </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {isEdit && (
                 <button
                   onClick={() => setShowChangePwd(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-primary font-semibold text-sm hover:underline"
                 >
                   <KeyRound className="w-3.5 h-3.5" /> ALTERAR SENHA
                 </button>
               )}
               <button
                 onClick={onClose}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -400,24 +428,22 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
           {/* Body */}
           {loadingData ? (
             <div className="flex-1 flex items-center justify-center p-10">
-              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
-              {/* ── SEÇÃO 1: Dados principais ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Dados principais" />
-                <div className="grid grid-cols-2 gap-3">
+              {/* ── Seção 1: Dados principais ── */}
+              <SectionBlock title="Dados principais">
+                {/* Nome */}
+                <div>
+                  <label className={LBL}>Nome<Req /></label>
+                  <input className={INP} placeholder="Nome completo" value={form.name} onChange={e => set("name", e.target.value)} />
+                  <FieldError msg={errors.name} />
+                </div>
 
-                  {/* Nome */}
-                  <div className="col-span-2">
-                    <label className={LBL}>Nome *</label>
-                    <input className={INP} placeholder="Nome completo" value={form.name} onChange={e => set("name", e.target.value)} />
-                    <FieldError msg={errors.name} />
-                  </div>
-
-                  {/* CPF | RG */}
+                {/* CPF | RG */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={LBL}>CPF</label>
                     <input className={INP} placeholder="000.000.000-00" value={form.cpf} onChange={e => set("cpf", maskCPF(e.target.value))} />
@@ -426,10 +452,12 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                     <label className={LBL}>RG</label>
                     <input className={INP} placeholder="RG" value={form.rg} onChange={e => set("rg", e.target.value)} />
                   </div>
+                </div>
 
-                  {/* Data nascimento | Sexo */}
+                {/* Data nascimento | Sexo */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LBL}>Data de nascimento *</label>
+                    <label className={LBL}>Data de nascimento<Req /></label>
                     <input type="date" className={INP} value={form.data_nascimento} onChange={e => set("data_nascimento", e.target.value)} />
                     <FieldError msg={errors.data_nascimento} />
                   </div>
@@ -444,20 +472,24 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       </select>
                     </SelectWrap>
                   </div>
+                </div>
 
-                  {/* Email | Telefone */}
+                {/* Email | Telefone */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={LBL}>E-mail *</label>
+                    <label className={LBL}>E-mail<Req /></label>
                     <input type="email" className={INP} placeholder="email@exemplo.com" value={form.email} onChange={e => set("email", e.target.value)} />
                     <FieldError msg={errors.email} />
                   </div>
                   <div>
-                    <label className={LBL}>Telefone *</label>
+                    <label className={LBL}>Telefone<Req /></label>
                     <input className={INP} placeholder="(00) 00000-0000" value={form.telefone} onChange={e => set("telefone", maskPhone(e.target.value))} />
                     <FieldError msg={errors.telefone} />
                   </div>
+                </div>
 
-                  {/* Tipo conselho | Número */}
+                {/* Tipo conselho | Número */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={LBL}>Tipo de conselho</label>
                     <SelectWrap>
@@ -470,76 +502,70 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                     <label className={LBL}>Número do conselho</label>
                     <input className={INP} placeholder="Ex: 000000-G/SP" value={form.numero_conselho} onChange={e => set("numero_conselho", e.target.value)} />
                   </div>
+                </div>
 
-                  {/* Senha (somente ao criar) */}
-                  {!isEdit && (
-                    <>
-                      <div>
-                        <label className={LBL}>Senha *</label>
-                        <div className="relative">
-                          <input
-                            type={form.showPassword ? "text" : "password"}
-                            className={INP + " pr-10"}
-                            placeholder="Senha de acesso"
-                            value={form.password}
-                            onChange={e => set("password", e.target.value)}
-                            autoComplete="new-password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => set("showPassword", !form.showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {form.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        <FieldError msg={errors.password} />
+                {/* Senha (somente ao criar) */}
+                {!isEdit && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={LBL}>Senha<Req /></label>
+                      <div className="relative">
+                        <input
+                          type={form.showPassword ? "text" : "password"}
+                          className={INP + " pr-7"}
+                          placeholder="Senha de acesso"
+                          value={form.password}
+                          onChange={e => set("password", e.target.value)}
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => set("showPassword", !form.showPassword)}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {form.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
-                      <div>
-                        <label className={LBL}>Confirme a senha *</label>
-                        <div className="relative">
-                          <input
-                            type={form.showConfirmPassword ? "text" : "password"}
-                            className={INP + " pr-10"}
-                            placeholder="Confirme a senha"
-                            value={form.confirm_password}
-                            onChange={e => set("confirm_password", e.target.value)}
-                            autoComplete="new-password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => set("showConfirmPassword", !form.showConfirmPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {form.showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        <FieldError msg={errors.confirm_password} />
+                      <FieldError msg={errors.password} />
+                    </div>
+                    <div>
+                      <label className={LBL}>Confirme a senha<Req /></label>
+                      <div className="relative">
+                        <input
+                          type={form.showConfirmPassword ? "text" : "password"}
+                          className={INP + " pr-7"}
+                          placeholder="Confirmar senha"
+                          value={form.confirm_password}
+                          onChange={e => set("confirm_password", e.target.value)}
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => set("showConfirmPassword", !form.showConfirmPassword)}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {form.showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
-                    </>
-                  )}
-
-                  {/* Bloquear acesso */}
-                  <div className="col-span-2">
-                    <div
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer"
-                      onClick={() => set("blocked", !form.blocked)}
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Bloquear acesso ao sistema</p>
-                        <p className="text-xs text-gray-500 mt-0.5">O membro não poderá fazer login</p>
-                      </div>
-                      <Toggle active={form.blocked} onToggle={() => set("blocked", !form.blocked)} />
+                      <FieldError msg={errors.confirm_password} />
                     </div>
                   </div>
-                </div>
-              </section>
+                )}
 
-              {/* ── SEÇÃO 2: Perfil de acesso ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Perfil de acesso" />
+                {/* Bloquear acesso */}
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <p className="text-sm text-gray-700 font-medium">Bloquear acesso ao sistema</p>
+                    <p className="text-xs text-gray-400 mt-0.5">O membro não poderá fazer login</p>
+                  </div>
+                  <Toggle active={form.blocked} onToggle={() => set("blocked", !form.blocked)} />
+                </div>
+              </SectionBlock>
+
+              {/* ── Seção 2: Perfil de acesso ── */}
+              <SectionBlock title="Perfil de acesso">
                 <div>
-                  <label className={LBL}>Cargo *</label>
+                  <label className={LBL}>Cargo<Req /></label>
                   <SelectWrap>
                     <select className={SEL} value={form.role} onChange={e => set("role", e.target.value as StaffRole)}>
                       <option value="">Selecionar cargo</option>
@@ -548,12 +574,11 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                   </SelectWrap>
                   <FieldError msg={errors.role} />
                 </div>
-              </section>
+              </SectionBlock>
 
-              {/* ── SEÇÃO 3: Endereço ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Endereço" />
-                <div className="grid grid-cols-3 gap-3">
+              {/* ── Seção 3: Endereço ── */}
+              <SectionBlock title="Endereço">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className={LBL}>CEP</label>
                     <div className="relative">
@@ -564,13 +589,15 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                         onChange={e => set("cep", maskCEP(e.target.value))}
                         onBlur={handleCEPBlur}
                       />
-                      {cepLoading && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+                      {cepLoading && <Loader2 className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
                     </div>
                   </div>
                   <div className="col-span-2">
                     <label className={LBL}>Logradouro</label>
                     <input className={INP} placeholder="Rua, Av, etc." value={form.logradouro} onChange={e => set("logradouro", e.target.value)} />
                   </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className={LBL}>Número</label>
                     <input className={INP} placeholder="Nº" value={form.numero_endereco} onChange={e => set("numero_endereco", e.target.value)} />
@@ -597,47 +624,45 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                     </SelectWrap>
                   </div>
                 </div>
-              </section>
+              </SectionBlock>
 
-              {/* ── SEÇÃO 4: Horários ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Horários de uso do sistema" />
-
-                <div
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer"
-                  onClick={() => set("horarios_ativo", !form.horarios_ativo)}
-                >
+              {/* ── Seção 4: Horários ── */}
+              <SectionBlock title="Horários de uso do sistema">
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">Limitar dias e horários de uso do sistema</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Define quando o membro pode acessar o sistema</p>
+                    <p className="text-sm text-gray-700 font-medium">Limitar dias e horários de uso do sistema</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Define quando o membro pode acessar o sistema</p>
                   </div>
                   <Toggle active={form.horarios_ativo} onToggle={() => set("horarios_ativo", !form.horarios_ativo)} />
                 </div>
 
                 {form.horarios_ativo && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 pt-2">
                     {form.horarios_periodos.map((periodo, idx) => (
-                      <div key={periodo._id} className="border border-gray-100 rounded-xl p-4 space-y-3">
-                        {/* Day chips */}
+                      <div key={periodo._id} className="border border-gray-200 rounded-lg p-3 space-y-3">
+                        {/* Chips de dias */}
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {DIAS_SEMANA.map(({ key, label }) => (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => toggleDia(idx, key)}
-                              className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-colors ${
-                                periodo.dias.includes(key)
-                                  ? "bg-primary text-white"
-                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                          {DIAS_SEMANA.map(({ key, label }) => {
+                            const selected = periodo.dias.includes(key);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => toggleDia(idx, key)}
+                                className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                                  selected
+                                    ? "bg-primary/10 text-primary font-semibold border border-primary/30"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
                         </div>
 
-                        {/* Time + controls */}
-                        <div className="flex items-end gap-3">
+                        {/* Hora + controles */}
+                        <div className="flex items-end gap-4">
                           <div className="flex-1">
                             <label className={LBL}>Hora inicial</label>
                             <input
@@ -658,18 +683,18 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                               onChange={e => updatePeriodo(idx, "hora_fim", e.target.value)}
                             />
                           </div>
-                          <div className="flex flex-col items-center gap-1 pb-1">
-                            <span className="text-xs text-gray-500 font-medium">Horário livre</span>
+                          <div className="flex items-center gap-2 pb-2">
                             <Toggle
                               active={periodo.horario_livre}
                               onToggle={() => updatePeriodo(idx, "horario_livre", !periodo.horario_livre)}
                             />
+                            <span className="text-sm text-gray-700">Horário livre</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => removePeriodo(idx)}
                             disabled={form.horarios_periodos.length === 1}
-                            className="pb-1 p-1.5 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="pb-2 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Remover período"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -681,66 +706,62 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                     <button
                       type="button"
                       onClick={addPeriodo}
-                      className="w-full py-2.5 border border-dashed border-gray-300 text-gray-500 text-sm font-semibold rounded-xl hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
+                      className="flex items-center gap-1.5 text-primary font-semibold text-sm hover:underline"
                     >
                       <Plus className="w-4 h-4" /> NOVO PERÍODO
                     </button>
                   </div>
                 )}
-              </section>
+              </SectionBlock>
 
-              {/* ── SEÇÃO 5: Documentos ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Documentos" />
+              {/* ── Seção 5: Documentos ── */}
+              <SectionBlock title="Documentos">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center gap-3 text-center">
-                    <Upload className="w-8 h-8 text-gray-300" />
-                    <div>
-                      <p className="text-sm text-gray-500">Arraste e solte ou</p>
-                      <p className="text-xs text-gray-400 mt-1">doc, docx, jpg, pdf, png</p>
-                    </div>
+                  <div className="border-2 border-dashed border-gray-200 rounded-lg p-5 flex flex-col items-center justify-center gap-2 text-center">
+                    <Upload className="w-7 h-7 text-gray-300" />
+                    <p className="text-sm text-gray-500">Arraste e solte ou</p>
+                    <p className="text-xs text-gray-400">doc, docx, jpg, pdf, png</p>
                     <button
                       type="button"
                       disabled
                       title="Em breve"
-                      className="px-4 py-1.5 border border-gray-200 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed select-none"
+                      className="mt-1 px-3 py-1 border border-gray-200 text-gray-400 text-xs font-semibold rounded cursor-not-allowed select-none"
                     >
                       SELECIONAR ARQUIVO
                     </button>
                   </div>
-                  <div className="border border-gray-100 rounded-xl p-4 min-h-[120px] flex items-center justify-center">
+                  <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-center min-h-[100px]">
                     <p className="text-sm text-gray-400">Nenhum arquivo encontrado</p>
                   </div>
                 </div>
-              </section>
+              </SectionBlock>
 
-              {/* ── SEÇÃO 6: Observações ── */}
-              <section className="space-y-4">
-                <SectionHeader title="Observações" />
+              {/* ── Seção 6: Observações ── */}
+              <SectionBlock title="Observações">
                 <textarea
-                  className={INP + " resize-none"}
+                  className={`w-full bg-transparent border border-gray-200 rounded-lg p-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-primary transition-colors resize-none`}
                   rows={3}
                   placeholder="Observação"
                   value={form.observacoes}
                   onChange={e => set("observacoes", e.target.value)}
                 />
-              </section>
+              </SectionBlock>
 
             </div>
           )}
 
           {/* Footer */}
-          <div className="flex items-center gap-3 px-6 py-4 border-t border-gray-100 bg-white flex-shrink-0">
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0 bg-white">
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+              className="text-primary font-semibold text-sm hover:underline px-2"
             >
               CANCELAR
             </button>
             <button
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending || loadingData}
-              className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="bg-primary text-white font-semibold px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {saveMutation.isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
