@@ -817,15 +817,15 @@ ${parqHtml}
                       >
                         <Pencil className="w-4 h-4 text-gray-500" />
                       </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(r.id)}
-                        title="Excluir anamnese"
-                        className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </>
                   )}
+                  <button
+                    onClick={() => setDeleteConfirmId(r.id)}
+                    title="Excluir anamnese"
+                    className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             );
@@ -1050,7 +1050,7 @@ ${parqHtml}
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
             <h3 className="text-base font-bold text-gray-900 mb-2">Excluir anamnese</h3>
             <p className="text-sm text-gray-500 mb-5">
-              Tem certeza que deseja excluir esta anamnese pendente? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir esta anamnese? Esta ação não pode ser desfeita.
             </p>
             <div className="flex justify-end gap-3">
               <button
