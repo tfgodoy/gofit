@@ -28,6 +28,7 @@ interface Questao {
   opcoes: string[];
   permite_outro: boolean;
   tem_respostas: boolean;
+  max_caracteres: number | null;
 }
 
 // ─── mapeamentos ─────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ interface FormState {
   tipo: TipoQuestao;
   opcoes: string[];
   permite_outro: boolean;
+  max_caracteres: string;
 }
 
 const FORM_VAZIO: FormState = {
@@ -74,6 +76,7 @@ const FORM_VAZIO: FormState = {
   tipo: "sim_nao",
   opcoes: [""],
   permite_outro: false,
+  max_caracteres: "",
 };
 
 // ─── componente principal ─────────────────────────────────────────────────────
@@ -100,7 +103,7 @@ export default function AnamneseBibliotecaPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("anamnese_questoes")
-      .select("id, pergunta, tipo, opcoes, permite_outro, tem_respostas")
+      .select("id, pergunta, tipo, opcoes, permite_outro, tem_respostas, max_caracteres")
       .eq("contractor_id", user!.contractorId!)
       .order("pergunta");
     if (!error) setQuestoes((data ?? []) as Questao[]);
@@ -124,10 +127,11 @@ export default function AnamneseBibliotecaPage() {
   function openEdit(q: Questao) {
     setEditing(q);
     setForm({
-      pergunta:     q.pergunta,
-      tipo:         q.tipo,
-      opcoes:       q.opcoes?.length ? q.opcoes : [""],
+      pergunta:      q.pergunta,
+      tipo:          q.tipo,
+      opcoes:        q.opcoes?.length ? q.opcoes : [""],
       permite_outro: q.permite_outro,
+      max_caracteres: q.max_caracteres ? String(q.max_caracteres) : "",
     });
     setDialogOpen(true);
   }
@@ -135,7 +139,7 @@ export default function AnamneseBibliotecaPage() {
   // ── mudança de tipo (reseta opções) ──────────────────────────────────────
 
   function handleTipoChange(tipo: TipoQuestao) {
-    setForm(f => ({ ...f, tipo, opcoes: [""], permite_outro: false }));
+    setForm(f => ({ ...f, tipo, opcoes: [""], permite_outro: false, max_caracteres: "" }));
   }
 
   // ── opções dinâmicas ─────────────────────────────────────────────────────
@@ -174,10 +178,13 @@ export default function AnamneseBibliotecaPage() {
 
     setSaving(true);
     const payload = {
-      pergunta:      form.pergunta.trim(),
-      tipo:          form.tipo,
-      opcoes:        opcoesFiltradas,
-      permite_outro: temOpcoes ? form.permite_outro : false,
+      pergunta:       form.pergunta.trim(),
+      tipo:           form.tipo,
+      opcoes:         opcoesFiltradas,
+      permite_outro:  temOpcoes ? form.permite_outro : false,
+      max_caracteres: form.tipo === "texto" && form.max_caracteres.trim()
+        ? parseInt(form.max_caracteres, 10) || null
+        : null,
     };
 
     if (editing) {
@@ -406,6 +413,32 @@ export default function AnamneseBibliotecaPage() {
                 })}
               </div>
             </div>
+
+            {/* Limite de caracteres (apenas para texto livre) */}
+            {form.tipo === "texto" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="max_caracteres">Limite de caracteres <span className="text-gray-400 font-normal">(opcional)</span></Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="max_caracteres"
+                    type="number"
+                    min={1}
+                    max={5000}
+                    placeholder="Sem limite"
+                    value={form.max_caracteres}
+                    onChange={e => setForm(f => ({ ...f, max_caracteres: e.target.value }))}
+                    disabled={!!editing?.tem_respostas}
+                    className="w-36"
+                  />
+                  {form.max_caracteres && (
+                    <span className="text-sm text-gray-500">
+                      Aluno verá: <strong>0 / {form.max_caracteres}</strong>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">Deixe em branco para não limitar.</p>
+              </div>
+            )}
 
             {/* Opções (apenas para radio / checkbox / select) */}
             {TIPOS_COM_OPCOES.includes(form.tipo) && (

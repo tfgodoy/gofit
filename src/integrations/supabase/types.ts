@@ -768,34 +768,37 @@ export interface Database {
       };
       anamnese_questoes: {
         Row: {
-          id:            string;
-          contractor_id: string;
-          pergunta:      string;
-          tipo:          string;
-          opcoes:        Json;
-          permite_outro: boolean;
-          tem_respostas: boolean;
-          created_at:    string;
-        };
-        Insert: {
-          id?:            string;
+          id:             string;
           contractor_id:  string;
           pergunta:       string;
           tipo:           string;
-          opcoes?:        Json;
-          permite_outro?: boolean;
-          tem_respostas?: boolean;
-          created_at?:    string;
+          opcoes:         Json;
+          permite_outro:  boolean;
+          tem_respostas:  boolean;
+          max_caracteres: number | null;
+          created_at:     string;
+        };
+        Insert: {
+          id?:             string;
+          contractor_id:   string;
+          pergunta:        string;
+          tipo:            string;
+          opcoes?:         Json;
+          permite_outro?:  boolean;
+          tem_respostas?:  boolean;
+          max_caracteres?: number | null;
+          created_at?:     string;
         };
         Update: {
-          id?:            string;
-          contractor_id?: string;
-          pergunta?:      string;
-          tipo?:          string;
-          opcoes?:        Json;
-          permite_outro?: boolean;
-          tem_respostas?: boolean;
-          created_at?:    string;
+          id?:             string;
+          contractor_id?:  string;
+          pergunta?:       string;
+          tipo?:           string;
+          opcoes?:         Json;
+          permite_outro?:  boolean;
+          tem_respostas?:  boolean;
+          max_caracteres?: number | null;
+          created_at?:     string;
         };
         Relationships: [];
       };

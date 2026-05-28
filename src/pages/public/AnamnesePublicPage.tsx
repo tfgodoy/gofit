@@ -24,6 +24,7 @@ interface Questao {
   opcoes: string[];
   permite_outro: boolean;
   obrigatoria: boolean;
+  max_caracteres: number | null;
 }
 
 interface Modelo {
@@ -71,17 +72,18 @@ export default function AnamnesePublicPage() {
 
     const { data: mq } = await supabase
       .from("anamnese_modelo_questoes")
-      .select("ordem, obrigatoria, anamnese_questoes(id, pergunta, tipo, opcoes, permite_outro)")
+      .select("ordem, obrigatoria, anamnese_questoes(id, pergunta, tipo, opcoes, permite_outro, max_caracteres)")
       .eq("modelo_id", (r as any).modelo_id)
       .order("ordem");
 
     const qs: Questao[] = ((mq ?? []) as any[]).map(row => ({
       id:           row.anamnese_questoes?.id ?? "",
       pergunta:     row.anamnese_questoes?.pergunta ?? "",
-      tipo:         row.anamnese_questoes?.tipo ?? "texto",
-      opcoes:       (row.anamnese_questoes?.opcoes ?? []) as string[],
-      permite_outro: row.anamnese_questoes?.permite_outro ?? false,
-      obrigatoria:  row.obrigatoria ?? false,
+      tipo:           row.anamnese_questoes?.tipo ?? "texto",
+      opcoes:         (row.anamnese_questoes?.opcoes ?? []) as string[],
+      permite_outro:  row.anamnese_questoes?.permite_outro ?? false,
+      obrigatoria:    row.obrigatoria ?? false,
+      max_caracteres: row.anamnese_questoes?.max_caracteres ?? null,
     })).filter(q => q.id);
 
     setQuestoes(qs);
@@ -210,12 +212,28 @@ export default function AnamnesePublicPage() {
           </div>
         );
 
-      case "texto":
+      case "texto": {
+        const maxLen = q.max_caracteres ?? null;
+        const currentLen = (val ?? "").length;
+        const nearLimit = maxLen && currentLen >= maxLen * 0.85;
         return (
-          <textarea rows={3} placeholder="Escreva sua resposta..." value={val ?? ""}
-            onChange={e => setAnswer(q.id, e.target.value)}
-            className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none" />
+          <div className="mt-2">
+            <textarea
+              rows={maxLen && maxLen <= 20 ? 1 : 3}
+              placeholder="Escreva sua resposta..."
+              value={val ?? ""}
+              maxLength={maxLen ?? undefined}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none"
+            />
+            {maxLen && (
+              <p className={`text-right text-xs mt-1 ${nearLimit ? "text-orange-500" : "text-gray-400"}`}>
+                {currentLen} / {maxLen}
+              </p>
+            )}
+          </div>
         );
+      }
 
       case "numero":
         return (
