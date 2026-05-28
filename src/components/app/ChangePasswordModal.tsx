@@ -8,8 +8,17 @@ interface Props {
   onClose: () => void;
 }
 
-const INP = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white pr-10";
-const LBL = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
+const INP = [
+  "w-full bg-transparent",
+  "border-0 border-b border-gray-300",
+  "py-2 px-0 pr-8",
+  "text-sm text-gray-900 placeholder:text-gray-400",
+  "outline-none",
+  "focus:border-b-2 focus:border-primary",
+  "transition-colors",
+].join(" ");
+
+const LBL = "block text-xs text-gray-500 mb-0.5";
 
 export default function ChangePasswordModal({ staffId, onClose }: Props) {
   const [newPwd,     setNewPwd]     = useState("");
@@ -43,25 +52,25 @@ export default function ChangePasswordModal({ staffId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm">
 
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+            <span className="bg-primary/10 rounded-full p-1.5">
               <KeyRound className="w-4 h-4 text-primary" />
-            </div>
+            </span>
             <h3 className="font-bold text-gray-900">Alterar senha</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="px-6 py-4 space-y-4">
           <div>
             <label className={LBL}>Nova senha</label>
             <div className="relative">
@@ -76,7 +85,7 @@ export default function ChangePasswordModal({ staffId, onClose }: Props) {
               <button
                 type="button"
                 onClick={() => setShowNew(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -97,7 +106,7 @@ export default function ChangePasswordModal({ staffId, onClose }: Props) {
               <button
                 type="button"
                 onClick={() => setShowConf(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 {showConf ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -105,23 +114,21 @@ export default function ChangePasswordModal({ staffId, onClose }: Props) {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">
-              {error}
-            </div>
+            <p className="text-xs text-red-500 mt-1">{error}</p>
           )}
         </div>
 
-        <div className="flex gap-3 px-5 pb-5">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+            className="text-primary font-semibold text-sm hover:underline px-2"
           >
             CANCELAR
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            className="bg-primary text-white font-semibold px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center gap-2"
           >
             {saving
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
