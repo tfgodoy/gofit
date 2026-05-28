@@ -7,6 +7,7 @@ export type Json =
   | Json[];
 
 export type StaffRole =
+  | "admin"
   | "teacher"
   | "receptionist"
   | "sales"

@@ -65,6 +65,7 @@ const DIAS_SEMANA = [
 ];
 
 const ROLES: { value: StaffRole; label: string }[] = [
+  { value: "admin",           label: "Administrador(a)" },
   { value: "teacher",         label: "Professor" },
   { value: "receptionist",    label: "Recepcionista" },
   { value: "sales",           label: "Vendas" },
