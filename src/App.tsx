@@ -50,6 +50,7 @@ import UnidadesPage             from "@/pages/app/UnidadesPage";
 import IntegracoesHubPage       from "@/pages/app/IntegracoesHubPage";
 import NfsePage                 from "@/pages/app/NfsePage";
 import FitcorePayPage           from "@/pages/app/FitcorePayPage";
+import MatriculaPage            from "@/pages/app/MatriculaPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/matricula"             element={<AppGuard><MatriculaPage /></AppGuard>} />
             <Route path="/app/dashboards/gerencial"   element={<AppGuard><DashboardGerencialPage /></AppGuard>} />
             <Route path="/app/dashboards/crm"        element={<AppGuard><DashboardCRMPage /></AppGuard>} />
             <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />

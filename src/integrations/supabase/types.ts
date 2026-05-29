@@ -2242,6 +2242,127 @@ export interface Database {
         };
         Relationships: [];
       };
+      wods: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          descricao:     string;
+          modalidade:    string;
+          data:          string;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          descricao?:     string;
+          modalidade?:    string;
+          data:           string;
+          created_at?:    string;
+          updated_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          descricao?:     string;
+          modalidade?:    string;
+          data?:          string;
+          created_at?:    string;
+          updated_at?:    string;
+        };
+        Relationships: [];
+      };
+      wod_sessions: {
+        Row: {
+          id:                 string;
+          wod_id:             string;
+          titulo:             string;
+          movimento:          string;
+          conteudo:           string;
+          informar_resultado: boolean;
+          ordem:              number;
+        };
+        Insert: {
+          id?:                 string;
+          wod_id:              string;
+          titulo?:             string;
+          movimento?:          string;
+          conteudo?:           string;
+          informar_resultado?: boolean;
+          ordem?:              number;
+        };
+        Update: {
+          id?:                 string;
+          wod_id?:             string;
+          titulo?:             string;
+          movimento?:          string;
+          conteudo?:           string;
+          informar_resultado?: boolean;
+          ordem?:              number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "wod_sessions_wod_id_fkey";
+            columns: ["wod_id"];
+            referencedRelation: "wods";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      student_contracts: {
+        Row: {
+          id:               string;
+          contractor_id:    string;
+          student_id:       string;
+          contrato_id:      string;
+          data_inicio:      string;
+          data_fim:         string | null;
+          status:           string;
+          valor_mensalidade: number;
+          dia_vencimento:   number;
+          forma_pagamento:  string | null;
+          bloqueado:        boolean;
+          motivo_bloqueio:  string | null;
+          observacoes:      string | null;
+          created_at:       string;
+          updated_at:       string;
+        };
+        Insert: {
+          id?:               string;
+          contractor_id:     string;
+          student_id:        string;
+          contrato_id:       string;
+          data_inicio:       string;
+          data_fim?:         string | null;
+          status?:           string;
+          valor_mensalidade: number;
+          dia_vencimento?:   number;
+          forma_pagamento?:  string | null;
+          bloqueado?:        boolean;
+          motivo_bloqueio?:  string | null;
+          observacoes?:      string | null;
+          created_at?:       string;
+          updated_at?:       string;
+        };
+        Update: {
+          id?:               string;
+          contractor_id?:    string;
+          student_id?:       string;
+          contrato_id?:      string;
+          data_inicio?:      string;
+          data_fim?:         string | null;
+          status?:           string;
+          valor_mensalidade?: number;
+          dia_vencimento?:   number;
+          forma_pagamento?:  string | null;
+          bloqueado?:        boolean;
+          motivo_bloqueio?:  string | null;
+          observacoes?:      string | null;
+          created_at?:       string;
+          updated_at?:       string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

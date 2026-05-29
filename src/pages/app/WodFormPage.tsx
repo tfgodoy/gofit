@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Trash2, Plus, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Trash2, Plus, Calendar, Loader2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 /* ── Types ──────────────────────────────────────────────── */
 
@@ -40,46 +43,36 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 /* ── Rich-text editor stub ──────────────────────────────── */
 
-function RichEditor({ onChange }: { value: string; onChange: (v: string) => void }) {
+function RichEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* Toolbar */}
       <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-gray-200 bg-white">
         <select className="text-xs text-gray-500 outline-none border-0 bg-transparent cursor-pointer mr-1 py-0.5">
-          <option>Normal</option>
-          <option>H1</option>
-          <option>H2</option>
-          <option>H3</option>
+          <option>Normal</option><option>H1</option><option>H2</option><option>H3</option>
         </select>
         <span className="w-px h-4 bg-gray-200 mx-0.5" />
-        <button type="button" title="Negrito"     className="w-6 h-6 rounded text-xs font-bold     text-gray-600 hover:bg-gray-100 transition-colors">B</button>
-        <button type="button" title="Itálico"     className="w-6 h-6 rounded text-xs italic        text-gray-600 hover:bg-gray-100 transition-colors">I</button>
-        <button type="button" title="Sublinhado"  className="w-6 h-6 rounded text-xs underline     text-gray-600 hover:bg-gray-100 transition-colors">U</button>
-        <button type="button" title="Riscado"     className="w-6 h-6 rounded text-xs line-through  text-gray-600 hover:bg-gray-100 transition-colors">S</button>
+        <button type="button" className="w-6 h-6 rounded text-xs font-bold text-gray-600 hover:bg-gray-100">B</button>
+        <button type="button" className="w-6 h-6 rounded text-xs italic text-gray-600 hover:bg-gray-100">I</button>
+        <button type="button" className="w-6 h-6 rounded text-xs underline text-gray-600 hover:bg-gray-100">U</button>
+        <button type="button" className="w-6 h-6 rounded text-xs line-through text-gray-600 hover:bg-gray-100">S</button>
         <span className="w-px h-4 bg-gray-200 mx-0.5" />
-        <button type="button" title="Cor do texto" className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 flex items-center justify-center transition-colors">
+        <button type="button" className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 flex items-center justify-center">
           <span className="font-bold border-b-2 border-red-500 leading-none text-[11px]">A</span>
         </button>
-        <button type="button" title="Cor de fundo" className="w-6 h-6 rounded text-xs hover:bg-gray-100 flex items-center justify-center transition-colors">
-          <span className="font-bold bg-yellow-200 leading-none text-[11px] px-0.5">A</span>
-        </button>
         <span className="w-px h-4 bg-gray-200 mx-0.5" />
-        <button type="button" title="Citação"      className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors font-bold">"</button>
-        <button type="button" title="Blockquote"   className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors font-bold">"</button>
-        <button type="button" title="Lista"        className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors">≡</button>
-        <button type="button" title="Lista numerada" className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100 transition-colors">
+        <button type="button" className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100">≡</button>
+        <button type="button" className="w-6 h-6 rounded text-xs text-gray-600 hover:bg-gray-100">
           <span className="text-[10px] font-bold">1.</span>
         </button>
         <span className="w-px h-4 bg-gray-200 mx-0.5" />
-        <button type="button" title="Emoji" className="w-6 h-6 rounded text-xs hover:bg-gray-100 transition-colors">😊</button>
+        <button type="button" className="w-6 h-6 rounded text-xs hover:bg-gray-100">😊</button>
       </div>
-
-      {/* Editable area */}
       <div
         contentEditable
         suppressContentEditableWarning
         onInput={e => onChange((e.target as HTMLDivElement).innerText)}
         className="min-h-[80px] p-3 text-sm text-gray-700 outline-none"
+        dangerouslySetInnerHTML={{ __html: value }}
       />
     </div>
   );
@@ -89,10 +82,20 @@ function RichEditor({ onChange }: { value: string; onChange: (v: string) => void
 
 export default function WodFormPage() {
   const navigate = useNavigate();
+  const { id }   = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+
+  const isEdit = !!id;
+
+  const [loading, setLoading] = useState(isEdit);
+  const [saving,  setSaving]  = useState(false);
 
   const [descricao,  setDescricao]  = useState("");
   const [modalidade, setModalidade] = useState("+Cross");
-  const [data,       setData]       = useState(new Date().toISOString().split("T")[0]);
+  const [data,       setData]       = useState(
+    searchParams.get("data") ?? new Date().toISOString().split("T")[0]
+  );
 
   const [sessions,  setSessions]  = useState<Session[]>([
     { id: "1", titulo: "Warm-up", movimento: "", conteudo: "", informarResultado: false },
@@ -101,51 +104,162 @@ export default function WodFormPage() {
   ]);
   const [activeId, setActiveId] = useState("1");
 
+  /* ── Load existing WOD ─────────────────────────────────── */
+  useEffect(() => {
+    if (!isEdit || !user?.contractorId) return;
+    async function load() {
+      const { data: wod } = await supabase
+        .from("wods")
+        .select("*")
+        .eq("id", id!)
+        .eq("contractor_id", user!.contractorId!)
+        .maybeSingle();
+
+      if (!wod) { toast.error("WOD não encontrado"); navigate("/app/wod"); return; }
+
+      setDescricao((wod as any).descricao ?? "");
+      setModalidade((wod as any).modalidade ?? "+Cross");
+      setData((wod as any).data ?? "");
+
+      const { data: sesList } = await supabase
+        .from("wod_sessions")
+        .select("*")
+        .eq("wod_id", id!)
+        .order("ordem");
+
+      if (sesList && sesList.length > 0) {
+        const loaded: Session[] = (sesList as any[]).map(s => ({
+          id:               s.id,
+          titulo:           s.titulo,
+          movimento:        s.movimento,
+          conteudo:         s.conteudo,
+          informarResultado: s.informar_resultado,
+        }));
+        setSessions(loaded);
+        setActiveId(loaded[0].id);
+      }
+      setLoading(false);
+    }
+    load();
+  }, [isEdit, id, user]);
+
+  /* ── Session helpers ────────────────────────────────────── */
+
   const active = sessions.find(s => s.id === activeId) ?? sessions[0];
 
   function addSession() {
-    const id = String(Date.now());
-    setSessions(prev => [...prev, { id, titulo: "Nova sessão", movimento: "", conteudo: "", informarResultado: false }]);
-    setActiveId(id);
+    const newId = `new-${Date.now()}`;
+    setSessions(prev => [...prev, { id: newId, titulo: "Nova sessão", movimento: "", conteudo: "", informarResultado: false }]);
+    setActiveId(newId);
   }
 
-  function removeSession(id: string) {
+  function removeSession(sid: string) {
     setSessions(prev => {
-      const next = prev.filter(s => s.id !== id);
-      if (id === activeId && next.length > 0) setActiveId(next[0].id);
+      const next = prev.filter(s => s.id !== sid);
+      if (sid === activeId && next.length > 0) setActiveId(next[0].id);
       return next;
     });
   }
 
-  function update(id: string, field: keyof Session, val: any) {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, [field]: val } : s));
+  function update(sid: string, field: keyof Session, val: unknown) {
+    setSessions(prev => prev.map(s => s.id === sid ? { ...s, [field]: val } : s));
+  }
+
+  /* ── Save ───────────────────────────────────────────────── */
+
+  async function handleSave() {
+    if (!user?.contractorId) return;
+    if (!descricao.trim() && !data) { toast.error("Informe pelo menos a data do WOD"); return; }
+
+    setSaving(true);
+    try {
+      let wodId = id;
+
+      if (isEdit) {
+        await supabase.from("wods").update({
+          descricao:  descricao.trim(),
+          modalidade,
+          data,
+          updated_at: new Date().toISOString(),
+        }).eq("id", wodId!);
+
+        /* Remove all old sessions then reinsert */
+        await supabase.from("wod_sessions").delete().eq("wod_id", wodId!);
+      } else {
+        const { data: newWod, error } = await supabase
+          .from("wods")
+          .insert({
+            contractor_id: user.contractorId!,
+            descricao:     descricao.trim(),
+            modalidade,
+            data,
+          })
+          .select("id")
+          .single();
+        if (error || !newWod) { toast.error("Erro ao criar WOD"); return; }
+        wodId = (newWod as any).id;
+      }
+
+      /* Insert sessions */
+      if (sessions.length > 0) {
+        await supabase.from("wod_sessions").insert(
+          sessions.map((s, i) => ({
+            wod_id:             wodId!,
+            titulo:             s.titulo,
+            movimento:          s.movimento,
+            conteudo:           s.conteudo,
+            informar_resultado: s.informarResultado,
+            ordem:              i,
+          }))
+        );
+      }
+
+      toast.success(isEdit ? "WOD atualizado!" : "WOD criado!");
+      navigate("/app/wod");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /* ── Delete ─────────────────────────────────────────────── */
+
+  async function handleDelete() {
+    if (!isEdit || !id) return;
+    if (!confirm("Excluir este WOD?")) return;
+    await supabase.from("wods").delete().eq("id", id);
+    toast.success("WOD excluído.");
+    navigate("/app/wod");
+  }
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-80">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
   }
 
   return (
     <AppLayout>
       <div className="flex flex-col min-h-full bg-white">
         <div className="flex-1 px-10 py-8" style={{ maxWidth: 960 }}>
+          <h1 className="text-lg font-bold text-gray-800 mb-6">{isEdit ? "Editar WOD" : "Novo WOD"}</h1>
 
-          {/* Page title */}
-          <h1 className="text-lg font-bold text-gray-800 mb-6">Novo WOD</h1>
-
-          {/* ── Dados principais ── */}
+          {/* Dados principais */}
           <div className="mb-8">
             <p className="text-sm text-gray-400 mb-4">Dados principais</p>
             <div className="grid grid-cols-3 gap-8">
-
-              {/* Descrição */}
               <div className="border-b border-gray-300 pb-1">
                 <input
                   type="text"
                   value={descricao}
                   onChange={e => setDescricao(e.target.value)}
-                  placeholder="Descrição *"
+                  placeholder="Descrição"
                   className="w-full text-sm text-gray-700 placeholder-gray-400 outline-none bg-transparent"
                 />
               </div>
-
-              {/* Modalidade */}
               <div className="border-b border-gray-300 pb-1">
                 <select
                   value={modalidade}
@@ -155,8 +269,6 @@ export default function WodFormPage() {
                   {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
-
-              {/* Data */}
               <div className="border-b border-gray-300 pb-1 relative">
                 <input
                   type="date"
@@ -169,23 +281,17 @@ export default function WodFormPage() {
             </div>
           </div>
 
-          {/* ── Sessões + Pré-visualização ── */}
+          {/* Sessões + Pré-visualização */}
           <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 260px" }}>
-
-            {/* Sessões */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm text-gray-400">Sessões</p>
-                <button
-                  type="button"
-                  onClick={addSession}
-                  className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
-                >
+                <button type="button" onClick={addSession}
+                  className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
                   <Plus className="w-3.5 h-3.5" /> SESSÃO
                 </button>
               </div>
 
-              {/* Tabs */}
               <div className="flex border-b border-gray-200 mb-5">
                 {sessions.map(s => (
                   <button
@@ -203,11 +309,8 @@ export default function WodFormPage() {
                 ))}
               </div>
 
-              {/* Active session editor */}
               {active && (
                 <div className="space-y-4">
-
-                  {/* Title + Remover */}
                   <div className="flex items-center gap-4">
                     <div className="flex-1 border-b border-gray-300 pb-1">
                       <input
@@ -227,7 +330,6 @@ export default function WodFormPage() {
                     </button>
                   </div>
 
-                  {/* Movimento dropdown */}
                   <div className="border-b border-gray-200 pb-1">
                     <select
                       value={active.movimento}
@@ -239,18 +341,11 @@ export default function WodFormPage() {
                     </select>
                   </div>
 
-                  {/* Rich text editor */}
                   <RichEditor
                     value={active.conteudo}
                     onChange={v => update(active.id, "conteudo", v)}
                   />
 
-                  {/* Movimentos placeholder */}
-                  <div>
-                    <p className="text-sm text-gray-400">Movimentos</p>
-                  </div>
-
-                  {/* Deve informar resultados */}
                   <div className="flex items-center gap-2.5 pt-1">
                     <Toggle
                       value={active.informarResultado}
@@ -269,8 +364,8 @@ export default function WodFormPage() {
                 {sessions.map(s => (
                   <div
                     key={s.id}
-                    className="border border-gray-200 rounded-lg p-4 min-h-[80px] cursor-pointer hover:border-gray-300 transition-colors"
                     onClick={() => setActiveId(s.id)}
+                    className="border border-gray-200 rounded-lg p-4 min-h-[80px] cursor-pointer hover:border-gray-300 transition-colors"
                   >
                     <p className="text-sm text-gray-500 mb-1">{s.titulo}</p>
                     {s.conteudo && (
@@ -283,20 +378,36 @@ export default function WodFormPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-8 mt-10 pt-5 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={() => navigate("/app/wod")}
-              className="text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors tracking-wide"
-            >
-              VOLTAR
-            </button>
-            <button
-              type="button"
-              className="bg-gray-900 text-white text-sm font-bold px-8 py-2.5 rounded-lg hover:bg-gray-800 transition-colors tracking-wide"
-            >
-              SALVAR
-            </button>
+          <div className="flex justify-between mt-10 pt-5 border-t border-gray-100">
+            <div>
+              {isEdit && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="text-sm font-bold text-red-400 hover:text-red-600 transition-colors"
+                >
+                  EXCLUIR WOD
+                </button>
+              )}
+            </div>
+            <div className="flex gap-8">
+              <button
+                type="button"
+                onClick={() => navigate("/app/wod")}
+                className="text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors tracking-wide"
+              >
+                VOLTAR
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-2 bg-gray-900 text-white text-sm font-bold px-8 py-2.5 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors tracking-wide"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                SALVAR
+              </button>
+            </div>
           </div>
         </div>
       </div>

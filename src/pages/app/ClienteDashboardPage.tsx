@@ -1848,6 +1848,344 @@ function EvolucoesTab({ studentId, contractorId }: { studentId: string; contract
   );
 }
 
+/* ── Contratos Tab ─────────────────────────────────────────── */
+
+const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
+  ativo:      { label: "Ativo",      bg: "bg-green-100",  text: "text-green-700"  },
+  cancelado:  { label: "Cancelado",  bg: "bg-red-100",    text: "text-red-700"    },
+  suspenso:   { label: "Suspenso",   bg: "bg-yellow-100", text: "text-yellow-700" },
+  encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
+};
+
+function ContratosTab({ studentId, contractorId }: {
+  studentId: string; contractorId: string;
+}) {
+  const navigate = useNavigate();
+  const [scs, setScs]           = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("student_contracts")
+      .select(`
+        id, data_inicio, data_fim, status, valor_mensalidade,
+        dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at,
+        contratos!contrato_id(descricao, tipo, duracao, tipo_duracao)
+      `)
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    setScs((data ?? []) as any[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [studentId, contractorId]);
+
+  async function handleCancel(id: string) {
+    await supabase.from("student_contracts").update({ status: "cancelado", updated_at: new Date().toISOString() }).eq("id", id);
+    toast.success("Matrícula cancelada.");
+    setCancelId(null);
+    load();
+  }
+
+  const FORMA_LABEL: Record<string, string> = {
+    dinheiro: "Dinheiro", pix: "Pix", cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito", boleto: "Boleto", transferencia: "Transferência",
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-bold text-gray-800">Contratos e Matrículas</h2>
+        <button
+          onClick={() => navigate(`/app/clientes/${studentId}/matricula`)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> NOVA MATRÍCULA
+        </button>
+      </div>
+
+      {scs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-2xl border border-gray-100">
+          <ScrollText className="w-10 h-10 text-gray-200" />
+          <p className="text-sm text-gray-400 font-semibold">Nenhuma matrícula registrada</p>
+          <p className="text-xs text-gray-400">Clique em "NOVA MATRÍCULA" para vincular este aluno a um plano.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {scs.map((sc: any) => {
+            const contrato = sc.contratos as any;
+            const sStyle = STATUS_SC[sc.status] ?? STATUS_SC.encerrado;
+            return (
+              <div key={sc.id} className={`bg-white rounded-xl border shadow-sm px-6 py-4 ${sc.bloqueado ? "border-red-300" : "border-gray-100"}`}>
+                {sc.bloqueado && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 text-sm text-red-700">
+                    ⚠ Aluno bloqueado por inadimplência
+                  </div>
+                )}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <p className="text-sm font-bold text-gray-800">
+                        {contrato?.descricao ?? "Plano"}
+                      </p>
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${sStyle.bg} ${sStyle.text}`}>
+                        {sStyle.label}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-500">
+                      <div>
+                        <p className="text-gray-400">Início</p>
+                        <p className="font-semibold text-gray-700">
+                          {new Date(sc.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Fim</p>
+                        <p className="font-semibold text-gray-700">
+                          {sc.data_fim ? new Date(sc.data_fim + "T00:00:00").toLocaleDateString("pt-BR") : "Sem prazo"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Mensalidade</p>
+                        <p className="font-extrabold text-gray-800">
+                          {Number(sc.valor_mensalidade).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Vencimento</p>
+                        <p className="font-semibold text-gray-700">
+                          Todo dia {sc.dia_vencimento} · {FORMA_LABEL[sc.forma_pagamento] ?? sc.forma_pagamento}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {sc.status === "ativo" && (
+                    <button
+                      onClick={() => setCancelId(sc.id)}
+                      className="text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 mt-1"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {cancelId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setCancelId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Cancelar matrícula</h3>
+            <p className="text-sm text-gray-500 mb-5">Tem certeza? As cobranças futuras não serão geradas automaticamente.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setCancelId(null)} className="text-sm font-bold text-gray-500 hover:underline">Manter</button>
+              <button onClick={() => handleCancel(cancelId)} className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700">
+                Cancelar matrícula
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Financeiro Tab ─────────────────────────────────────────── */
+
+const STATUS_REC: Record<string, { label: string; bg: string; text: string }> = {
+  pendente:  { label: "Pendente",  bg: "bg-yellow-100", text: "text-yellow-700" },
+  pago:      { label: "Pago",      bg: "bg-green-100",  text: "text-green-700"  },
+  atrasado:  { label: "Atrasado",  bg: "bg-red-100",    text: "text-red-700"    },
+  cancelado: { label: "Cancelado", bg: "bg-gray-100",   text: "text-gray-500"   },
+};
+
+function FinanceiroTab({ studentId, contractorId }: { studentId: string; contractorId: string }) {
+  const [recs, setRecs]         = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [payModal, setPayModal] = useState<any | null>(null);
+  const [payVal,   setPayVal]   = useState("");
+  const [payForm,  setPayForm]  = useState("pix");
+  const [paying,   setPaying]   = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("receivables")
+      .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em")
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("vencimento", { ascending: false });
+    const today = new Date().toISOString().split("T")[0];
+    const list = ((data ?? []) as any[]).map(r => ({
+      ...r,
+      status: r.status === "pendente" && r.vencimento < today ? "atrasado" : r.status,
+    }));
+    setRecs(list);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [studentId, contractorId]);
+
+  const pendente  = recs.filter(r => r.status === "pendente").reduce((s, r) => s + r.valor, 0);
+  const atrasado  = recs.filter(r => r.status === "atrasado").reduce((s, r) => s + r.valor, 0);
+  const pago      = recs.filter(r => r.status === "pago").reduce((s, r) => s + (r.valor_pago ?? r.valor), 0);
+  const proxVenc  = recs.filter(r => ["pendente","atrasado"].includes(r.status)).sort((a,b)=>a.vencimento.localeCompare(b.vencimento))[0];
+
+  async function handlePay() {
+    if (!payModal) return;
+    setPaying(true);
+    const valor_pago = parseFloat(payVal.replace(",", ".")) || payModal.valor;
+    await supabase.from("receivables").update({
+      status: "pago", forma_pagamento: payForm,
+      valor_pago, pago_em: new Date().toISOString().split("T")[0],
+      updated_at: new Date().toISOString(),
+    }).eq("id", payModal.id);
+    await supabase.from("transactions").insert({
+      contractor_id: contractorId,
+      tipo: "entrada",
+      categoria: "Mensalidade",
+      descricao: payModal.descricao,
+      valor: valor_pago,
+      data: new Date().toISOString().split("T")[0],
+      forma_pagamento: payForm,
+      receivable_id: payModal.id,
+      student_id: studentId,
+    });
+    toast.success("Pagamento registrado!");
+    setPaying(false);
+    setPayModal(null);
+    load();
+  }
+
+  const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-4">Financeiro</h2>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: "Em atraso",      value: fmt(atrasado), color: atrasado > 0 ? "text-red-600" : "text-gray-800" },
+          { label: "Pendente",       value: fmt(pendente), color: "text-yellow-700"  },
+          { label: "Total pago",     value: fmt(pago),     color: "text-green-700"   },
+          { label: "Próx. vencimento", value: proxVenc ? new Date(proxVenc.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "—", color: "text-gray-700" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-100 p-4">
+            <p className="text-xs text-gray-400 mb-1">{label}</p>
+            <p className={`text-base font-extrabold ${color}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Cobranças */}
+      {recs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-2 bg-white rounded-2xl border border-gray-100">
+          <DollarSign className="w-8 h-8 text-gray-200" />
+          <p className="text-sm text-gray-400">Nenhuma cobrança encontrada</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left text-xs font-semibold text-gray-400 px-5 py-3">DESCRIÇÃO</th>
+                <th className="text-right text-xs font-semibold text-gray-400 px-5 py-3">VALOR</th>
+                <th className="text-left text-xs font-semibold text-gray-400 px-5 py-3">VENCIMENTO</th>
+                <th className="text-center text-xs font-semibold text-gray-400 px-5 py-3">STATUS</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {recs.map((r: any) => {
+                const s = STATUS_REC[r.status] ?? STATUS_REC.pendente;
+                return (
+                  <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm text-gray-700">{r.descricao}</td>
+                    <td className="px-5 py-3 text-sm font-semibold text-right text-gray-800">{fmt(r.valor)}</td>
+                    <td className="px-5 py-3 text-sm text-gray-500">
+                      {new Date(r.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+                        {s.label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {["pendente","atrasado"].includes(r.status) && (
+                        <button
+                          onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
+                          className="text-xs font-bold text-primary hover:underline"
+                        >
+                          Receber
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pay modal */}
+      {payModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPayModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-base font-bold text-gray-900">Registrar pagamento</h3>
+            <p className="text-sm text-gray-500">{payModal.descricao}</p>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Valor recebido</label>
+              <input
+                type="number"
+                step="0.01"
+                value={payVal}
+                onChange={e => setPayVal(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Forma de pagamento</label>
+              <select
+                value={payForm}
+                onChange={e => setPayForm(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {["pix","dinheiro","cartao_credito","cartao_debito","boleto"].map(f => (
+                  <option key={f} value={f}>{{ pix:"Pix", dinheiro:"Dinheiro", cartao_credito:"Cartão crédito", cartao_debito:"Cartão débito", boleto:"Boleto" }[f] ?? f}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setPayModal(null)} className="text-sm font-bold text-gray-500 hover:underline">Cancelar</button>
+              <button
+                onClick={handlePay}
+                disabled={paying}
+                className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40"
+              >
+                {paying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                CONFIRMAR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Page ────────────────────────────────────────────── */
 
 export default function ClienteDashboardPage() {
@@ -1862,6 +2200,10 @@ export default function ClienteDashboardPage() {
   const [deleteExameConfirm,  setDeleteExameConfirm]  = useState<string | null>(null);
   const [documentos,          setDocumentos]          = useState<any[]>([]);
   const [exames,              setExames]              = useState<any[]>([]);
+  const [kpiAtrasado,         setKpiAtrasado]         = useState(0);
+  const [kpiPendente,         setKpiPendente]         = useState(0);
+  const [kpiProxVenc,         setKpiProxVenc]         = useState<string | null>(null);
+  const [bloqueado,           setBloqueado]           = useState(false);
 
   useEffect(() => {
     if (!id || !user?.contractorId) return;
@@ -1880,12 +2222,23 @@ export default function ClienteDashboardPage() {
 
   const loadResumo = useCallback(async () => {
     if (!id || !user?.contractorId) return;
-    const [{ data: docs }, { data: exms }] = await Promise.all([
+    const today = new Date().toISOString().split("T")[0];
+    const [{ data: docs }, { data: exms }, { data: recs }, { data: scs }] = await Promise.all([
       supabase.from("student_documents").select("*").eq("student_id", id).eq("contractor_id", user.contractorId).order("created_at", { ascending: false }),
       supabase.from("student_exams").select("*").eq("student_id", id).eq("contractor_id", user.contractorId).order("created_at", { ascending: false }),
+      supabase.from("receivables").select("valor, vencimento, status").eq("student_id", id).eq("contractor_id", user.contractorId).in("status", ["pendente","atrasado"]),
+      supabase.from("student_contracts").select("bloqueado").eq("student_id", id).eq("contractor_id", user.contractorId).eq("status", "ativo"),
     ]);
     setDocumentos(docs ?? []);
     setExames(exms ?? []);
+    const recsArr = (recs ?? []) as any[];
+    const atrasados = recsArr.filter(r => r.status === "atrasado" || r.vencimento < today);
+    const pendentes = recsArr.filter(r => r.status === "pendente" && r.vencimento >= today);
+    setKpiAtrasado(atrasados.reduce((s: number, r: any) => s + r.valor, 0));
+    setKpiPendente(pendentes.reduce((s: number, r: any) => s + r.valor, 0));
+    const proxima = recsArr.filter(r => r.vencimento >= today).sort((a: any, b: any) => a.vencimento.localeCompare(b.vencimento))[0];
+    setKpiProxVenc(proxima?.vencimento ?? null);
+    setBloqueado(((scs ?? []) as any[]).some(sc => sc.bloqueado));
   }, [id, user]);
 
   useEffect(() => {
@@ -2050,19 +2403,55 @@ export default function ClienteDashboardPage() {
               studentId={student.id}
               contractorId={user!.contractorId!}
             />
+          ) : activeTab === "Contratos" ? (
+            <ContratosTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
+            />
+          ) : activeTab === "Financeiro" ? (
+            <FinanceiroTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
+            />
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />
           ) : (
             <div className="space-y-4">
 
-              {/* KPI row */}
+              {/* Banner bloqueio */}
+              {bloqueado && (
+                <div className="flex items-center gap-3 bg-red-50 border border-red-300 rounded-xl px-5 py-3.5">
+                  <span className="text-lg">⚠️</span>
+                  <div>
+                    <p className="text-sm font-bold text-red-700">Aluno bloqueado por inadimplência</p>
+                    <p className="text-xs text-red-600">Há cobranças em atraso. Regularize o pagamento para reativar o acesso.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* KPI row — dados reais */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {([
-                  { label: "Em atraso",        value: "R$ 0,00", bg: "bg-red-500",     icon: <DollarSign className="w-4 h-4 text-white" /> },
-                  { label: "Saldo devedor",     value: "R$ 0,00", bg: "bg-emerald-500", icon: <DollarSign className="w-4 h-4 text-white" /> },
-                  { label: "Créditos",          value: "R$ 0,00", bg: "bg-emerald-500", icon: <DollarSign className="w-4 h-4 text-white" /> },
-                  { label: "Saldo FitCoins",    value: "0 FC",    bg: "bg-amber-400",   icon: <Coins className="w-4 h-4 text-white" /> },
-                  { label: "Próx. vencimento",  value: "—",       bg: "bg-emerald-500", icon: <CalendarDays className="w-4 h-4 text-white" /> },
+                  {
+                    label: "Em atraso",
+                    value: kpiAtrasado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+                    bg: kpiAtrasado > 0 ? "bg-red-500" : "bg-gray-300",
+                    icon: <DollarSign className="w-4 h-4 text-white" />,
+                  },
+                  {
+                    label: "Pendente",
+                    value: kpiPendente.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+                    bg: "bg-yellow-400",
+                    icon: <DollarSign className="w-4 h-4 text-white" />,
+                  },
+                  { label: "Créditos",         value: "R$ 0,00", bg: "bg-emerald-500", icon: <DollarSign className="w-4 h-4 text-white" /> },
+                  { label: "Saldo FitCoins",   value: "0 FC",    bg: "bg-amber-400",   icon: <Coins className="w-4 h-4 text-white" /> },
+                  {
+                    label: "Próx. vencimento",
+                    value: kpiProxVenc ? new Date(kpiProxVenc + "T00:00:00").toLocaleDateString("pt-BR") : "—",
+                    bg: "bg-emerald-500",
+                    icon: <CalendarDays className="w-4 h-4 text-white" />,
+                  },
                 ] as { label: string; value: string; bg: string; icon: React.ReactNode }[]).map(({ label, value, bg, icon }) => (
                   <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center flex-shrink-0 shadow-sm`}>
