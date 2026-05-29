@@ -40,6 +40,10 @@ import LeadsPage              from "@/pages/app/LeadsPage";
 import OportunidadesPage      from "@/pages/app/OportunidadesPage";
 import AtividadesPage         from "@/pages/app/AtividadesPage";
 import CampanhasPage          from "@/pages/app/CampanhasPage";
+import DashboardGerencialPage  from "@/pages/app/DashboardGerencialPage";
+import DashboardCRMPage        from "@/pages/app/DashboardCRMPage";
+import DashboardClientesPage   from "@/pages/app/DashboardClientesPage";
+import DashboardFinanceiroPage from "@/pages/app/DashboardFinanceiroPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -78,7 +82,11 @@ export default function App() {
             <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
-            <Route path="/app/dashboards/*"      element={<AppGuard><PlaceholderPage title="Dashboards" /></AppGuard>} />
+            <Route path="/app/dashboards/gerencial"   element={<AppGuard><DashboardGerencialPage /></AppGuard>} />
+            <Route path="/app/dashboards/crm"        element={<AppGuard><DashboardCRMPage /></AppGuard>} />
+            <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />
+            <Route path="/app/dashboards/financeiro" element={<AppGuard><DashboardFinanceiroPage /></AppGuard>} />
+            <Route path="/app/dashboards/*"          element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
             <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
             <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
             <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
