@@ -102,6 +102,7 @@ export interface Database {
           valor_adesao: number | null;
           comissionar_consultor: boolean;
           categoria_receita: string | null;
+          vende_app_aluno: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -134,6 +135,7 @@ export interface Database {
           valor_adesao?: number | null;
           comissionar_consultor?: boolean;
           categoria_receita?: string | null;
+          vende_app_aluno?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -166,6 +168,7 @@ export interface Database {
           valor_adesao?: number | null;
           comissionar_consultor?: boolean;
           categoria_receita?: string | null;
+          vende_app_aluno?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -180,16 +183,28 @@ export interface Database {
           sessoes_por_semana: number | null;
           total_aulas: number | null;
           contabilizar_conjunto: boolean;
+          modalidade_id: string | null;
+          limitar_acessos: boolean;
+          max_acessos: number | null;
+          tipo_duracao_acessos: string;
+          limitar_horarios: boolean;
+          periodos_horario: unknown;
           created_at: string;
         };
         Insert: {
           id?: string;
           contrato_id: string;
-          nome: string;
+          nome?: string;
           tipo_acesso?: string;
           sessoes_por_semana?: number | null;
           total_aulas?: number | null;
           contabilizar_conjunto?: boolean;
+          modalidade_id?: string | null;
+          limitar_acessos?: boolean;
+          max_acessos?: number | null;
+          tipo_duracao_acessos?: string;
+          limitar_horarios?: boolean;
+          periodos_horario?: unknown;
           created_at?: string;
         };
         Update: {
@@ -200,6 +215,12 @@ export interface Database {
           sessoes_por_semana?: number | null;
           total_aulas?: number | null;
           contabilizar_conjunto?: boolean;
+          modalidade_id?: string | null;
+          limitar_acessos?: boolean;
+          max_acessos?: number | null;
+          tipo_duracao_acessos?: string;
+          limitar_horarios?: boolean;
+          periodos_horario?: unknown;
           created_at?: string;
         };
         Relationships: [];

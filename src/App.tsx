@@ -27,6 +27,7 @@ import TreinoFormPage         from "@/pages/app/TreinoFormPage";
 import WodFormPage            from "@/pages/app/WodFormPage";
 import EquipePage             from "@/pages/app/EquipePage";
 import ContratosPage          from "@/pages/app/ContratosPage";
+import ContratoFormPage       from "@/pages/app/ContratoFormPage";
 import ModalidadesPage        from "@/pages/app/ModalidadesPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
@@ -82,8 +83,10 @@ export default function App() {
             <Route path="/app/wod/:id"           element={<AppGuard><WodFormPage /></AppGuard>} />
             <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
             <Route path="/app/relatorios/*"      element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
-            <Route path="/app/administrativo/equipe"     element={<AppGuard><EquipePage /></AppGuard>} />
-            <Route path="/app/administrativo/contratos" element={<AppGuard><ContratosPage /></AppGuard>} />
+            <Route path="/app/administrativo/equipe"              element={<AppGuard><EquipePage /></AppGuard>} />
+            <Route path="/app/administrativo/contratos"           element={<AppGuard><ContratosPage /></AppGuard>} />
+            <Route path="/app/administrativo/contratos/novo"      element={<AppGuard><ContratoFormPage /></AppGuard>} />
+            <Route path="/app/administrativo/contratos/:id/editar" element={<AppGuard><ContratoFormPage /></AppGuard>} />
             <Route path="/app/administrativo/*"          element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
             <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><ModalidadesPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />

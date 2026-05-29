@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, FileText, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import ContratoFormModal from "@/components/app/ContratoFormModal";
 
 interface Contrato {
   id: string;
@@ -66,13 +66,12 @@ function fmtDuracao(duracao: number, tipo: string) {
 
 export default function ContratosPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [filtered, setFiltered] = useState<Contrato[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Contrato | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   async function load() {
@@ -106,8 +105,8 @@ export default function ContratosPage() {
     load();
   }
 
-  function openNew() { setEditing(null); setShowForm(true); }
-  function openEdit(c: Contrato) { setEditing(c); setShowForm(true); }
+  function openNew() { navigate("/app/administrativo/contratos/novo"); }
+  function openEdit(c: Contrato) { navigate(`/app/administrativo/contratos/${c.id}/editar`); }
 
   return (
     <>
@@ -250,15 +249,6 @@ export default function ContratosPage() {
           </div>
         </div>
       </AppLayout>
-
-      {/* Form modal */}
-      {showForm && (
-        <ContratoFormModal
-          contrato={editing}
-          onClose={() => { setShowForm(false); setEditing(null); }}
-          onSaved={() => { setShowForm(false); setEditing(null); load(); }}
-        />
-      )}
 
       {/* Delete confirmation */}
       {deleteId && (
