@@ -47,6 +47,9 @@ import DashboardFinanceiroPage from "@/pages/app/DashboardFinanceiroPage";
 import PermissoesPage           from "@/pages/app/PermissoesPage";
 import ParametrosFinanceirosPage from "@/pages/app/ParametrosFinanceirosPage";
 import UnidadesPage             from "@/pages/app/UnidadesPage";
+import IntegracoesHubPage       from "@/pages/app/IntegracoesHubPage";
+import NfsePage                 from "@/pages/app/NfsePage";
+import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -102,6 +105,8 @@ export default function App() {
             <Route path="/app/financeiro/caixa"              element={<AppGuard><CaixaPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
             <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
+            <Route path="/app/financeiro/nfs-e"             element={<AppGuard><NfsePage /></AppGuard>} />
+            <Route path="/app/financeiro/pay"               element={<AppGuard><FitcorePayPage /></AppGuard>} />
             <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
             <Route path="/app/estoque/*"         element={<AppGuard><PlaceholderPage title="Estoque" /></AppGuard>} />
             <Route path="/app/treinos/treinos"       element={<AppGuard><TreinosPage /></AppGuard>} />
@@ -128,7 +133,8 @@ export default function App() {
             <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />
             <Route path="/app/configuracoes/graduacoes"    element={<AppGuard><GraduacoesPage /></AppGuard>} />
             <Route path="/app/configuracoes/financeiro"   element={<AppGuard><ParametrosFinanceirosPage /></AppGuard>} />
-            <Route path="/app/configuracoes/unidades"     element={<AppGuard><UnidadesPage /></AppGuard>} />
+            <Route path="/app/configuracoes/unidades"        element={<AppGuard><UnidadesPage /></AppGuard>} />
+            <Route path="/app/configuracoes/integracoes"    element={<AppGuard><IntegracoesHubPage /></AppGuard>} />
             <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />
