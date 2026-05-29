@@ -1201,6 +1201,150 @@ export interface Database {
         };
         Relationships: [];
       };
+      schedule_grids: {
+        Row: {
+          id:                string;
+          contractor_id:     string;
+          modalidade_id:     string | null;
+          modalidade_nome:   string | null;
+          staff_id:          string | null;
+          staff_nome:        string | null;
+          nome:              string;
+          dias_semana:       string[];
+          hora_inicio:       string;
+          hora_fim:          string;
+          capacidade_maxima: number;
+          cor:               string;
+          ativo:             boolean;
+          created_at:        string;
+        };
+        Insert: {
+          id?:                string;
+          contractor_id:      string;
+          modalidade_id?:     string | null;
+          modalidade_nome?:   string | null;
+          staff_id?:          string | null;
+          staff_nome?:        string | null;
+          nome?:              string;
+          dias_semana?:       string[];
+          hora_inicio:        string;
+          hora_fim:           string;
+          capacidade_maxima?: number;
+          cor?:               string;
+          ativo?:             boolean;
+          created_at?:        string;
+        };
+        Update: {
+          id?:                string;
+          contractor_id?:     string;
+          modalidade_id?:     string | null;
+          modalidade_nome?:   string | null;
+          staff_id?:          string | null;
+          staff_nome?:        string | null;
+          nome?:              string;
+          dias_semana?:       string[];
+          hora_inicio?:       string;
+          hora_fim?:          string;
+          capacidade_maxima?: number;
+          cor?:               string;
+          ativo?:             boolean;
+          created_at?:        string;
+        };
+        Relationships: [];
+      };
+      schedule_slots: {
+        Row: {
+          id:                string;
+          contractor_id:     string;
+          grid_id:           string | null;
+          modalidade_id:     string | null;
+          modalidade_nome:   string | null;
+          staff_id:          string | null;
+          staff_nome:        string | null;
+          data:              string;
+          hora_inicio:       string;
+          hora_fim:          string;
+          capacidade_maxima: number;
+          cor:               string;
+          status:            string;
+          observacoes:       string | null;
+          created_at:        string;
+        };
+        Insert: {
+          id?:                string;
+          contractor_id:      string;
+          grid_id?:           string | null;
+          modalidade_id?:     string | null;
+          modalidade_nome?:   string | null;
+          staff_id?:          string | null;
+          staff_nome?:        string | null;
+          data:               string;
+          hora_inicio:        string;
+          hora_fim:           string;
+          capacidade_maxima?: number;
+          cor?:               string;
+          status?:            string;
+          observacoes?:       string | null;
+          created_at?:        string;
+        };
+        Update: {
+          id?:                string;
+          contractor_id?:     string;
+          grid_id?:           string | null;
+          modalidade_id?:     string | null;
+          modalidade_nome?:   string | null;
+          staff_id?:          string | null;
+          staff_nome?:        string | null;
+          data?:              string;
+          hora_inicio?:       string;
+          hora_fim?:          string;
+          capacidade_maxima?: number;
+          cor?:               string;
+          status?:            string;
+          observacoes?:       string | null;
+          created_at?:        string;
+        };
+        Relationships: [];
+      };
+      bookings: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          slot_id:       string;
+          student_id:    string | null;
+          student_nome:  string | null;
+          status:        string;
+          reservado_em:  string | null;
+          checkin_em:    string | null;
+          observacoes:   string | null;
+          created_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          slot_id:        string;
+          student_id?:    string | null;
+          student_nome?:  string | null;
+          status?:        string;
+          reservado_em?:  string | null;
+          checkin_em?:    string | null;
+          observacoes?:   string | null;
+          created_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          slot_id?:       string;
+          student_id?:    string | null;
+          student_nome?:  string | null;
+          status?:        string;
+          reservado_em?:  string | null;
+          checkin_em?:    string | null;
+          observacoes?:   string | null;
+          created_at?:    string;
+        };
+        Relationships: [];
+      };
       cash_sessions: {
         Row: {
           id:                     string;

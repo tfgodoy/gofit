@@ -32,6 +32,8 @@ import ModalidadesPage        from "@/pages/app/ModalidadesPage";
 import CaixaPage              from "@/pages/app/CaixaPage";
 import ContasReceberPage      from "@/pages/app/ContasReceberPage";
 import VendasPage             from "@/pages/app/VendasPage";
+import AgendaPage             from "@/pages/app/AgendaPage";
+import GradesPage             from "@/pages/app/GradesPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -71,7 +73,9 @@ export default function App() {
             <Route path="/app/dashboards/*"      element={<AppGuard><PlaceholderPage title="Dashboards" /></AppGuard>} />
             <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
             <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
-            <Route path="/app/agenda/*"          element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
+            <Route path="/app/agenda/agenda"  element={<AppGuard><AgendaPage /></AppGuard>} />
+            <Route path="/app/agenda/grades"  element={<AppGuard><GradesPage /></AppGuard>} />
+            <Route path="/app/agenda/*"       element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
             <Route path="/app/financeiro/caixa"              element={<AppGuard><CaixaPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
             <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
