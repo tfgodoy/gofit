@@ -51,6 +51,8 @@ import IntegracoesHubPage       from "@/pages/app/IntegracoesHubPage";
 import NfsePage                 from "@/pages/app/NfsePage";
 import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
+import ContasPagarPage         from "@/pages/app/ContasPagarPage";
+import DrePage                 from "@/pages/app/DrePage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -106,6 +108,8 @@ export default function App() {
             <Route path="/app/agenda/*"       element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
             <Route path="/app/financeiro/caixa"              element={<AppGuard><CaixaPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
+            <Route path="/app/financeiro/contas-a-pagar"    element={<AppGuard><ContasPagarPage /></AppGuard>} />
+            <Route path="/app/financeiro/dre"               element={<AppGuard><DrePage /></AppGuard>} />
             <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
             <Route path="/app/financeiro/nfs-e"             element={<AppGuard><NfsePage /></AppGuard>} />
             <Route path="/app/financeiro/pay"               element={<AppGuard><FitcorePayPage /></AppGuard>} />

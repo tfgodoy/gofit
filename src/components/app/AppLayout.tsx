@@ -12,6 +12,7 @@ import {
   BookOpen, LayoutTemplate, ScrollText, Banknote, Plug,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import NotificationBell from "@/components/app/NotificationBell";
 import type { ReactNode } from "react";
 
 interface GrandNavItem {
@@ -91,6 +92,7 @@ const mainNav: NavItem[] = [
       { icon: TrendingUp,      label: "Comissão",           to: "/app/financeiro/comissao",           iconColor: "text-green-500" },
       { icon: ArrowUpCircle,   label: "Contas a pagar",     to: "/app/financeiro/contas-a-pagar",     iconColor: "text-green-500" },
       { icon: ArrowDownCircle, label: "Contas a receber",   to: "/app/financeiro/contas-a-receber",   iconColor: "text-green-500" },
+      { icon: BarChart2,       label: "DRE Gerencial",      to: "/app/financeiro/dre",                iconColor: "text-green-500" },
       { icon: Landmark,        label: "Contas financeiras", to: "/app/financeiro/contas-financeiras", iconColor: "text-green-500" },
       { icon: CreditCard,      label: "FitCore Pay",        to: "/app/financeiro/pay",                iconColor: "text-green-500" },
       { icon: FileText,        label: "NFS-e",              to: "/app/financeiro/nfs-e",              iconColor: "text-green-500" },
@@ -340,12 +342,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         {/* Logo */}
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
               <BarChart2 className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-base text-gray-900">
+            <span className="font-bold text-base text-gray-900 flex-1 truncate">
               Fit<span className="text-primary">Core</span>Sys
             </span>
+            <NotificationBell contractorId={user?.contractorId ?? undefined} />
           </div>
           <p className="text-xs text-gray-400 mt-1.5 truncate font-medium">
             {user?.contractorName ?? user?.name}

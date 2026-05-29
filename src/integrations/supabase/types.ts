@@ -2363,6 +2363,87 @@ export interface Database {
         };
         Relationships: [];
       };
+      notifications: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          tipo:          string;
+          titulo:        string;
+          mensagem:      string | null;
+          lido:          boolean;
+          student_id:    string | null;
+          link:          string | null;
+          created_at:    string;
+        };
+        Insert: {
+          id?:           string;
+          contractor_id: string;
+          tipo?:         string;
+          titulo:        string;
+          mensagem?:     string | null;
+          lido?:         boolean;
+          student_id?:   string | null;
+          link?:         string | null;
+          created_at?:   string;
+        };
+        Update: {
+          id?:           string;
+          contractor_id?: string;
+          tipo?:         string;
+          titulo?:       string;
+          mensagem?:     string | null;
+          lido?:         boolean;
+          student_id?:   string | null;
+          link?:         string | null;
+          created_at?:   string;
+        };
+        Relationships: [];
+      };
+      payables: {
+        Row: {
+          id:              string;
+          contractor_id:   string;
+          descricao:       string;
+          categoria:       string;
+          valor:           number;
+          vencimento:      string;
+          status:          string;
+          forma_pagamento: string | null;
+          valor_pago:      number | null;
+          pago_em:         string | null;
+          observacoes:     string | null;
+          created_at:      string;
+        };
+        Insert: {
+          id?:             string;
+          contractor_id:   string;
+          descricao:       string;
+          categoria?:      string;
+          valor:           number;
+          vencimento:      string;
+          status?:         string;
+          forma_pagamento?: string | null;
+          valor_pago?:     number | null;
+          pago_em?:        string | null;
+          observacoes?:    string | null;
+          created_at?:     string;
+        };
+        Update: {
+          id?:             string;
+          contractor_id?:  string;
+          descricao?:      string;
+          categoria?:      string;
+          valor?:          number;
+          vencimento?:     string;
+          status?:         string;
+          forma_pagamento?: string | null;
+          valor_pago?:     number | null;
+          pago_em?:        string | null;
+          observacoes?:    string | null;
+          created_at?:     string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
