@@ -36,6 +36,10 @@ import AgendaPage             from "@/pages/app/AgendaPage";
 import GradesPage             from "@/pages/app/GradesPage";
 import AvaliacaoFisicaFormPage from "@/pages/app/AvaliacaoFisicaFormPage";
 import GraduacoesPage         from "@/pages/app/GraduacoesPage";
+import LeadsPage              from "@/pages/app/LeadsPage";
+import OportunidadesPage      from "@/pages/app/OportunidadesPage";
+import AtividadesPage         from "@/pages/app/AtividadesPage";
+import CampanhasPage          from "@/pages/app/CampanhasPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -75,6 +79,10 @@ export default function App() {
             <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/dashboards/*"      element={<AppGuard><PlaceholderPage title="Dashboards" /></AppGuard>} />
+            <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
+            <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
+            <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
+            <Route path="/app/crm/automacoes"    element={<AppGuard><CampanhasPage /></AppGuard>} />
             <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
             <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
             <Route path="/app/agenda/agenda"  element={<AppGuard><AgendaPage /></AppGuard>} />
