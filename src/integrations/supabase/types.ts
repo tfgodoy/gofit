@@ -21,6 +21,138 @@ export type ContractorPlan = "trial" | "starter" | "profissional" | "empresarial
 export interface Database {
   public: {
     Tables: {
+      contratos: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          descricao: string;
+          tipo: string;
+          duracao: number;
+          tipo_duracao: string;
+          valor_total: number;
+          valor_por_mes: number | null;
+          permite_renovar: boolean;
+          renova_automaticamente: boolean;
+          renovacao_quando: string | null;
+          permite_parcelado: boolean;
+          max_parcelas: number | null;
+          formas_pagamento: string[];
+          template_contrato: string | null;
+          assinatura_eletronica: boolean;
+          forma_envio_assinatura: string | null;
+          ativo: boolean;
+          limita_periodo_venda: boolean;
+          data_inicio_venda: string | null;
+          data_fim_venda: string | null;
+          max_suspensoes: number | null;
+          max_dias_suspensao: number | null;
+          permite_pre_venda: boolean;
+          possui_valor_adesao: boolean;
+          valor_adesao: number | null;
+          comissionar_consultor: boolean;
+          categoria_receita: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          descricao: string;
+          tipo?: string;
+          duracao?: number;
+          tipo_duracao?: string;
+          valor_total?: number;
+          valor_por_mes?: number | null;
+          permite_renovar?: boolean;
+          renova_automaticamente?: boolean;
+          renovacao_quando?: string | null;
+          permite_parcelado?: boolean;
+          max_parcelas?: number | null;
+          formas_pagamento?: string[];
+          template_contrato?: string | null;
+          assinatura_eletronica?: boolean;
+          forma_envio_assinatura?: string | null;
+          ativo?: boolean;
+          limita_periodo_venda?: boolean;
+          data_inicio_venda?: string | null;
+          data_fim_venda?: string | null;
+          max_suspensoes?: number | null;
+          max_dias_suspensao?: number | null;
+          permite_pre_venda?: boolean;
+          possui_valor_adesao?: boolean;
+          valor_adesao?: number | null;
+          comissionar_consultor?: boolean;
+          categoria_receita?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          descricao?: string;
+          tipo?: string;
+          duracao?: number;
+          tipo_duracao?: string;
+          valor_total?: number;
+          valor_por_mes?: number | null;
+          permite_renovar?: boolean;
+          renova_automaticamente?: boolean;
+          renovacao_quando?: string | null;
+          permite_parcelado?: boolean;
+          max_parcelas?: number | null;
+          formas_pagamento?: string[];
+          template_contrato?: string | null;
+          assinatura_eletronica?: boolean;
+          forma_envio_assinatura?: string | null;
+          ativo?: boolean;
+          limita_periodo_venda?: boolean;
+          data_inicio_venda?: string | null;
+          data_fim_venda?: string | null;
+          max_suspensoes?: number | null;
+          max_dias_suspensao?: number | null;
+          permite_pre_venda?: boolean;
+          possui_valor_adesao?: boolean;
+          valor_adesao?: number | null;
+          comissionar_consultor?: boolean;
+          categoria_receita?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      contrato_modalidades: {
+        Row: {
+          id: string;
+          contrato_id: string;
+          nome: string;
+          tipo_acesso: string;
+          sessoes_por_semana: number | null;
+          total_aulas: number | null;
+          contabilizar_conjunto: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          contrato_id: string;
+          nome: string;
+          tipo_acesso?: string;
+          sessoes_por_semana?: number | null;
+          total_aulas?: number | null;
+          contabilizar_conjunto?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          contrato_id?: string;
+          nome?: string;
+          tipo_acesso?: string;
+          sessoes_por_semana?: number | null;
+          total_aulas?: number | null;
+          contabilizar_conjunto?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       contractors: {
         Row: {
           id: string;

@@ -9,7 +9,7 @@ import {
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
-  BookOpen, LayoutTemplate,
+  BookOpen, LayoutTemplate, ScrollText,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReactNode } from "react";
@@ -126,8 +126,9 @@ const bottomNav: NavItem[] = [
     icon: Building2, label: "Administrativo", to: "/app/administrativo",
     iconColor: "text-gray-500",
     children: [
-      { icon: Users,  label: "Equipe",     to: "/app/administrativo/equipe",     iconColor: "text-gray-500" },
-      { icon: Shield, label: "Permissões", to: "/app/administrativo/permissoes", iconColor: "text-gray-500" },
+      { icon: Users,      label: "Equipe",     to: "/app/administrativo/equipe",     iconColor: "text-gray-500" },
+      { icon: ScrollText, label: "Contratos",  to: "/app/administrativo/contratos",  iconColor: "text-gray-500" },
+      { icon: Shield,     label: "Permissões", to: "/app/administrativo/permissoes", iconColor: "text-gray-500" },
     ],
   },
   {
