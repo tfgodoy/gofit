@@ -9,7 +9,7 @@ import {
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
-  BookOpen, LayoutTemplate, ScrollText,
+  BookOpen, LayoutTemplate, ScrollText, Banknote,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ReactNode } from "react";
@@ -135,8 +135,10 @@ const bottomNav: NavItem[] = [
     icon: Settings, label: "Configurações", to: "/app/configuracoes",
     iconColor: "text-gray-500",
     children: [
-      { icon: LayoutGrid,    label: "Modalidades",  to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
-      { icon: GraduationCap, label: "Graduações",   to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
+      { icon: LayoutGrid,    label: "Modalidades",            to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
+      { icon: GraduationCap, label: "Graduações",             to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
+      { icon: Banknote,      label: "Parâmetros Financeiros", to: "/app/configuracoes/financeiro",   iconColor: "text-gray-500" },
+      { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
       {
         icon: ClipboardList, label: "Anamnese", to: "/app/configuracoes/anamnese",
         iconColor: "text-gray-500",

@@ -1888,6 +1888,135 @@ export interface Database {
         };
         Relationships: [];
       };
+      role_permissions: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          role:          string;
+          module_name:   string;
+          can_view:      boolean;
+          can_create:    boolean;
+          can_edit:      boolean;
+          can_delete:    boolean;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          role:           string;
+          module_name:    string;
+          can_view?:      boolean;
+          can_create?:    boolean;
+          can_edit?:      boolean;
+          can_delete?:    boolean;
+          updated_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          role?:          string;
+          module_name?:   string;
+          can_view?:      boolean;
+          can_create?:    boolean;
+          can_edit?:      boolean;
+          can_delete?:    boolean;
+          updated_at?:    string;
+        };
+        Relationships: [];
+      };
+      financial_settings: {
+        Row: {
+          id:                     string;
+          contractor_id:          string;
+          juros_mensal:           number;
+          multa_atraso:           number;
+          dias_tolerancia:        number;
+          dias_notificacao_antes: number;
+          formas_pagamento:       string[];
+          updated_at:             string;
+        };
+        Insert: {
+          id?:                     string;
+          contractor_id:           string;
+          juros_mensal?:           number;
+          multa_atraso?:           number;
+          dias_tolerancia?:        number;
+          dias_notificacao_antes?: number;
+          formas_pagamento?:       string[];
+          updated_at?:             string;
+        };
+        Update: {
+          id?:                     string;
+          contractor_id?:          string;
+          juros_mensal?:           number;
+          multa_atraso?:           number;
+          dias_tolerancia?:        number;
+          dias_notificacao_antes?: number;
+          formas_pagamento?:       string[];
+          updated_at?:             string;
+        };
+        Relationships: [];
+      };
+      units: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          nome:          string;
+          cnpj:          string | null;
+          telefone:      string | null;
+          email:         string | null;
+          cep:           string | null;
+          logradouro:    string | null;
+          numero:        string | null;
+          complemento:   string | null;
+          bairro:        string | null;
+          cidade:        string | null;
+          uf:            string | null;
+          is_principal:  boolean;
+          ativo:         boolean;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          nome:           string;
+          cnpj?:          string | null;
+          telefone?:      string | null;
+          email?:         string | null;
+          cep?:           string | null;
+          logradouro?:    string | null;
+          numero?:        string | null;
+          complemento?:   string | null;
+          bairro?:        string | null;
+          cidade?:        string | null;
+          uf?:            string | null;
+          is_principal?:  boolean;
+          ativo?:         boolean;
+          created_at?:    string;
+          updated_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          nome?:          string;
+          cnpj?:          string | null;
+          telefone?:      string | null;
+          email?:         string | null;
+          cep?:           string | null;
+          logradouro?:    string | null;
+          numero?:        string | null;
+          complemento?:   string | null;
+          bairro?:        string | null;
+          cidade?:        string | null;
+          uf?:            string | null;
+          is_principal?:  boolean;
+          ativo?:         boolean;
+          created_at?:    string;
+          updated_at?:    string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
