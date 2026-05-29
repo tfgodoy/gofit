@@ -135,6 +135,7 @@ const bottomNav: NavItem[] = [
     icon: Settings, label: "Configurações", to: "/app/configuracoes",
     iconColor: "text-gray-500",
     children: [
+      { icon: LayoutGrid, label: "Modalidades", to: "/app/configuracoes/modalidades", iconColor: "text-gray-500" },
       {
         icon: ClipboardList, label: "Anamnese", to: "/app/configuracoes/anamnese",
         iconColor: "text-gray-500",

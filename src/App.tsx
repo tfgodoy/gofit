@@ -27,6 +27,7 @@ import TreinoFormPage         from "@/pages/app/TreinoFormPage";
 import WodFormPage            from "@/pages/app/WodFormPage";
 import EquipePage             from "@/pages/app/EquipePage";
 import ContratosPage          from "@/pages/app/ContratosPage";
+import ModalidadesPage        from "@/pages/app/ModalidadesPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="/app/administrativo/equipe"     element={<AppGuard><EquipePage /></AppGuard>} />
             <Route path="/app/administrativo/contratos" element={<AppGuard><ContratosPage /></AppGuard>} />
             <Route path="/app/administrativo/*"          element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
+            <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><ModalidadesPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />

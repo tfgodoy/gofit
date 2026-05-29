@@ -21,6 +21,57 @@ export type ContractorPlan = "trial" | "starter" | "profissional" | "empresarial
 export interface Database {
   public: {
     Tables: {
+      modalidades: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          descricao: string;
+          utiliza_agenda: boolean;
+          utiliza_wod: boolean;
+          exibir_wod_app: boolean;
+          exibicao_wod: string;
+          exibe_wod_antes_dia: boolean;
+          dias_semana: string[];
+          cor: string;
+          icone: string;
+          utiliza_gonutri: boolean;
+          ativo: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          descricao: string;
+          utiliza_agenda?: boolean;
+          utiliza_wod?: boolean;
+          exibir_wod_app?: boolean;
+          exibicao_wod?: string;
+          exibe_wod_antes_dia?: boolean;
+          dias_semana?: string[];
+          cor?: string;
+          icone?: string;
+          utiliza_gonutri?: boolean;
+          ativo?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          descricao?: string;
+          utiliza_agenda?: boolean;
+          utiliza_wod?: boolean;
+          exibir_wod_app?: boolean;
+          exibicao_wod?: string;
+          exibe_wod_antes_dia?: boolean;
+          dias_semana?: string[];
+          cor?: string;
+          icone?: string;
+          utiliza_gonutri?: boolean;
+          ativo?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       contratos: {
         Row: {
           id: string;
