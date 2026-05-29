@@ -1854,39 +1854,129 @@ const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
   ativo:      { label: "Ativo",      bg: "bg-green-100",  text: "text-green-700"  },
   cancelado:  { label: "Cancelado",  bg: "bg-red-100",    text: "text-red-700"    },
   suspenso:   { label: "Suspenso",   bg: "bg-yellow-100", text: "text-yellow-700" },
+  congelado:  { label: "Congelado",  bg: "bg-blue-100",   text: "text-blue-700"   },
   encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
 };
 
-function ContratosTab({ studentId, contractorId }: {
-  studentId: string; contractorId: string;
+type ContratoAction = { type: "cancelar" | "suspender" | "congelar" | "reativar"; id: string } | null;
+
+function ContratosTab({ studentId, contractorId, student }: {
+  studentId: string; contractorId: string; student: StudentDetail | null;
 }) {
   const navigate = useNavigate();
-  const [scs, setScs]           = useState<any[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [scs, setScs]         = useState<any[]>([]);
+  const [autDocs, setAutDocs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [action, setAction]   = useState<ContratoAction>(null);
+
+  /* congelar form state */
+  const [congelarInicio, setCongelarInicio] = useState("");
+  const [congelarFim,    setCongelarFim]    = useState("");
+  const [congelarMotivo, setCongelarMotivo] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  /* assinatura eletrônica state */
+  const [autTarget, setAutTarget]   = useState<{ scId: string; contratoDesc: string } | null>(null);
+  const [autEmail,  setAutEmail]    = useState(student?.email ?? "");
+  const [autSaving, setAutSaving]   = useState(false);
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from("student_contracts")
-      .select(`
-        id, data_inicio, data_fim, status, valor_mensalidade,
-        dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at,
-        contratos!contrato_id(descricao, tipo, duracao, tipo_duracao)
-      `)
-      .eq("contractor_id", contractorId)
-      .eq("student_id", studentId)
-      .order("created_at", { ascending: false });
+    const [{ data }, { data: autData }] = await Promise.all([
+      supabase.from("student_contracts")
+        .select(`
+          id, data_inicio, data_fim, status, valor_mensalidade,
+          dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at,
+          data_congelamento_inicio, data_congelamento_fim, motivo_congelamento,
+          contratos!contrato_id(descricao, tipo, duracao, tipo_duracao)
+        `)
+        .eq("contractor_id", contractorId)
+        .eq("student_id", studentId)
+        .order("created_at", { ascending: false }),
+      supabase.from("autentique_documents")
+        .select("id, student_contract_id, status, link_assinatura, assinado_em, created_at")
+        .eq("contractor_id", contractorId)
+        .eq("student_id", studentId)
+        .order("created_at", { ascending: false }),
+    ]);
     setScs((data ?? []) as any[]);
+    setAutDocs((autData ?? []) as any[]);
     setLoading(false);
+  }
+
+  async function handleSolicitarAssinatura() {
+    if (!autTarget || !autEmail.trim()) { toast.error("Informe o e-mail do aluno."); return; }
+    const sc = scs.find(s => s.id === autTarget.scId);
+    if (!sc) return;
+    setAutSaving(true);
+    try {
+      const resp = await supabase.functions.invoke("solicitar-assinatura", {
+        body: {
+          contractor_id: contractorId,
+          student_contract_id: autTarget.scId,
+          student_id: studentId,
+          student_nome: student?.nome_completo,
+          student_email: autEmail.trim(),
+          contrato_descricao: autTarget.contratoDesc,
+          valor_mensalidade: sc.valor_mensalidade,
+          data_inicio: sc.data_inicio,
+          data_fim: sc.data_fim,
+        },
+      });
+      if (resp.error || resp.data?.error) {
+        toast.error(resp.data?.error ?? "Erro ao solicitar assinatura. Verifique se a API key do Autentique está configurada.");
+      } else {
+        toast.success("Documento enviado para assinatura!");
+        const link = resp.data?.link_assinatura;
+        if (link) {
+          await navigator.clipboard.writeText(link).catch(() => {});
+          toast.info("Link copiado para a área de transferência.");
+        }
+        load();
+      }
+    } catch {
+      toast.error("Erro ao solicitar assinatura.");
+    }
+    setAutSaving(false);
+    setAutTarget(null);
   }
 
   useEffect(() => { load(); }, [studentId, contractorId]);
 
-  async function handleCancel(id: string) {
-    await supabase.from("student_contracts").update({ status: "cancelado", updated_at: new Date().toISOString() }).eq("id", id);
-    toast.success("Matrícula cancelada.");
-    setCancelId(null);
+  async function handleAction() {
+    if (!action) return;
+    setSaving(true);
+    const now = new Date().toISOString();
+    let update: Record<string, unknown> = { updated_at: now };
+
+    if (action.type === "cancelar") {
+      update.status = "cancelado";
+    } else if (action.type === "suspender") {
+      update.status = "suspenso";
+    } else if (action.type === "reativar") {
+      update.status = "ativo";
+      update.data_congelamento_inicio = null;
+      update.data_congelamento_fim    = null;
+      update.motivo_congelamento      = null;
+    } else if (action.type === "congelar") {
+      if (!congelarInicio || !congelarFim) { toast.error("Informe as datas de congelamento."); setSaving(false); return; }
+      update.status = "congelado";
+      update.data_congelamento_inicio = congelarInicio;
+      update.data_congelamento_fim    = congelarFim;
+      update.motivo_congelamento      = congelarMotivo.trim() || null;
+    }
+
+    const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
+    if (error) { toast.error("Erro ao atualizar contrato."); setSaving(false); return; }
+
+    const labels: Record<string, string> = {
+      cancelar: "Matrícula cancelada.", suspender: "Contrato suspenso.",
+      reativar: "Contrato reativado.", congelar: "Contrato congelado.",
+    };
+    toast.success(labels[action.type]);
+    setAction(null);
+    setCongelarInicio(""); setCongelarFim(""); setCongelarMotivo("");
+    setSaving(false);
     load();
   }
 
@@ -1920,19 +2010,37 @@ function ContratosTab({ studentId, contractorId }: {
           {scs.map((sc: any) => {
             const contrato = sc.contratos as any;
             const sStyle = STATUS_SC[sc.status] ?? STATUS_SC.encerrado;
+            const isActive    = sc.status === "ativo";
+            const isFrozen    = sc.status === "congelado";
+            const isSuspended = sc.status === "suspenso";
+            const canReactivate = isFrozen || isSuspended;
             return (
-              <div key={sc.id} className={`bg-white rounded-xl border shadow-sm px-6 py-4 ${sc.bloqueado ? "border-red-300" : "border-gray-100"}`}>
+              <div key={sc.id} className={`bg-white rounded-xl border shadow-sm px-6 py-4 ${sc.bloqueado ? "border-red-300" : isFrozen ? "border-blue-200" : isSuspended ? "border-yellow-200" : "border-gray-100"}`}>
                 {sc.bloqueado && (
                   <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 text-sm text-red-700">
                     ⚠ Aluno bloqueado por inadimplência
                   </div>
                 )}
+                {isFrozen && (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-sm text-blue-700">
+                    ❄ Contrato congelado
+                    {sc.data_congelamento_inicio && sc.data_congelamento_fim && (
+                      <span className="ml-1">
+                        · {new Date(sc.data_congelamento_inicio + "T00:00:00").toLocaleDateString("pt-BR")} até {new Date(sc.data_congelamento_fim + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                    {sc.motivo_congelamento && <span className="ml-1">· {sc.motivo_congelamento}</span>}
+                  </div>
+                )}
+                {isSuspended && (
+                  <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-3 text-sm text-yellow-700">
+                    ⏸ Contrato suspenso
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <p className="text-sm font-bold text-gray-800">
-                        {contrato?.descricao ?? "Plano"}
-                      </p>
+                      <p className="text-sm font-bold text-gray-800">{contrato?.descricao ?? "Plano"}</p>
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${sStyle.bg} ${sStyle.text}`}>
                         {sStyle.label}
                       </span>
@@ -1964,31 +2072,210 @@ function ContratosTab({ studentId, contractorId }: {
                       </div>
                     </div>
                   </div>
-                  {sc.status === "ativo" && (
-                    <button
-                      onClick={() => setCancelId(sc.id)}
-                      className="text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 mt-1"
-                    >
-                      Cancelar
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-1">
+                    {canReactivate && (
+                      <button
+                        onClick={() => setAction({ type: "reativar", id: sc.id })}
+                        className="text-xs font-semibold text-green-600 hover:text-green-800 transition-colors px-2 py-1 rounded-lg hover:bg-green-50"
+                      >
+                        Reativar
+                      </button>
+                    )}
+                    {isActive && (
+                      <>
+                        <button
+                          onClick={() => setAction({ type: "congelar", id: sc.id })}
+                          className="text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded-lg hover:bg-blue-50"
+                        >
+                          Congelar
+                        </button>
+                        <button
+                          onClick={() => setAction({ type: "suspender", id: sc.id })}
+                          className="text-xs font-semibold text-yellow-600 hover:text-yellow-800 transition-colors px-2 py-1 rounded-lg hover:bg-yellow-50"
+                        >
+                          Suspender
+                        </button>
+                        <button
+                          onClick={() => setAction({ type: "cancelar", id: sc.id })}
+                          className="text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                        >
+                          Cancelar
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {/* Assinatura eletrônica */}
+                {(() => {
+                  const autDoc = autDocs.find(d => d.student_contract_id === sc.id);
+                  if (autDoc) {
+                    const STATUS_AUT: Record<string, { label: string; cls: string }> = {
+                      aguardando_assinatura: { label: "Aguardando assinatura", cls: "bg-yellow-100 text-yellow-700" },
+                      assinado:              { label: "Assinado",              cls: "bg-green-100 text-green-700"  },
+                      recusado:              { label: "Recusado",              cls: "bg-red-100 text-red-600"      },
+                    };
+                    const s = STATUS_AUT[autDoc.status] ?? { label: autDoc.status, cls: "bg-gray-100 text-gray-500" };
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">Assinatura eletrônica:</span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
+                        </div>
+                        {autDoc.link_assinatura && (
+                          <div className="flex items-center gap-2">
+                            <a href={autDoc.link_assinatura} target="_blank" rel="noreferrer"
+                               className="text-xs font-semibold text-primary hover:underline">
+                              Ver no Autentique
+                            </a>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(autDoc.link_assinatura); toast.success("Link copiado!"); }}
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                              title="Copiar link"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (sc.status === "ativo" || sc.status === "congelado") ? (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => {
+                          setAutTarget({ scId: sc.id, contratoDesc: (sc.contratos as any)?.descricao ?? "Plano" });
+                          setAutEmail(student?.email ?? "");
+                        }}
+                        className="text-xs font-semibold text-gray-500 hover:text-primary transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Solicitar assinatura eletrônica
+                      </button>
+                    </div>
+                  ) : null;
+                })()}
               </div>
             );
           })}
         </div>
       )}
 
-      {cancelId && (
+      {/* Modal assinatura */}
+      {autTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setCancelId(null)} />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAutTarget(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-900 mb-2">Cancelar matrícula</h3>
-            <p className="text-sm text-gray-500 mb-5">Tem certeza? As cobranças futuras não serão geradas automaticamente.</p>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Solicitar assinatura eletrônica</h3>
+            <p className="text-sm text-gray-400 mb-4">Um link de assinatura será gerado via Autentique e enviado para o aluno.</p>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">E-mail do aluno *</label>
+              <input
+                type="email"
+                value={autEmail}
+                onChange={e => setAutEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Contrato: <strong>{autTarget.contratoDesc}</strong></p>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setAutTarget(null)} className="text-sm font-bold text-gray-500 hover:underline" disabled={autSaving}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleSolicitarAssinatura}
+                disabled={autSaving}
+                className="bg-primary text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors"
+              >
+                {autSaving ? "Enviando..." : "Solicitar assinatura"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modais de ação */}
+      {action && action.type !== "congelar" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAction(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">
+              {{ cancelar: "Cancelar matrícula", suspender: "Suspender contrato", reativar: "Reativar contrato" }[action.type]}
+            </h3>
+            <p className="text-sm text-gray-500 mb-5">
+              {{ cancelar: "Tem certeza? As cobranças futuras não serão geradas.", suspender: "O contrato será suspenso temporariamente. Você pode reativar a qualquer momento.", reativar: "O contrato voltará ao status ativo." }[action.type]}
+            </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setCancelId(null)} className="text-sm font-bold text-gray-500 hover:underline">Manter</button>
-              <button onClick={() => handleCancel(cancelId)} className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700">
-                Cancelar matrícula
+              <button onClick={() => setAction(null)} className="text-sm font-bold text-gray-500 hover:underline" disabled={saving}>
+                Voltar
+              </button>
+              <button
+                onClick={handleAction}
+                disabled={saving}
+                className={`text-white text-sm font-bold px-5 py-2 rounded-lg disabled:opacity-60 transition-colors ${
+                  action.type === "cancelar" ? "bg-red-600 hover:bg-red-700" :
+                  action.type === "suspender" ? "bg-yellow-600 hover:bg-yellow-700" :
+                  "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {saving ? "Salvando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {action && action.type === "congelar" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAction(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-1">Congelar contrato</h3>
+            <p className="text-sm text-gray-400 mb-4">O aluno ficará afastado por um período determinado.</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Início</label>
+                  <input
+                    type="date"
+                    value={congelarInicio}
+                    onChange={e => setCongelarInicio(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Retorno previsto</label>
+                  <input
+                    type="date"
+                    value={congelarFim}
+                    onChange={e => setCongelarFim(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Motivo (opcional)</label>
+                <input
+                  type="text"
+                  value={congelarMotivo}
+                  onChange={e => setCongelarMotivo(e.target.value)}
+                  placeholder="Ex: Viagem, cirurgia, licença maternidade..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setAction(null)} className="text-sm font-bold text-gray-500 hover:underline" disabled={saving}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleAction}
+                disabled={saving}
+                className="bg-blue-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              >
+                {saving ? "Salvando..." : "Congelar"}
               </button>
             </div>
           </div>
@@ -2407,6 +2694,7 @@ export default function ClienteDashboardPage() {
             <ContratosTab
               studentId={student.id}
               contractorId={user!.contractorId!}
+              student={student}
             />
           ) : activeTab === "Financeiro" ? (
             <FinanceiroTab

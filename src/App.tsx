@@ -53,6 +53,8 @@ import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
 import DrePage                 from "@/pages/app/DrePage";
+import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
+import ComissoesPage           from "@/pages/app/ComissoesPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -95,8 +97,9 @@ export default function App() {
             <Route path="/app/dashboards/gerencial"   element={<AppGuard><DashboardGerencialPage /></AppGuard>} />
             <Route path="/app/dashboards/crm"        element={<AppGuard><DashboardCRMPage /></AppGuard>} />
             <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />
-            <Route path="/app/dashboards/financeiro" element={<AppGuard><DashboardFinanceiroPage /></AppGuard>} />
-            <Route path="/app/dashboards/*"          element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
+            <Route path="/app/dashboards/financeiro"  element={<AppGuard><DashboardFinanceiroPage /></AppGuard>} />
+            <Route path="/app/dashboards/operacional" element={<AppGuard><DashboardOperacionalPage /></AppGuard>} />
+            <Route path="/app/dashboards/*"           element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
             <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
             <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
             <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
@@ -110,6 +113,7 @@ export default function App() {
             <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-pagar"    element={<AppGuard><ContasPagarPage /></AppGuard>} />
             <Route path="/app/financeiro/dre"               element={<AppGuard><DrePage /></AppGuard>} />
+            <Route path="/app/financeiro/comissao"          element={<AppGuard><ComissoesPage /></AppGuard>} />
             <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
             <Route path="/app/financeiro/nfs-e"             element={<AppGuard><NfsePage /></AppGuard>} />
             <Route path="/app/financeiro/pay"               element={<AppGuard><FitcorePayPage /></AppGuard>} />
