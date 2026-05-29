@@ -1,37 +1,48 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Search, CheckCircle2, XCircle, UserPlus } from "lucide-react";
+import { X, Search, CheckCircle2, XCircle, UserPlus, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export interface SlotInfo {
-  id:                string;
-  modalidade_nome:   string | null;
-  staff_nome:        string | null;
-  data:              string;
-  hora_inicio:       string;
-  hora_fim:          string;
-  capacidade_maxima: number;
-  cor:               string;
-  status:            string;
+  id:                         string;
+  grid_id:                    string | null;
+  modalidade_nome:            string | null;
+  staff_nome:                 string | null;
+  data:                       string;
+  hora_inicio:                string;
+  hora_fim:                   string;
+  capacidade_maxima:          number;
+  cor:                        string;
+  status:                     string;
+}
+
+interface GridPerms {
+  permite_leads:              boolean;
+  permite_clientes_especiais: boolean;
+  fila_espera_ativa:          boolean;
 }
 
 interface Booking {
   id:           string;
   student_id:   string | null;
   student_nome: string | null;
+  lead_id:      string | null;
+  lead_nome:    string | null;
+  tipo:         string;
   status:       string;
   checkin_em:   string | null;
 }
 
 interface Student { id: string; nome_completo: string }
+interface Lead    { id: string; nome: string; telefone: string | null }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  reservado:    { label: "Reservado",       cls: "bg-blue-100 text-blue-700" },
-  presente:     { label: "Presente",        cls: "bg-green-100 text-green-700" },
-  faltou:       { label: "Faltou",          cls: "bg-red-100 text-red-600" },
-  cancelado:    { label: "Cancelado",       cls: "bg-gray-100 text-gray-500" },
-  lista_espera: { label: "Lista de espera", cls: "bg-yellow-100 text-yellow-700" },
+  reservado:    { label: "Reservado",        cls: "bg-blue-100 text-blue-700"   },
+  presente:     { label: "Presente",         cls: "bg-green-100 text-green-700" },
+  faltou:       { label: "Faltou",           cls: "bg-red-100 text-red-600"     },
+  cancelado:    { label: "Cancelado",        cls: "bg-gray-100 text-gray-500"   },
+  lista_espera: { label: "Fila de espera",   cls: "bg-yellow-100 text-yellow-700" },
 };
 
 function fmtDataLong(s: string) {
@@ -46,28 +57,30 @@ interface Props {
   onChanged: () => void;
 }
 
+type AddMode = "aluno" | "lead" | null;
+
 export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const { user } = useAuth();
-  const [bookings, setBookings]     = useState<Booking[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [students, setStudents]     = useState<Student[]>([]);
-  const [showAdd, setShowAdd]       = useState(false);
-  const [studentSearch, setStudentSearch] = useState("");
-  const [dropOpen, setDropOpen]     = useState(false);
-  const [selected, setSelected]     = useState<Student | null>(null);
-  const [adding, setAdding]         = useState(false);
-  const [cancelingSlot, setCancelingSlot] = useState(false);
+  const [bookings, setBookings]       = useState<Booking[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [students, setStudents]       = useState<Student[]>([]);
+  const [leads,    setLeads]          = useState<Lead[]>([]);
+  const [perms,    setPerms]          = useState<GridPerms | null>(null);
+  const [addMode,  setAddMode]        = useState<AddMode>(null);
+  const [search,   setSearch]         = useState("");
+  const [dropOpen, setDropOpen]       = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedLead,    setSelectedLead]    = useState<Lead    | null>(null);
+  const [adding,          setAdding]          = useState(false);
+  const [cancelingSlot,   setCancelingSlot]   = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   async function loadBookings() {
     setLoading(true);
     const { data } = await supabase
-      .from("bookings")
-      .select("*")
-      .eq("slot_id", slot.id)
-      .neq("status", "cancelado")
-      .order("created_at");
-    setBookings((data ?? []) as Booking[]);
+      .from("bookings").select("*")
+      .eq("slot_id", slot.id).neq("status", "cancelado").order("created_at");
+    setBookings((data ?? []) as unknown as Booking[]);
     setLoading(false);
   }
 
@@ -75,21 +88,37 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   useEffect(() => {
     if (!user?.contractorId) return;
-    supabase.from("students")
-      .select("id, nome_completo")
-      .eq("contractor_id", user.contractorId)
-      .order("nome_completo")
+    supabase.from("students").select("id, nome_completo")
+      .eq("contractor_id", user.contractorId).order("nome_completo")
       .then(({ data }) => setStudents((data ?? []) as Student[]));
-  }, [user]);
+
+    if (slot.grid_id) {
+      supabase.from("schedule_grids")
+        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa")
+        .eq("id", slot.grid_id).single()
+        .then(({ data }) => setPerms(data as GridPerms | null));
+    }
+  }, [user, slot.grid_id]);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node))
-        setDropOpen(false);
+    if (!user?.contractorId || addMode !== "lead") return;
+    supabase.from("opportunities").select("id, nome, telefone")
+      .eq("contractor_id", user.contractorId).not("etapa", "eq", "perdido").order("nome")
+      .then(({ data }) => setLeads((data ?? []) as Lead[]));
+  }, [user, addMode]);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setDropOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  function resetAdd() {
+    setAddMode(null); setSearch(""); setDropOpen(false);
+    setSelectedStudent(null); setSelectedLead(null);
+  }
 
   async function handleMarkStatus(bookingId: string, status: "presente" | "faltou") {
     const update = status === "presente"
@@ -98,56 +127,68 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     const { error } = await supabase.from("bookings").update(update).eq("id", bookingId);
     if (error) { toast.error("Erro ao atualizar."); return; }
     toast.success(status === "presente" ? "Presença confirmada." : "Falta registrada.");
-    loadBookings();
-    onChanged();
+    loadBookings(); onChanged();
   }
 
   async function handleUndoStatus(bookingId: string) {
     await supabase.from("bookings").update({ status: "reservado", checkin_em: null }).eq("id", bookingId);
-    loadBookings();
-    onChanged();
+    loadBookings(); onChanged();
   }
 
   async function handleAddBooking() {
-    if (!user?.contractorId || !selected) { toast.error("Selecione um aluno."); return; }
-
-    const activeCount = bookings.length;
-    const status      = activeCount >= slot.capacidade_maxima ? "lista_espera" : "reservado";
+    if (!user?.contractorId) return;
+    const activeCount = bookings.filter(b => b.status !== "lista_espera").length;
+    const useFila = perms?.fila_espera_ativa && activeCount >= slot.capacidade_maxima;
+    const status = useFila ? "lista_espera" : "reservado";
 
     setAdding(true);
-    const { error } = await supabase.from("bookings").insert({
-      contractor_id: user.contractorId!,
-      slot_id:       slot.id,
-      student_id:    selected.id,
-      student_nome:  selected.nome_completo,
-      status,
-    });
-    setAdding(false);
+    let insertPayload: Record<string, unknown>;
 
+    if (addMode === "aluno" && selectedStudent) {
+      insertPayload = {
+        contractor_id: user.contractorId!,
+        slot_id:       slot.id,
+        student_id:    selectedStudent.id,
+        student_nome:  selectedStudent.nome_completo,
+        tipo:          "aluno",
+        status,
+      };
+    } else if (addMode === "lead" && selectedLead) {
+      insertPayload = {
+        contractor_id: user.contractorId!,
+        slot_id:       slot.id,
+        lead_id:       selectedLead.id,
+        lead_nome:     selectedLead.nome,
+        tipo:          "lead",
+        status,
+      };
+    } else {
+      toast.error("Selecione um aluno ou lead."); setAdding(false); return;
+    }
+
+    const { error } = await supabase.from("bookings").insert(insertPayload as any);
+    setAdding(false);
     if (error) {
-      if (error.code === "23505") toast.error("Aluno já está nesta aula.");
-      else toast.error("Erro ao adicionar aluno.");
+      if (error.code === "23505") toast.error("Já está nesta aula.");
+      else toast.error("Erro ao adicionar.");
       return;
     }
-    toast.success(status === "lista_espera" ? "Aluno adicionado na lista de espera." : "Aluno adicionado.");
-    setSelected(null);
-    setStudentSearch("");
-    setShowAdd(false);
-    loadBookings();
-    onChanged();
+    toast.success(status === "lista_espera" ? "Adicionado na fila de espera." : "Adicionado com sucesso.");
+    resetAdd(); loadBookings(); onChanged();
   }
 
   async function handleCancelSlot() {
     await supabase.from("schedule_slots").update({ status: "cancelado" }).eq("id", slot.id);
     toast.success("Aula cancelada.");
-    setCancelingSlot(false);
-    onClose();
-    onChanged();
+    setCancelingSlot(false); onClose(); onChanged();
   }
 
-  const filteredStudents = studentSearch
-    ? students.filter(s => s.nome_completo.toLowerCase().includes(studentSearch.toLowerCase()))
+  const filteredStudents = search
+    ? students.filter(s => s.nome_completo.toLowerCase().includes(search.toLowerCase()))
     : students;
+  const filteredLeads = search
+    ? leads.filter(l => l.nome.toLowerCase().includes(search.toLowerCase()))
+    : leads;
 
   const presentCount = bookings.filter(b => b.status === "presente").length;
   const isCanceled   = slot.status === "cancelado";
@@ -156,15 +197,14 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     return (name ?? "?").split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
   }
 
+  const canAddLeads = perms?.permite_leads ?? false;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start gap-3 px-6 py-4 border-b border-gray-100">
-          <div
-            className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0"
-            style={{ backgroundColor: slot.cor }}
-          />
+        <div className="flex items-start gap-3 px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: slot.cor }} />
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-900">{slot.modalidade_nome ?? "Aula"}</p>
             <p className="text-sm text-gray-500">
@@ -172,32 +212,32 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
             </p>
             {slot.staff_nome && <p className="text-xs text-gray-400 mt-0.5">{slot.staff_nome}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0"
-          >
+          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Stats bar */}
-        <div className="flex items-center gap-5 px-6 py-2.5 bg-gray-50 border-b border-gray-100 text-sm">
+        <div className="flex items-center gap-5 px-6 py-2.5 bg-gray-50 border-b border-gray-100 text-sm flex-shrink-0">
           <span className="text-gray-600">
-            <span className="font-bold text-gray-900">{bookings.length}</span>
+            <span className="font-bold text-gray-900">{bookings.filter(b => b.status !== "lista_espera").length}</span>
             <span className="text-gray-400">/{slot.capacidade_maxima}</span>
             {" "}reservados
           </span>
           <span className="text-gray-600">
             <span className="font-bold text-green-600">{presentCount}</span> presentes
           </span>
-          {isCanceled && (
-            <span className="ml-auto text-xs font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-              Cancelada
+          {bookings.filter(b => b.status === "lista_espera").length > 0 && (
+            <span className="text-yellow-600 font-medium text-xs">
+              {bookings.filter(b => b.status === "lista_espera").length} na fila
             </span>
+          )}
+          {isCanceled && (
+            <span className="ml-auto text-xs font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Cancelada</span>
           )}
         </div>
 
-        {/* Bookings list */}
+        {/* Booking list */}
         <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
           {loading ? (
             <div className="flex items-center justify-center py-10">
@@ -208,17 +248,19 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               <p className="text-sm text-gray-400">Nenhum aluno reservado ainda.</p>
             </div>
           ) : bookings.map(b => {
+            const nome     = b.tipo === "lead" ? (b.lead_nome ?? "Lead") : (b.student_nome ?? "—");
             const badge    = STATUS_BADGE[b.status] ?? STATUS_BADGE.reservado;
-            const canMark  = b.status === "reservado" || b.status === "lista_espera";
-            const hasMark  = b.status === "presente" || b.status === "faltou";
+            const canMark  = !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
+            const hasMark  = !isCanceled && (b.status === "presente"  || b.status === "faltou");
             return (
               <div key={b.id} className="flex items-center gap-3 px-6 py-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
-                  {initials(b.student_nome)}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${b.tipo === "lead" ? "bg-orange-100 text-orange-700" : "bg-primary/10 text-primary"}`}>
+                  {initials(nome)}
                 </div>
-                <p className="flex-1 text-sm font-medium text-gray-900 truncate">
-                  {b.student_nome ?? "—"}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
+                  {b.tipo === "lead" && <p className="text-xs text-orange-500">Lead</p>}
+                </div>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>
                   {badge.label}
                 </span>
@@ -226,28 +268,19 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                   <div className="flex items-center gap-0.5 flex-shrink-0">
                     {canMark && (
                       <>
-                        <button
-                          onClick={() => handleMarkStatus(b.id, "presente")}
-                          title="Marcar presente"
-                          className="p-1 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-                        >
+                        <button onClick={() => handleMarkStatus(b.id, "presente")} title="Marcar presente"
+                          className="p-1 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleMarkStatus(b.id, "faltou")}
-                          title="Marcar falta"
-                          className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
+                        <button onClick={() => handleMarkStatus(b.id, "faltou")} title="Marcar falta"
+                          className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                           <XCircle className="w-4 h-4" />
                         </button>
                       </>
                     )}
                     {hasMark && (
-                      <button
-                        onClick={() => handleUndoStatus(b.id)}
-                        title="Desfazer"
-                        className="text-xs text-gray-400 hover:text-primary hover:underline px-1"
-                      >
+                      <button onClick={() => handleUndoStatus(b.id)}
+                        className="text-xs text-gray-400 hover:text-primary hover:underline px-1">
                         desfazer
                       </button>
                     )}
@@ -258,76 +291,80 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           })}
         </div>
 
-        {/* Add student / cancel slot */}
+        {/* Add panel */}
         {!isCanceled && (
-          <div className="px-6 py-3 border-t border-gray-100">
-            {showAdd ? (
+          <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0">
+            {addMode ? (
               <div ref={searchRef} className="relative">
                 <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2">
                   <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Buscar aluno..."
-                    value={selected ? selected.nome_completo : studentSearch}
-                    onChange={e => { setStudentSearch(e.target.value); setSelected(null); setDropOpen(true); }}
+                  <input autoFocus type="text"
+                    placeholder={addMode === "lead" ? "Buscar lead..." : "Buscar aluno..."}
+                    value={(addMode === "aluno" ? selectedStudent?.nome_completo : selectedLead?.nome) ?? search}
+                    onChange={e => {
+                      setSearch(e.target.value);
+                      setSelectedStudent(null); setSelectedLead(null);
+                      setDropOpen(true);
+                    }}
                     onClick={() => setDropOpen(true)}
                     className="flex-1 text-sm text-gray-900 outline-none bg-transparent"
                   />
-                  {selected && (
-                    <button
-                      onClick={() => { setSelected(null); setStudentSearch(""); }}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                  {(selectedStudent || selectedLead) && (
+                    <button onClick={() => { setSelectedStudent(null); setSelectedLead(null); setSearch(""); }}
+                      className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
                   )}
                 </div>
 
-                {dropOpen && !selected && (
+                {dropOpen && !selectedStudent && !selectedLead && (
                   <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
-                    {filteredStudents.length === 0 ? (
-                      <p className="px-3 py-2 text-sm text-gray-400">Nenhum aluno encontrado</p>
-                    ) : filteredStudents.slice(0, 20).map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => { setSelected(s); setStudentSearch(""); setDropOpen(false); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
-                      >
-                        {s.nome_completo}
-                      </button>
-                    ))}
+                    {addMode === "aluno" && (
+                      filteredStudents.length === 0
+                        ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum aluno encontrado</p>
+                        : filteredStudents.slice(0, 20).map(s => (
+                          <button key={s.id} onClick={() => { setSelectedStudent(s); setSearch(""); setDropOpen(false); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                            {s.nome_completo}
+                          </button>
+                        ))
+                    )}
+                    {addMode === "lead" && (
+                      filteredLeads.length === 0
+                        ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum lead encontrado</p>
+                        : filteredLeads.slice(0, 20).map(l => (
+                          <button key={l.id} onClick={() => { setSelectedLead(l); setSearch(""); setDropOpen(false); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                            <span>{l.nome}</span>
+                            {l.telefone && <span className="ml-2 text-xs text-gray-400">{l.telefone}</span>}
+                          </button>
+                        ))
+                    )}
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => { setShowAdd(false); setSelected(null); setStudentSearch(""); }}
-                    className="text-primary text-sm font-semibold hover:underline"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleAddBooking}
-                    disabled={!selected || adding}
-                    className="ml-auto bg-primary text-white text-sm font-semibold px-4 py-1.5 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={resetAdd} className="text-primary text-sm font-semibold hover:underline">Cancelar</button>
+                  <button onClick={handleAddBooking} disabled={(!selectedStudent && !selectedLead) || adding}
+                    className="ml-auto bg-primary text-white text-sm font-semibold px-4 py-1.5 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {adding ? "Adicionando..." : "Adicionar"}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setShowAdd(true)}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
-                >
-                  <UserPlus className="w-4 h-4" /> Adicionar aluno
-                </button>
-                <button
-                  onClick={() => setCancelingSlot(true)}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                >
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setAddMode("aluno")}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
+                    <UserPlus className="w-4 h-4" /> Adicionar aluno
+                  </button>
+                  {canAddLeads && (
+                    <button onClick={() => setAddMode("lead")}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:underline">
+                      <Users className="w-4 h-4" /> Adicionar lead
+                    </button>
+                  )}
+                </div>
+                <button onClick={() => setCancelingSlot(true)}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors">
                   Cancelar aula
                 </button>
               </div>
@@ -336,22 +373,14 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         )}
       </div>
 
-      {/* Cancel slot confirmation */}
       {cancelingSlot && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
             <h3 className="text-base font-bold text-gray-900 mb-2">Cancelar esta aula?</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              As reservas serão mantidas no histórico mas a aula ficará marcada como cancelada.
-            </p>
+            <p className="text-sm text-gray-500 mb-6">As reservas serão mantidas no histórico mas a aula ficará marcada como cancelada.</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setCancelingSlot(false)} className="text-primary font-semibold text-sm hover:underline px-2">
-                VOLTAR
-              </button>
-              <button
-                onClick={handleCancelSlot}
-                className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
-              >
+              <button onClick={() => setCancelingSlot(false)} className="text-primary font-semibold text-sm hover:underline px-2">VOLTAR</button>
+              <button onClick={handleCancelSlot} className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors">
                 CANCELAR AULA
               </button>
             </div>

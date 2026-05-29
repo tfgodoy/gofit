@@ -54,7 +54,9 @@ import MatriculaPage            from "@/pages/app/MatriculaPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
 import DrePage                 from "@/pages/app/DrePage";
 import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
+import DashboardAgendaPage     from "@/pages/app/DashboardAgendaPage";
 import ComissoesPage           from "@/pages/app/ComissoesPage";
+import OcupacaoPage            from "@/pages/app/OcupacaoPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -99,16 +101,18 @@ export default function App() {
             <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />
             <Route path="/app/dashboards/financeiro"  element={<AppGuard><DashboardFinanceiroPage /></AppGuard>} />
             <Route path="/app/dashboards/operacional" element={<AppGuard><DashboardOperacionalPage /></AppGuard>} />
-            <Route path="/app/dashboards/*"           element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
+            <Route path="/app/dashboards/agenda"     element={<AppGuard><DashboardAgendaPage /></AppGuard>} />
+            <Route path="/app/dashboards/*"          element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
             <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
             <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
             <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
             <Route path="/app/crm/automacoes"    element={<AppGuard><CampanhasPage /></AppGuard>} />
             <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
             <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
-            <Route path="/app/agenda/agenda"  element={<AppGuard><AgendaPage /></AppGuard>} />
-            <Route path="/app/agenda/grades"  element={<AppGuard><GradesPage /></AppGuard>} />
-            <Route path="/app/agenda/*"       element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
+            <Route path="/app/agenda/agenda"   element={<AppGuard><AgendaPage /></AppGuard>} />
+            <Route path="/app/agenda/grades"   element={<AppGuard><GradesPage /></AppGuard>} />
+            <Route path="/app/agenda/ocupacao" element={<AppGuard><OcupacaoPage /></AppGuard>} />
+            <Route path="/app/agenda/*"        element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
             <Route path="/app/financeiro/caixa"              element={<AppGuard><CaixaPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-a-pagar"    element={<AppGuard><ContasPagarPage /></AppGuard>} />

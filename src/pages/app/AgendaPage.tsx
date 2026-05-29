@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import SlotDetailModal, { type SlotInfo } from "@/components/app/SlotDetailModal";
 
 // ─── date helpers ────────────────────────────────────────────────────────────
@@ -48,7 +49,9 @@ export default function AgendaPage() {
   const [slots, setSlots]         = useState<SlotRow[]>([]);
   const [bkCounts, setBkCounts]   = useState<Record<string, number>>({});
   const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState<SlotInfo | null>(null);
+  const [selected,    setSelected]    = useState<SlotInfo | null>(null);
+  const [cancelDay,   setCancelDay]   = useState<string | null>(null);
+  const [cancelingDay, setCancelingDay] = useState(false);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const today    = isoDate(new Date());
@@ -90,6 +93,20 @@ export default function AgendaPage() {
   }
 
   useEffect(() => { load(); }, [user, weekStart]);
+
+  async function handleCancelDay() {
+    if (!cancelDay || !user?.contractorId) return;
+    setCancelingDay(true);
+    const daySlotIds = slots.filter(s => s.data === cancelDay && s.status !== "cancelado").map(s => s.id);
+    if (daySlotIds.length > 0) {
+      await supabase.from("schedule_slots").update({ status: "cancelado" })
+        .in("id", daySlotIds);
+    }
+    toast.success(`${daySlotIds.length} aula(s) cancelada(s).`);
+    setCancelingDay(false);
+    setCancelDay(null);
+    load();
+  }
 
   function slotsByDay(iso: string) {
     return slots.filter(s => s.data === iso);
@@ -153,13 +170,22 @@ export default function AgendaPage() {
                   return (
                     <div key={iso}>
                       {/* Day header */}
-                      <div className={`text-center py-2 mb-2 rounded-xl ${isToday ? "bg-primary/10" : ""}`}>
+                      <div className={`text-center py-2 mb-2 rounded-xl relative group ${isToday ? "bg-primary/10" : ""}`}>
                         <p className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-primary" : "text-gray-400"}`}>
                           {DAY_LABELS[i]}
                         </p>
                         <p className={`text-2xl font-bold leading-tight ${isToday ? "text-primary" : "text-gray-800"}`}>
                           {day.getDate()}
                         </p>
+                        {daySlots.length > 0 && (
+                          <button
+                            onClick={() => setCancelDay(iso)}
+                            title="Cancelar todas as aulas do dia"
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 rounded text-gray-300 hover:text-red-400 hover:bg-red-50 transition-all"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Slot cards */}
@@ -224,6 +250,32 @@ export default function AgendaPage() {
           onClose={() => setSelected(null)}
           onChanged={load}
         />
+      )}
+
+      {cancelDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Cancelar todas as aulas do dia?</h3>
+            <p className="text-sm text-gray-500 mb-1">
+              {new Date(cancelDay + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+            </p>
+            <p className="text-sm text-gray-400 mb-6">
+              {slots.filter(s => s.data === cancelDay && s.status !== "cancelado").length} aula(s) serão canceladas.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setCancelDay(null)} className="text-primary font-semibold text-sm hover:underline px-2">
+                VOLTAR
+              </button>
+              <button
+                onClick={handleCancelDay}
+                disabled={cancelingDay}
+                className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors disabled:opacity-60"
+              >
+                {cancelingDay ? "Cancelando..." : "CANCELAR TODAS"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
