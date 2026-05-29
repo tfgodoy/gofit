@@ -34,6 +34,8 @@ import ContasReceberPage      from "@/pages/app/ContasReceberPage";
 import VendasPage             from "@/pages/app/VendasPage";
 import AgendaPage             from "@/pages/app/AgendaPage";
 import GradesPage             from "@/pages/app/GradesPage";
+import AvaliacaoFisicaFormPage from "@/pages/app/AvaliacaoFisicaFormPage";
+import GraduacoesPage         from "@/pages/app/GraduacoesPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
 
@@ -70,6 +72,8 @@ export default function App() {
             <Route path="/app/clientes/novo"               element={<AppGuard><AlunoFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/cadastro"       element={<AppGuard><AlunoFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/dashboards/*"      element={<AppGuard><PlaceholderPage title="Dashboards" /></AppGuard>} />
             <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
             <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
@@ -102,6 +106,7 @@ export default function App() {
             <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />
+            <Route path="/app/configuracoes/graduacoes"    element={<AppGuard><GraduacoesPage /></AppGuard>} />
             <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />

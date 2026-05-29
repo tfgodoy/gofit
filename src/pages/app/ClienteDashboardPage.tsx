@@ -13,6 +13,10 @@ import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
+} from "recharts";
 
 /* ── Types ────────────────────────────────────────────────── */
 
@@ -1577,6 +1581,273 @@ function ExameModal({ studentId, contractorId, initialData, onClose, onSaved }: 
   );
 }
 
+/* ── Helpers ──────────────────────────────────────────────── */
+
+function fmtDateShort(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+/* ── Avaliações Físicas Tab ────────────────────────────────── */
+
+type Aval = {
+  id: string;
+  data_avaliacao: string;
+  peso_kg: number | null;
+  altura_cm: number | null;
+  imc: number | null;
+  percentual_gordura: number | null;
+  massa_magra_kg: number | null;
+  massa_gorda_kg: number | null;
+  avaliador_nome: string | null;
+};
+
+function AvaliacoesTab({ studentId, contractorId }: { studentId: string; contractorId: string }) {
+  const navigate = useNavigate();
+  const [avais, setAvais]       = useState<Aval[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("physical_evaluations")
+      .select("id, data_avaliacao, peso_kg, altura_cm, imc, percentual_gordura, massa_magra_kg, massa_gorda_kg, avaliador_nome")
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("data_avaliacao", { ascending: false });
+    setAvais((data ?? []) as Aval[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [studentId, contractorId]);
+
+  async function handleDelete(id: string) {
+    await supabase.from("physical_evaluations").delete().eq("id", id);
+    toast.success("Avaliação excluída.");
+    setDeleteId(null);
+    load();
+  }
+
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-bold text-gray-800">Avaliações Físicas</h2>
+        <button
+          onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/nova`)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          NOVA AVALIAÇÃO
+        </button>
+      </div>
+
+      {avais.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-300">
+          <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
+            <ClipboardList className="w-7 h-7 text-primary/30" />
+          </div>
+          <p className="text-sm text-gray-400 font-semibold">Nenhuma avaliação registrada</p>
+          <p className="text-xs text-gray-400">Clique em "NOVA AVALIAÇÃO" para começar</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {avais.map(a => (
+            <div key={a.id} className="bg-white rounded-xl border border-gray-100 shadow-sm px-6 py-4 flex items-center justify-between gap-4 group">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <span className="text-sm font-bold text-gray-800">
+                    {new Date(a.data_avaliacao + "T00:00:00").toLocaleDateString("pt-BR")}
+                  </span>
+                  {a.avaliador_nome && (
+                    <span className="text-xs text-gray-400">Avaliador: {a.avaliador_nome}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {a.peso_kg != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Peso</p>
+                      <p className="text-sm font-bold text-gray-700">{a.peso_kg} kg</p>
+                    </div>
+                  )}
+                  {a.altura_cm != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Altura</p>
+                      <p className="text-sm font-bold text-gray-700">{a.altura_cm} cm</p>
+                    </div>
+                  )}
+                  {a.imc != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">IMC</p>
+                      <p className="text-sm font-bold text-gray-700">{a.imc}</p>
+                    </div>
+                  )}
+                  {a.percentual_gordura != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">% Gordura</p>
+                      <p className="text-sm font-bold text-gray-700">{a.percentual_gordura}%</p>
+                    </div>
+                  )}
+                  {a.massa_magra_kg != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Massa Magra</p>
+                      <p className="text-sm font-bold text-gray-700">{a.massa_magra_kg} kg</p>
+                    </div>
+                  )}
+                  {a.massa_gorda_kg != null && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Massa Gorda</p>
+                      <p className="text-sm font-bold text-gray-700">{a.massa_gorda_kg} kg</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                <button
+                  onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/${a.id}`)}
+                  className="p-1.5 rounded hover:bg-gray-100"
+                  title="Editar"
+                >
+                  <Pencil className="w-4 h-4 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setDeleteId(a.id)}
+                  className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
+                  title="Excluir"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Excluir avaliação</h3>
+            <p className="text-sm text-gray-500 mb-5">Tem certeza? Esta ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteId(null)} className="text-sm font-bold text-gray-500 hover:underline">
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDelete(deleteId)}
+                className="bg-red-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-red-700"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Evoluções Tab ─────────────────────────────────────────── */
+
+const PURPLE = "hsl(270 60% 50%)";
+const ORANGE = "#f97316";
+const GREEN  = "#22c55e";
+const BLUE   = "#3b82f6";
+
+function EvolucoesTab({ studentId, contractorId }: { studentId: string; contractorId: string }) {
+  const [avais, setAvais]     = useState<Aval[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from("physical_evaluations")
+      .select("id, data_avaliacao, peso_kg, imc, percentual_gordura, massa_magra_kg, massa_gorda_kg, altura_cm")
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("data_avaliacao", { ascending: true })
+      .then(({ data }) => {
+        setAvais((data ?? []) as Aval[]);
+        setLoading(false);
+      });
+  }, [studentId, contractorId]);
+
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+    </div>
+  );
+
+  if (avais.length < 2) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center">
+          <ClipboardList className="w-7 h-7 text-primary/30" />
+        </div>
+        <p className="text-sm text-gray-400 font-semibold">Evoluções indisponíveis</p>
+        <p className="text-xs text-gray-400 text-center max-w-xs">
+          São necessárias pelo menos 2 avaliações físicas para exibir os gráficos de evolução.
+        </p>
+      </div>
+    );
+  }
+
+  const chartData = avais.map(a => ({
+    data:     fmtDateShort(a.data_avaliacao),
+    peso:     a.peso_kg,
+    imc:      a.imc,
+    gordura:  a.percentual_gordura,
+    magra:    a.massa_magra_kg,
+  }));
+
+  function Chart({ title, dataKey, color, unit }: {
+    title: string; dataKey: string; color: string; unit: string;
+  }) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <h3 className="text-sm font-bold text-gray-700 mb-4">{title}</h3>
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <XAxis dataKey="data" tick={{ fontSize: 11, fill: "#9ca3af" }} />
+            <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} />
+            <Tooltip
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+              formatter={(v: unknown) => [`${v} ${unit}`, title]}
+            />
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke={color}
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: color, strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
+              connectNulls
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-800 mb-4">Evolução Física</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Chart title="Peso (kg)"         dataKey="peso"    color={PURPLE} unit="kg" />
+        <Chart title="IMC"               dataKey="imc"     color={BLUE}   unit="" />
+        <Chart title="% Gordura"         dataKey="gordura" color={ORANGE} unit="%" />
+        <Chart title="Massa Magra (kg)"  dataKey="magra"   color={GREEN}  unit="kg" />
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Page ────────────────────────────────────────────── */
 
 export default function ClienteDashboardPage() {
@@ -1768,6 +2039,16 @@ export default function ClienteDashboardPage() {
               studentEmail={student.email}
               studentTelefone={student.telefone}
               studentName={student.nome_completo}
+            />
+          ) : activeTab === "Avaliações Físicas" ? (
+            <AvaliacoesTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
+            />
+          ) : activeTab === "Evoluções" ? (
+            <EvolucoesTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
             />
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />
