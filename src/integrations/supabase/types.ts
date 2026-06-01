@@ -593,6 +593,46 @@ export interface Database {
           }
         ];
       };
+      staff_documentos: {
+        Row: {
+          id: string;
+          staff_id: string;
+          contractor_id: string;
+          tipo: "rg" | "cpf" | "comprovante_residencia" | "carteira_conselho" | "cnh" | "ctps" | "outros";
+          arquivo_nome: string;
+          arquivo_path: string;
+          tamanho: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          staff_id: string;
+          contractor_id: string;
+          tipo?: "rg" | "cpf" | "comprovante_residencia" | "carteira_conselho" | "cnh" | "ctps" | "outros";
+          arquivo_nome: string;
+          arquivo_path: string;
+          tamanho?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          staff_id?: string;
+          contractor_id?: string;
+          tipo?: "rg" | "cpf" | "comprovante_residencia" | "carteira_conselho" | "cnh" | "ctps" | "outros";
+          arquivo_nome?: string;
+          arquivo_path?: string;
+          tamanho?: number | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_documentos_staff_id_fkey";
+            columns: ["staff_id"];
+            referencedRelation: "staff";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       students: {
         Row: {
           id: string;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   X, Eye, EyeOff, Loader2, Plus, Trash2, ChevronDown,
-  KeyRound, Upload, Users,
+  KeyRound, Users,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ import ChangePasswordModal from "@/components/app/ChangePasswordModal";
 import StaffSalarioTab from "@/components/app/StaffSalarioTab";
 import StaffFeriasTab from "@/components/app/StaffFeriasTab";
 import StaffOcorrenciasTab from "@/components/app/StaffOcorrenciasTab";
+import StaffDocumentosSection from "@/components/app/StaffDocumentosSection";
 
 interface Props {
   editId: string | null;
@@ -729,6 +730,17 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       </div>
                     </div>
                   </SectionBlock>
+
+                  {isEdit && editId && user?.contractorId ? (
+                    <StaffDocumentosSection staffId={editId} contractorId={user.contractorId} />
+                  ) : !isEdit ? (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-gray-700">Documentos</h3>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-400">Salve o cadastro primeiro para anexar documentos.</p>
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
 
@@ -951,22 +963,6 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                         </button>
                       </div>
                     )}
-                  </SectionBlock>
-
-                  <SectionBlock title="Documentos">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="border-2 border-dashed border-gray-200 rounded-lg p-5 flex flex-col items-center justify-center gap-2 text-center">
-                        <Upload className="w-7 h-7 text-gray-300" />
-                        <p className="text-sm text-gray-500">Arraste e solte ou</p>
-                        <p className="text-xs text-gray-400">doc, docx, jpg, pdf, png</p>
-                        <button type="button" disabled title="Em breve" className="mt-1 px-3 py-1 border border-gray-200 text-gray-400 text-xs font-semibold rounded cursor-not-allowed select-none">
-                          SELECIONAR ARQUIVO
-                        </button>
-                      </div>
-                      <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-center min-h-[100px]">
-                        <p className="text-sm text-gray-400">Nenhum arquivo encontrado</p>
-                      </div>
-                    </div>
                   </SectionBlock>
 
                   <SectionBlock title="Observações">
