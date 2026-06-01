@@ -593,6 +593,67 @@ export interface Database {
           }
         ];
       };
+      contas_financeiras: {
+        Row: {
+          id: string;
+          contractor_id: string;
+          descricao: string;
+          tipo: "conta_corrente" | "conta_poupanca" | "outro";
+          banco_codigo: string | null;
+          banco_nome: string | null;
+          agencia: string | null;
+          agencia_digito: string | null;
+          conta: string | null;
+          conta_digito: string | null;
+          titular_diferente: boolean;
+          titular_nome: string | null;
+          titular_cpf: string | null;
+          ativo: boolean;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          contractor_id: string;
+          descricao: string;
+          tipo: "conta_corrente" | "conta_poupanca" | "outro";
+          banco_codigo?: string | null;
+          banco_nome?: string | null;
+          agencia?: string | null;
+          agencia_digito?: string | null;
+          conta?: string | null;
+          conta_digito?: string | null;
+          titular_diferente?: boolean;
+          titular_nome?: string | null;
+          titular_cpf?: string | null;
+          ativo?: boolean;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          contractor_id?: string;
+          descricao?: string;
+          tipo?: "conta_corrente" | "conta_poupanca" | "outro";
+          banco_codigo?: string | null;
+          banco_nome?: string | null;
+          agencia?: string | null;
+          agencia_digito?: string | null;
+          conta?: string | null;
+          conta_digito?: string | null;
+          titular_diferente?: boolean;
+          titular_nome?: string | null;
+          titular_cpf?: string | null;
+          ativo?: boolean;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "contas_financeiras_contractor_id_fkey";
+            columns: ["contractor_id"];
+            referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       staff_documentos: {
         Row: {
           id: string;
