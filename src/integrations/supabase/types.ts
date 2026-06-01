@@ -593,6 +593,18 @@ export interface Database {
           }
         ];
       };
+      centros_custo: {
+        Row:    { id: string; contractor_id: string; descricao: string; created_at: string };
+        Insert: { id?: string; contractor_id: string; descricao: string; created_at?: string };
+        Update: { id?: string; contractor_id?: string; descricao?: string; created_at?: string };
+        Relationships: [];
+      };
+      centros_receita: {
+        Row:    { id: string; contractor_id: string; descricao: string; created_at: string };
+        Insert: { id?: string; contractor_id: string; descricao: string; created_at?: string };
+        Update: { id?: string; contractor_id?: string; descricao?: string; created_at?: string };
+        Relationships: [];
+      };
       contas_financeiras: {
         Row: {
           id: string;

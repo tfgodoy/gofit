@@ -9,7 +9,7 @@ import {
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
-  BookOpen, LayoutTemplate, ScrollText, Banknote, Plug,
+  BookOpen, LayoutTemplate, ScrollText, Banknote, Plug, TrendingDown,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationBell from "@/components/app/NotificationBell";
@@ -140,6 +140,14 @@ const bottomNav: NavItem[] = [
       { icon: LayoutGrid,    label: "Modalidades",            to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
       { icon: GraduationCap, label: "Graduações",             to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
       { icon: Banknote,      label: "Parâmetros Financeiros", to: "/app/configuracoes/financeiro",   iconColor: "text-gray-500" },
+      {
+        icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/centros-custo",
+        iconColor: "text-gray-500",
+        children: [
+          { icon: TrendingDown, label: "Centros de custo",   to: "/app/configuracoes/centros-custo",   iconColor: "text-red-500" },
+          { icon: TrendingUp,   label: "Centros de receita", to: "/app/configuracoes/centros-receita", iconColor: "text-green-600" },
+        ],
+      },
       { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
       { icon: Plug,          label: "Integrações",            to: "/app/configuracoes/integracoes",  iconColor: "text-gray-500" },
       {

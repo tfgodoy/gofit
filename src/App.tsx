@@ -53,6 +53,7 @@ import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
 import ContasFinanceirasPage   from "@/pages/app/ContasFinanceirasPage";
+import CentroFinanceiroPage    from "@/pages/app/CentroFinanceiroPage";
 import DrePage                 from "@/pages/app/DrePage";
 import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
 import DashboardAgendaPage     from "@/pages/app/DashboardAgendaPage";
@@ -148,7 +149,9 @@ export default function App() {
             <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />
             <Route path="/app/configuracoes/graduacoes"    element={<AppGuard><GraduacoesPage /></AppGuard>} />
-            <Route path="/app/configuracoes/financeiro"   element={<AppGuard><ParametrosFinanceirosPage /></AppGuard>} />
+            <Route path="/app/configuracoes/financeiro"          element={<AppGuard><ParametrosFinanceirosPage /></AppGuard>} />
+            <Route path="/app/configuracoes/centros-custo"        element={<AppGuard><CentroFinanceiroPage tipo="custo" /></AppGuard>} />
+            <Route path="/app/configuracoes/centros-receita"      element={<AppGuard><CentroFinanceiroPage tipo="receita" /></AppGuard>} />
             <Route path="/app/configuracoes/unidades"        element={<AppGuard><UnidadesPage /></AppGuard>} />
             <Route path="/app/configuracoes/integracoes"    element={<AppGuard><IntegracoesHubPage /></AppGuard>} />
             <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
