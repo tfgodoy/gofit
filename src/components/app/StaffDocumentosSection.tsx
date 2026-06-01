@@ -97,7 +97,7 @@ export default function StaffDocumentosSection({ staffId, contractorId }: Props)
       const { error: insertErr } = await supabase.from("staff_documentos").insert([{
         staff_id:      staffId,
         contractor_id: contractorId,
-        tipo,
+        tipo: tipo as "rg" | "cpf" | "comprovante_residencia" | "carteira_conselho" | "cnh" | "ctps" | "outros",
         arquivo_nome:  file.name,
         arquivo_path:  path,
         tamanho:       file.size,
