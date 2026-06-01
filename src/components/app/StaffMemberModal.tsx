@@ -74,7 +74,7 @@ interface FormState {
 }
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
-type TabId = "pessoal" | "profissional" | "sistema" | "salario" | "ferias" | "ocorrencias";
+type TabId = "pessoal" | "profissional" | "sistema" | "ferias" | "ocorrencias";
 
 const DIAS_SEMANA = [
   { key: "seg", label: "Seg" }, { key: "ter", label: "Ter" },
@@ -506,13 +506,12 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
     { id: "sistema",      label: "Sistema" },
   ];
   const editTabs: { id: TabId; label: string }[] = [
-    { id: "salario",      label: "Salário" },
     { id: "ferias",       label: "Férias" },
     { id: "ocorrencias",  label: "Ocorrências" },
   ];
   const tabs = isEdit ? [...baseTabs, ...editTabs] : baseTabs;
 
-  const isRelationalTab = activeTab === "salario" || activeTab === "ferias" || activeTab === "ocorrencias";
+  const isRelationalTab = activeTab === "ferias" || activeTab === "ocorrencias";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -859,6 +858,10 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       <input className={INP} placeholder="CPF, e-mail, telefone ou chave aleatória" value={form.chave_pix} onChange={e => set("chave_pix", e.target.value)} />
                     </div>
                   </SectionBlock>
+
+                  {isEdit && editId && user?.contractorId && (
+                    <StaffSalarioTab staffId={editId} contractorId={user.contractorId} />
+                  )}
                 </>
               )}
 
@@ -981,9 +984,6 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
               {/* ══════════════════════════════════════════════════════
                   TABS RELACIONAIS (edit only)
               ══════════════════════════════════════════════════════ */}
-              {activeTab === "salario" && editId && user?.contractorId && (
-                <StaffSalarioTab staffId={editId} contractorId={user.contractorId} />
-              )}
               {activeTab === "ferias" && editId && user?.contractorId && (
                 <StaffFeriasTab staffId={editId} contractorId={user.contractorId} />
               )}
