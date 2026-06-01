@@ -196,6 +196,15 @@ function NavItemLink({
     return null;
   });
 
+  useEffect(() => {
+    for (const child of item.children ?? []) {
+      if (child.children?.some(gc => location.pathname.startsWith(gc.to))) {
+        setExpandedSub(child.to);
+        return;
+      }
+    }
+  }, [location.pathname]);
+
   if (item.children) {
     return (
       <div>
@@ -327,7 +336,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     const all = [...mainNav, ...bottomNav];
     for (const item of all) {
-      if (item.children?.some(c => location.pathname.startsWith(c.to))) {
+      const matched = item.children?.some(c =>
+        location.pathname.startsWith(c.to) ||
+        c.children?.some(gc => location.pathname.startsWith(gc.to))
+      );
+      if (matched) {
         setExpandedKey(item.to);
         return;
       }
