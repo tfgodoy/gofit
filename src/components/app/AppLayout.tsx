@@ -139,11 +139,11 @@ const bottomNav: NavItem[] = [
     children: [
       { icon: LayoutGrid,    label: "Modalidades",            to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
       { icon: GraduationCap, label: "Graduações",             to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
-      { icon: Banknote,      label: "Parâmetros Financeiros", to: "/app/configuracoes/financeiro",   iconColor: "text-gray-500" },
       {
-        icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/centros-custo",
+        icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/financeiro",
         iconColor: "text-gray-500",
         children: [
+          { icon: Banknote,     label: "Parâmetros",         to: "/app/configuracoes/financeiro",              iconColor: "text-gray-500" },
           { icon: TrendingDown, label: "Centros de custo",   to: "/app/configuracoes/centros-custo",           iconColor: "text-red-500" },
           { icon: TrendingUp,   label: "Centros de receita", to: "/app/configuracoes/centros-receita",         iconColor: "text-green-600" },
           { icon: Tags,         label: "Categorias",         to: "/app/configuracoes/categorias-financeiras",  iconColor: "text-primary" },
