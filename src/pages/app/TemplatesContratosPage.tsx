@@ -22,60 +22,69 @@ const PAGE_SIZE = 20;
 
 /* ── Campos disponíveis ──────────────────────────────────────────────── */
 interface Campo { label: string; variavel: string }
-interface GrupoCampos { grupo: string; itens: Campo[] }
+interface BlocoAvancado { label: string; codigo: string }
+interface GrupoCampos {
+  grupo: string;
+  itens?: Campo[];
+  blocos?: BlocoAvancado[];  // para foreach/if com sintaxe multilinha
+}
 
 const CAMPOS: GrupoCampos[] = [
-  { grupo: "Empresa", itens: [
-    { label: "Razão social da empresa",          variavel: "RazaoSocialEmpresa" },
-    { label: "Nome fantasia da empresa",         variavel: "NomeFantasiaEmpresa" },
-    { label: "Logomarca da empresa",             variavel: "LogoEmpresa" },
-    { label: "CPF/CNPJ da empresa",              variavel: "CpfCnpjEmpresa" },
-    { label: "Telefone da empresa",              variavel: "TelefoneEmpresa" },
-    { label: "E-mail da empresa",                variavel: "EmailEmpresa" },
-    { label: "Endereço da empresa",              variavel: "EnderecoEmpresa" },
-    { label: "Número do endereço da empresa",    variavel: "NumeroEnderecoEmpresa" },
-    { label: "Complemento do endereço",          variavel: "ComplementoEnderecoEmpresa" },
-    { label: "Bairro da empresa",                variavel: "BairroEmpresa" },
-    { label: "CEP da empresa",                   variavel: "CepEmpresa" },
-    { label: "Cidade da empresa",                variavel: "CidadeEmpresa" },
-    { label: "UF da empresa",                    variavel: "UfEmpresa" },
+  { grupo: "Empresa (Filial)", itens: [
+    { label: "Logomarca",                        variavel: "LogoFilial" },
+    { label: "Razão social",                     variavel: "RazaoSocialFilial" },
+    { label: "Nome fantasia",                    variavel: "NomeFantasiaFilial" },
+    { label: "CNPJ / CPF",                       variavel: "CnpjCpfFilial" },
+    { label: "Endereço",                         variavel: "EnderecoFilial" },
+    { label: "Número do endereço",               variavel: "NumeroEnderecoFilial" },
+    { label: "Bairro",                           variavel: "BairroFilial" },
+    { label: "CEP",                              variavel: "CepFilial" },
+    { label: "Cidade",                           variavel: "CidadeFilial" },
+    { label: "UF",                               variavel: "UfFilial" },
+    { label: "Data de impressão",                variavel: "DataImpressao" },
   ]},
   { grupo: "Cliente", itens: [
-    { label: "Nome do cliente",                  variavel: "NomeCliente" },
-    { label: "CPF do cliente",                   variavel: "CpfCliente" },
-    { label: "RG do cliente",                    variavel: "RgCliente" },
-    { label: "Email do cliente",                 variavel: "EmailCliente" },
-    { label: "Telefone do cliente",              variavel: "TelefoneCliente" },
-    { label: "Endereço do cliente",              variavel: "EnderecoCliente" },
-    { label: "Número do endereço do cliente",    variavel: "NumeroEnderecoCliente" },
-    { label: "Complemento do endereço",          variavel: "ComplementoEnderecoCliente" },
-    { label: "Bairro do cliente",                variavel: "BairroCliente" },
-    { label: "CEP do cliente",                   variavel: "CepCliente" },
-    { label: "Cidade do cliente",                variavel: "CidadeCliente" },
-    { label: "UF do cliente",                    variavel: "UfCliente" },
+    { label: "Nome",                             variavel: "NomeCliente" },
+    { label: "CPF",                              variavel: "CpfCliente" },
+    { label: "RG",                               variavel: "RgCliente" },
+    { label: "E-mail",                           variavel: "EmailCliente" },
+    { label: "Telefone",                         variavel: "TelefoneCliente" },
+    { label: "Endereço",                         variavel: "EnderecoCliente" },
+    { label: "Número do endereço",               variavel: "NumeroEnderecoCliente" },
+    { label: "Bairro",                           variavel: "BairroCliente" },
+    { label: "CEP",                              variavel: "CepCliente" },
+    { label: "Cidade",                           variavel: "CidadeCliente" },
+    { label: "UF",                               variavel: "UfCliente" },
   ]},
   { grupo: "Contrato", itens: [
-    { label: "Descrição do contrato",            variavel: "DescricaoContrato" },
-    { label: "Duração do contrato",              variavel: "DuracaoContrato" },
-    { label: "Valor total do contrato",          variavel: "ValorTotalContrato" },
+    { label: "Descrição",                        variavel: "DescricaoContrato" },
+    { label: "Duração",                          variavel: "DuracaoContrato" },
     { label: "Valor total (formatado)",          variavel: "ValorTotalContratoFormatado" },
-    { label: "Valor de adesão/matrícula",        variavel: "ValorAdesaoContrato" },
-    { label: "Valor de adesão (formatado)",      variavel: "ValorAdesaoContratoFormatado" },
-    { label: "Valor sem desconto",               variavel: "ValorTotalContratoSemDesconto" },
-    { label: "Máx. dias de suspensão",           variavel: "QtdDiasSuspensao" },
-    { label: "Data de início do contrato",       variavel: "DataInicioContrato" },
-    { label: "Data de validade do contrato",     variavel: "DataValidadeContrato" },
+    { label: "Valor de adesão (formatado)",      variavel: "ValorAdesaoFormatado" },
+    { label: "Data de início",                   variavel: "DataInicioContrato" },
+    { label: "Data de validade",                 variavel: "DataValidadeContrato" },
   ]},
-  { grupo: "Modalidade do contrato", itens: [
-    { label: "Descrição da modalidade",          variavel: "DescricaoModalidade" },
-    { label: "Limite de acessos",                variavel: "LimiteAcessos" },
-    { label: "Sessões por semana",               variavel: "QtdSessoesPorSemana" },
-    { label: "Dias liberados para acesso",       variavel: "DiasLiberadosAcesso" },
-    { label: "Horários liberados",               variavel: "HorariosLiberadosAcesso" },
-    { label: "Dias e horários liberados",        variavel: "DiasHorariosLiberadosAcesso" },
-    { label: "Tipo de modalidade",               variavel: "TipoModalidade" },
-    { label: "Descrição do tipo de modalidade",  variavel: "DescricaoTipoModalidade" },
-    { label: "Quantidade do pacote de aulas",    variavel: "QtdPacoteAulas" },
+  { grupo: "Modalidades (loop)", blocos: [
+    {
+      label: "Loop de modalidades",
+      codigo: "<<foreach [modalidade in Modalidades]>>\n<<[modalidade.DescricaoModalidade]>>\n<<[modalidade.QtdeSessoesPorSemana]>> sessões/semana\n<</foreach>>",
+    },
+    {
+      label: "Grade de horários (dentro do loop de modalidades)",
+      codigo: "<<foreach [gradeHorario in modalidade.GradeHorarios]>>\n<<[gradeHorario.DiaDaSemana]>> das <<[gradeHorario.HorarioInicial]>> às <<[gradeHorario.HorarioFinal]>>\n<</foreach>>",
+    },
+  ]},
+  { grupo: "Parcelas (loop)", blocos: [
+    {
+      label: "Loop de parcelas",
+      codigo: "<<foreach [parcela in Parcelas]>>\nR$<<[parcela.ValorFormatado]>> com vencimento em <<[parcela.DataVencimento]>>\n<</foreach>>",
+    },
+  ]},
+  { grupo: "Condicional", blocos: [
+    {
+      label: "Exibir bloco só se houver adesão",
+      codigo: "<<if [ValorAdesao > 0]>>\nR$<<[ValorAdesaoFormatado]>> refere-se à taxa de adesão\n<</if>>",
+    },
   ]},
 ];
 
@@ -169,7 +178,7 @@ function CamposModal({ onClose }: { onClose: () => void }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          {CAMPOS.map(({ grupo, itens }) => (
+          {CAMPOS.map(({ grupo, itens, blocos }) => (
             <div key={grupo}>
               {/* Cabeçalho do grupo */}
               <button
@@ -182,9 +191,8 @@ function CamposModal({ onClose }: { onClose: () => void }) {
                   : <ChevronDown className="w-4 h-4 text-gray-400" />}
               </button>
 
-              {abertos.includes(grupo) && (
+              {abertos.includes(grupo) && itens && (
                 <div>
-                  {/* Sub-cabeçalho */}
                   <div className="grid grid-cols-2 px-5 py-1.5 border-b border-gray-100 bg-gray-50/50">
                     <span className="text-xs text-gray-400 font-semibold">Campo</span>
                     <span className="text-xs text-gray-400 font-semibold">Variável para copiar</span>
@@ -192,10 +200,7 @@ function CamposModal({ onClose }: { onClose: () => void }) {
                   {itens.map(({ label, variavel }) => {
                     const sintaxe = `<<[${variavel}]>>`;
                     return (
-                      <div
-                        key={variavel}
-                        className="grid grid-cols-2 items-center px-5 py-2.5 border-b border-gray-50 hover:bg-primary/5 transition-colors"
-                      >
+                      <div key={variavel} className="grid grid-cols-2 items-center px-5 py-2.5 border-b border-gray-50 hover:bg-primary/5 transition-colors">
                         <span className="text-sm text-gray-700">{label}</span>
                         <div className="flex items-center">
                           <code className="text-xs font-mono text-primary bg-primary/5 px-2 py-1 rounded truncate">
@@ -206,6 +211,22 @@ function CamposModal({ onClose }: { onClose: () => void }) {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {abertos.includes(grupo) && blocos && (
+                <div className="divide-y divide-gray-50">
+                  {blocos.map(({ label, codigo }) => (
+                    <div key={label} className="px-5 py-3 hover:bg-primary/5 transition-colors">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-gray-600">{label}</span>
+                        <CopiarBtn texto={codigo} />
+                      </div>
+                      <pre className="text-xs font-mono text-primary bg-primary/5 px-3 py-2 rounded whitespace-pre-wrap leading-relaxed">
+                        {codigo}
+                      </pre>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
