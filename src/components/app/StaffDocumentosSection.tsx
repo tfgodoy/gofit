@@ -33,6 +33,16 @@ const TIPOS = [
 
 const TIPO_LABEL: Record<string, string> = Object.fromEntries(TIPOS.map(t => [t.value, t.label]));
 
+const TIPO_BADGE: Record<string, string> = {
+  rg:                     "bg-blue-100 text-blue-700",
+  cpf:                    "bg-indigo-100 text-indigo-700",
+  comprovante_residencia: "bg-green-100 text-green-700",
+  carteira_conselho:      "bg-purple-100 text-purple-700",
+  cnh:                    "bg-orange-100 text-orange-700",
+  ctps:                   "bg-yellow-100 text-yellow-700",
+  outros:                 "bg-gray-100 text-gray-600",
+};
+
 function fmtSize(bytes: number | null) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -194,11 +204,11 @@ export default function StaffDocumentosSection({ staffId, contractorId }: Props)
               <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 bg-white">
                 <FileIcon name={doc.arquivo_nome} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">{doc.arquivo_nome}</p>
-                  <p className="text-xs text-gray-400">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold mb-0.5 ${TIPO_BADGE[doc.tipo] ?? "bg-gray-100 text-gray-600"}`}>
                     {TIPO_LABEL[doc.tipo] ?? doc.tipo}
-                    {doc.tamanho ? ` · ${fmtSize(doc.tamanho)}` : ""}
-                  </p>
+                  </span>
+                  <p className="text-sm font-medium text-gray-700 truncate">{doc.arquivo_nome}</p>
+                  {doc.tamanho && <p className="text-xs text-gray-400">{fmtSize(doc.tamanho)}</p>}
                 </div>
                 <button
                   type="button"
