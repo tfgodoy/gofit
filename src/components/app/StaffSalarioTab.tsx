@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Trash2, Loader2, ChevronDown, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Loader2, ChevronDown, TrendingUp, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -91,13 +91,114 @@ function parseCurrency(v: string): number | null {
   return isNaN(n) || n <= 0 ? null : n;
 }
 
+function recordToForm(s: SalarioRecord): SalarioForm {
+  return {
+    data_vigencia: s.data_vigencia,
+    valor: s.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    motivo: s.motivo,
+    observacao: s.observacao ?? "",
+  };
+}
+
+// ── Formulário reutilizável ──────────────────────────────────────────────────
+
+interface FormPanelProps {
+  title: string;
+  form: SalarioForm;
+  onChange: <K extends keyof SalarioForm>(k: K, v: SalarioForm[K]) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}
+
+function FormPanel({ title, form, onChange, onSave, onCancel, isPending }: FormPanelProps) {
+  return (
+    <div className="border border-primary/30 rounded-lg p-4 bg-primary/5 space-y-4">
+      <p className="text-sm font-semibold text-gray-700">{title}</p>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={LBL}>Data de vigência *</label>
+          <input
+            type="date"
+            className={INP}
+            value={form.data_vigencia}
+            onChange={e => onChange("data_vigencia", e.target.value)}
+          />
+        </div>
+        <div>
+          <label className={LBL}>Valor (R$) *</label>
+          <input
+            className={INP}
+            placeholder="0,00"
+            value={form.valor}
+            onChange={e => onChange("valor", maskCurrency(e.target.value))}
+          />
+        </div>
+      </div>
+      <div>
+        <label className={LBL}>Motivo *</label>
+        <div className="relative">
+          <select className={SEL} value={form.motivo} onChange={e => onChange("motivo", e.target.value)}>
+            {MOTIVOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+          <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        </div>
+      </div>
+      <div>
+        <label className={LBL}>Observação</label>
+        <input
+          className={INP}
+          placeholder="Opcional"
+          value={form.observacao}
+          onChange={e => onChange("observacao", e.target.value)}
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-500 font-semibold text-sm hover:underline px-2"
+        >
+          CANCELAR
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={isPending}
+          className="bg-primary text-white font-semibold px-4 py-1.5 rounded text-sm hover:bg-primary/90 disabled:opacity-60 flex items-center gap-2"
+        >
+          {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+          SALVAR
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Componente principal ─────────────────────────────────────────────────────
+
 export default function StaffSalarioTab({ staffId, contractorId }: Props) {
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<SalarioForm>(EMPTY);
+  const [showAddForm, setShowAddForm]   = useState(false);
+  const [addForm, setAddForm]           = useState<SalarioForm>(EMPTY);
+  const [editingId, setEditingId]       = useState<string | null>(null);
+  const [editForm, setEditForm]         = useState<SalarioForm>(EMPTY);
 
-  function set<K extends keyof SalarioForm>(k: K, v: SalarioForm[K]) {
-    setForm(f => ({ ...f, [k]: v }));
+  function setAdd<K extends keyof SalarioForm>(k: K, v: SalarioForm[K]) {
+    setAddForm(f => ({ ...f, [k]: v }));
+  }
+  function setEdit<K extends keyof SalarioForm>(k: K, v: SalarioForm[K]) {
+    setEditForm(f => ({ ...f, [k]: v }));
+  }
+
+  function startEdit(s: SalarioRecord) {
+    setEditingId(s.id);
+    setEditForm(recordToForm(s));
+    setShowAddForm(false);
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(EMPTY);
   }
 
   const { data: salarios = [], isLoading } = useQuery({
@@ -115,31 +216,56 @@ export default function StaffSalarioTab({ staffId, contractorId }: Props) {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      if (!form.data_vigencia || !form.valor || !form.motivo)
-        throw new Error("required");
-      const valor = parseCurrency(form.valor);
+      if (!addForm.data_vigencia || !addForm.valor || !addForm.motivo) throw new Error("required");
+      const valor = parseCurrency(addForm.valor);
       if (!valor) throw new Error("invalid");
       const { error } = await supabase.from("staff_salarios").insert([{
         staff_id: staffId,
         contractor_id: contractorId,
-        data_vigencia: form.data_vigencia,
+        data_vigencia: addForm.data_vigencia,
         valor,
-        motivo: form.motivo as "admissao" | "reajuste" | "promocao" | "correcao",
-        observacao: form.observacao.trim() || null,
+        motivo: addForm.motivo as "admissao" | "reajuste" | "promocao" | "correcao",
+        observacao: addForm.observacao.trim() || null,
       }]);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Salário registrado.");
       qc.invalidateQueries({ queryKey: ["staff-salarios", staffId] });
-      setForm(EMPTY);
-      setShowForm(false);
+      setAddForm(EMPTY);
+      setShowAddForm(false);
     },
     onError: (err) => {
       const msg = (err as Error).message;
       if (msg === "required") toast.error("Preencha data, valor e motivo.");
       else if (msg === "invalid") toast.error("Valor inválido.");
       else toast.error("Erro ao registrar salário.");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editForm.data_vigencia || !editForm.valor || !editForm.motivo) throw new Error("required");
+      const valor = parseCurrency(editForm.valor);
+      if (!valor) throw new Error("invalid");
+      const { error } = await supabase.from("staff_salarios").update({
+        data_vigencia: editForm.data_vigencia,
+        valor,
+        motivo: editForm.motivo as "admissao" | "reajuste" | "promocao" | "correcao",
+        observacao: editForm.observacao.trim() || null,
+      }).eq("id", editingId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Registro atualizado.");
+      qc.invalidateQueries({ queryKey: ["staff-salarios", staffId] });
+      cancelEdit();
+    },
+    onError: (err) => {
+      const msg = (err as Error).message;
+      if (msg === "required") toast.error("Preencha data, valor e motivo.");
+      else if (msg === "invalid") toast.error("Valor inválido.");
+      else toast.error("Erro ao atualizar registro.");
     },
   });
 
@@ -176,13 +302,13 @@ export default function StaffSalarioTab({ staffId, contractorId }: Props) {
         </div>
       )}
 
-      {/* Botão adicionar */}
+      {/* Cabeçalho + botão adicionar */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-gray-700">Histórico salarial</h4>
-        {!showForm && (
+        {!showAddForm && !editingId && (
           <button
             type="button"
-            onClick={() => setShowForm(true)}
+            onClick={() => setShowAddForm(true)}
             className="flex items-center gap-1.5 text-primary font-semibold text-xs hover:underline"
           >
             <Plus className="w-3.5 h-3.5" /> REGISTRAR AJUSTE
@@ -190,60 +316,19 @@ export default function StaffSalarioTab({ staffId, contractorId }: Props) {
         )}
       </div>
 
-      {/* Formulário inline */}
-      {showForm && (
-        <div className="border border-primary/30 rounded-lg p-4 bg-primary/5 space-y-4">
-          <p className="text-sm font-semibold text-gray-700">Novo registro salarial</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={LBL}>Data de vigência *</label>
-              <input type="date" className={INP} value={form.data_vigencia} onChange={e => set("data_vigencia", e.target.value)} />
-            </div>
-            <div>
-              <label className={LBL}>Valor (R$) *</label>
-              <input
-                className={INP}
-                placeholder="0,00"
-                value={form.valor}
-                onChange={e => set("valor", maskCurrency(e.target.value))}
-              />
-            </div>
-          </div>
-          <div>
-            <label className={LBL}>Motivo *</label>
-            <div className="relative">
-              <select className={SEL} value={form.motivo} onChange={e => set("motivo", e.target.value)}>
-                {MOTIVOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-          <div>
-            <label className={LBL}>Observação</label>
-            <input className={INP} placeholder="Opcional" value={form.observacao} onChange={e => set("observacao", e.target.value)} />
-          </div>
-          <div className="flex justify-end gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => { setShowForm(false); setForm(EMPTY); }}
-              className="text-gray-500 font-semibold text-sm hover:underline px-2"
-            >
-              CANCELAR
-            </button>
-            <button
-              type="button"
-              onClick={() => addMutation.mutate()}
-              disabled={addMutation.isPending}
-              className="bg-primary text-white font-semibold px-4 py-1.5 rounded text-sm hover:bg-primary/90 disabled:opacity-60 flex items-center gap-2"
-            >
-              {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-              SALVAR
-            </button>
-          </div>
-        </div>
+      {/* Formulário de adição */}
+      {showAddForm && (
+        <FormPanel
+          title="Novo registro salarial"
+          form={addForm}
+          onChange={setAdd}
+          onSave={() => addMutation.mutate()}
+          onCancel={() => { setShowAddForm(false); setAddForm(EMPTY); }}
+          isPending={addMutation.isPending}
+        />
       )}
 
-      {/* Tabela de histórico */}
+      {/* Lista de histórico */}
       {isLoading ? (
         <div className="flex justify-center py-8">
           <Loader2 className="w-5 h-5 text-primary animate-spin" />
@@ -255,30 +340,59 @@ export default function StaffSalarioTab({ staffId, contractorId }: Props) {
       ) : (
         <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
           {salarios.map((s, idx) => (
-            <div key={s.id} className={`flex items-center justify-between px-4 py-3 ${idx === 0 ? "bg-gray-50" : "bg-white"}`}>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">{fmtBRL(s.valor)}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${MOTIVO_BADGE[s.motivo]}`}>
-                    {MOTIVO_LABEL[s.motivo]}
-                  </span>
-                  {idx === 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">atual</span>
-                  )}
+            <div key={s.id}>
+              {editingId === s.id ? (
+                /* Formulário de edição inline */
+                <div className="p-3">
+                  <FormPanel
+                    title="Editar registro"
+                    form={editForm}
+                    onChange={setEdit}
+                    onSave={() => updateMutation.mutate()}
+                    onCancel={cancelEdit}
+                    isPending={updateMutation.isPending}
+                  />
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Vigência: {fmtDate(s.data_vigencia)}
-                  {s.observacao ? ` · ${s.observacao}` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => { if (confirm("Remover este registro?")) deleteMutation.mutate(s.id); }}
-                className="text-gray-300 hover:text-red-500 transition-colors ml-3 flex-shrink-0"
-                title="Remover"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              ) : (
+                /* Linha normal */
+                <div className={`flex items-center justify-between px-4 py-3 ${idx === 0 ? "bg-gray-50" : "bg-white"}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{fmtBRL(s.valor)}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${MOTIVO_BADGE[s.motivo]}`}>
+                        {MOTIVO_LABEL[s.motivo]}
+                      </span>
+                      {idx === 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">atual</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Vigência: {fmtDate(s.data_vigencia)}
+                      {s.observacao ? ` · ${s.observacao}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(s)}
+                      disabled={!!editingId || showAddForm}
+                      className="text-gray-300 hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Editar"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { if (confirm("Remover este registro?")) deleteMutation.mutate(s.id); }}
+                      disabled={!!editingId || showAddForm}
+                      className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Remover"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
