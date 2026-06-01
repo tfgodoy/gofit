@@ -131,6 +131,7 @@ const bottomNav: NavItem[] = [
       { icon: Users,      label: "Equipe",     to: "/app/administrativo/equipe",     iconColor: "text-gray-500" },
       { icon: ScrollText, label: "Contratos",  to: "/app/administrativo/contratos",  iconColor: "text-gray-500" },
       { icon: Shield,     label: "Permissões", to: "/app/administrativo/permissoes", iconColor: "text-gray-500" },
+      { icon: FileText,   label: "Templates",  to: "/app/administrativo/templates",  iconColor: "text-gray-500" },
     ],
   },
   {

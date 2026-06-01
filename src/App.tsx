@@ -55,6 +55,7 @@ import ContasPagarPage         from "@/pages/app/ContasPagarPage";
 import ContasFinanceirasPage   from "@/pages/app/ContasFinanceirasPage";
 import CentroFinanceiroPage        from "@/pages/app/CentroFinanceiroPage";
 import CategoriasFinanceirasPage   from "@/pages/app/CategoriasFinanceirasPage";
+import TemplatesContratosPage      from "@/pages/app/TemplatesContratosPage";
 import DrePage                 from "@/pages/app/DrePage";
 import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
 import DashboardAgendaPage     from "@/pages/app/DashboardAgendaPage";
@@ -144,6 +145,7 @@ export default function App() {
             <Route path="/app/administrativo/contratos/novo"      element={<AppGuard><ContratoFormPage /></AppGuard>} />
             <Route path="/app/administrativo/contratos/:id/editar" element={<AppGuard><ContratoFormPage /></AppGuard>} />
             <Route path="/app/administrativo/permissoes"          element={<AppGuard><PermissoesPage /></AppGuard>} />
+            <Route path="/app/administrativo/templates"           element={<AppGuard><TemplatesContratosPage /></AppGuard>} />
             <Route path="/app/administrativo/*"          element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
             <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><ModalidadesPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
