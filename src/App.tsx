@@ -52,6 +52,7 @@ import NfsePage                 from "@/pages/app/NfsePage";
 import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
+import ContasFinanceirasPage   from "@/pages/app/ContasFinanceirasPage";
 import DrePage                 from "@/pages/app/DrePage";
 import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
 import DashboardAgendaPage     from "@/pages/app/DashboardAgendaPage";
@@ -121,6 +122,7 @@ export default function App() {
             <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
             <Route path="/app/financeiro/nfs-e"             element={<AppGuard><NfsePage /></AppGuard>} />
             <Route path="/app/financeiro/pay"               element={<AppGuard><FitcorePayPage /></AppGuard>} />
+            <Route path="/app/financeiro/contas-financeiras" element={<AppGuard><ContasFinanceirasPage /></AppGuard>} />
             <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
             <Route path="/app/estoque/*"         element={<AppGuard><PlaceholderPage title="Estoque" /></AppGuard>} />
             <Route path="/app/treinos/treinos"       element={<AppGuard><TreinosPage /></AppGuard>} />
