@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Plus, Search, MoreVertical, Pencil, Trash2, Download,
   Upload, Code2, FileText, ChevronLeft, ChevronRight,
-  AlertTriangle, X, ChevronDown, ChevronUp,
+  AlertTriangle, X, ChevronDown, ChevronUp, Copy, Check,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,35 +21,61 @@ interface Template {
 const PAGE_SIZE = 20;
 
 /* ── Campos disponíveis ──────────────────────────────────────────────── */
-const CAMPOS = [
+interface Campo { label: string; variavel: string }
+interface GrupoCampos { grupo: string; itens: Campo[] }
+
+const CAMPOS: GrupoCampos[] = [
   { grupo: "Empresa", itens: [
-    "Razão social da empresa", "Nome fantasia da empresa", "Logomarca da empresa",
-    "CPF/CNPJ da empresa", "Telefone da empresa", "E-mail da empresa",
-    "Endereço da empresa", "Número do endereço da empresa",
-    "Complemento do endereço da empresa", "Bairro da empresa",
-    "CEP da empresa", "Cidade da empresa", "UF da empresa",
+    { label: "Razão social da empresa",          variavel: "RazaoSocialEmpresa" },
+    { label: "Nome fantasia da empresa",         variavel: "NomeFantasiaEmpresa" },
+    { label: "Logomarca da empresa",             variavel: "LogoEmpresa" },
+    { label: "CPF/CNPJ da empresa",              variavel: "CpfCnpjEmpresa" },
+    { label: "Telefone da empresa",              variavel: "TelefoneEmpresa" },
+    { label: "E-mail da empresa",                variavel: "EmailEmpresa" },
+    { label: "Endereço da empresa",              variavel: "EnderecoEmpresa" },
+    { label: "Número do endereço da empresa",    variavel: "NumeroEnderecoEmpresa" },
+    { label: "Complemento do endereço",          variavel: "ComplementoEnderecoEmpresa" },
+    { label: "Bairro da empresa",                variavel: "BairroEmpresa" },
+    { label: "CEP da empresa",                   variavel: "CepEmpresa" },
+    { label: "Cidade da empresa",                variavel: "CidadeEmpresa" },
+    { label: "UF da empresa",                    variavel: "UfEmpresa" },
   ]},
   { grupo: "Cliente", itens: [
-    "Nome do cliente", "CPF do cliente", "RG do cliente",
-    "Email do cliente", "Telefone do cliente", "Endereço do cliente",
-    "Número do endereço do cliente", "Complemento do endereço do cliente",
-    "Bairro do cliente", "CEP do cliente", "Cidade do cliente", "UF do cliente",
+    { label: "Nome do cliente",                  variavel: "NomeCliente" },
+    { label: "CPF do cliente",                   variavel: "CpfCliente" },
+    { label: "RG do cliente",                    variavel: "RgCliente" },
+    { label: "Email do cliente",                 variavel: "EmailCliente" },
+    { label: "Telefone do cliente",              variavel: "TelefoneCliente" },
+    { label: "Endereço do cliente",              variavel: "EnderecoCliente" },
+    { label: "Número do endereço do cliente",    variavel: "NumeroEnderecoCliente" },
+    { label: "Complemento do endereço",          variavel: "ComplementoEnderecoCliente" },
+    { label: "Bairro do cliente",                variavel: "BairroCliente" },
+    { label: "CEP do cliente",                   variavel: "CepCliente" },
+    { label: "Cidade do cliente",                variavel: "CidadeCliente" },
+    { label: "UF do cliente",                    variavel: "UfCliente" },
   ]},
   { grupo: "Contrato", itens: [
-    "Descrição do contrato", "Duração do contrato",
-    "Valor total do contrato", "Valor total do contrato (formatado)",
-    "Valor de adesão/matrícula do contrato",
-    "Valor de adesão/matrícula do contrato (formatado)",
-    "Valor total do contrato sem desconto",
-    "Qtd. máxima de dias nas suspensões do contrato",
-    "Data de início do contrato", "Data de validade do contrato",
+    { label: "Descrição do contrato",            variavel: "DescricaoContrato" },
+    { label: "Duração do contrato",              variavel: "DuracaoContrato" },
+    { label: "Valor total do contrato",          variavel: "ValorTotalContrato" },
+    { label: "Valor total (formatado)",          variavel: "ValorTotalContratoFormatado" },
+    { label: "Valor de adesão/matrícula",        variavel: "ValorAdesaoContrato" },
+    { label: "Valor de adesão (formatado)",      variavel: "ValorAdesaoContratoFormatado" },
+    { label: "Valor sem desconto",               variavel: "ValorTotalContratoSemDesconto" },
+    { label: "Máx. dias de suspensão",           variavel: "QtdDiasSuspensao" },
+    { label: "Data de início do contrato",       variavel: "DataInicioContrato" },
+    { label: "Data de validade do contrato",     variavel: "DataValidadeContrato" },
   ]},
   { grupo: "Modalidade do contrato", itens: [
-    "Descrição da modalidade", "Limite de acessos",
-    "Quantidade de sessões por semana", "Dias liberados para acesso",
-    "Horários liberados para acesso", "Dias e horários liberados para acesso",
-    "Tipo de modalidade", "Descrição do tipo de modalidade",
-    "Quantidade do pacote de aulas",
+    { label: "Descrição da modalidade",          variavel: "DescricaoModalidade" },
+    { label: "Limite de acessos",                variavel: "LimiteAcessos" },
+    { label: "Sessões por semana",               variavel: "QtdSessoesPorSemana" },
+    { label: "Dias liberados para acesso",       variavel: "DiasLiberadosAcesso" },
+    { label: "Horários liberados",               variavel: "HorariosLiberadosAcesso" },
+    { label: "Dias e horários liberados",        variavel: "DiasHorariosLiberadosAcesso" },
+    { label: "Tipo de modalidade",               variavel: "TipoModalidade" },
+    { label: "Descrição do tipo de modalidade",  variavel: "DescricaoTipoModalidade" },
+    { label: "Quantidade do pacote de aulas",    variavel: "QtdPacoteAulas" },
   ]},
 ];
 
@@ -93,10 +119,30 @@ function MenuAcoes({ onEditar, onDownload, onRemover }: {
 }
 
 /* ── Modal Campos Disponíveis ────────────────────────────────────────── */
+function CopiarBtn({ texto }: { texto: string }) {
+  const [copiado, setCopiado] = useState(false);
+  function copiar() {
+    navigator.clipboard.writeText(texto).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    });
+  }
+  return (
+    <button
+      onClick={copiar}
+      title="Copiar"
+      className="ml-1.5 flex-shrink-0 p-1 rounded hover:bg-primary/10 transition-colors text-gray-400 hover:text-primary"
+    >
+      {copiado ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
 function CamposModal({ onClose }: { onClose: () => void }) {
   const [abertos, setAbertos] = useState<string[]>(["Empresa"]);
   const toggle = (g: string) =>
     setAbertos(a => a.includes(g) ? a.filter(x => x !== g) : [...a, g]);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -111,46 +157,64 @@ function CamposModal({ onClose }: { onClose: () => void }) {
             <X className="w-5 h-5 text-gray-400" />
           </button>
         </div>
-        {/* Body */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Lista */}
-          <div className="flex-1 overflow-y-auto border-r border-gray-100">
-            {CAMPOS.map(({ grupo, itens }) => (
-              <div key={grupo}>
-                <button onClick={() => toggle(grupo)}
-                  className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-100">
-                  {grupo}
-                  {abertos.includes(grupo) ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                </button>
-                {abertos.includes(grupo) && itens.map(item => (
-                  <div key={item}
-                    className="px-6 py-2.5 text-sm text-gray-600 border-b border-gray-50 hover:bg-primary/5 transition-colors">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-          {/* Info */}
-          <div className="w-72 p-5 space-y-4 flex-shrink-0">
-            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              Caso você coloque uma variável com formatação errada (caracteres inválidos), ela não aparecerá na impressão.
-            </div>
-            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">Exemplo de uso</p>
-              <code className="text-xs text-primary font-mono">{"<<[RazaoSocialFilial]>>"}</code>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">Exemplo de saída</p>
-              <p className="text-xs text-gray-700">FIT CORE STUDIO LTDA</p>
-            </div>
-          </div>
+
+        {/* Instrução rápida */}
+        <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            Copie a variável (coluna da direita) e cole no Word exatamente como está — sem alterar maiúsculas, minúsculas ou acentos.
+            Exemplo: <code className="font-mono bg-amber-100 px-1 rounded">{"<<[RazaoSocialEmpresa]>>"}</code> → sairá <strong>FIT CORE STUDIO LTDA</strong>
+          </p>
         </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {CAMPOS.map(({ grupo, itens }) => (
+            <div key={grupo}>
+              {/* Cabeçalho do grupo */}
+              <button
+                onClick={() => toggle(grupo)}
+                className="flex items-center justify-between w-full px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider bg-gray-50 hover:bg-gray-100 transition-colors border-b border-gray-200"
+              >
+                {grupo}
+                {abertos.includes(grupo)
+                  ? <ChevronUp className="w-4 h-4 text-gray-400" />
+                  : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              </button>
+
+              {abertos.includes(grupo) && (
+                <div>
+                  {/* Sub-cabeçalho */}
+                  <div className="grid grid-cols-2 px-5 py-1.5 border-b border-gray-100 bg-gray-50/50">
+                    <span className="text-xs text-gray-400 font-semibold">Campo</span>
+                    <span className="text-xs text-gray-400 font-semibold">Variável para copiar</span>
+                  </div>
+                  {itens.map(({ label, variavel }) => {
+                    const sintaxe = `<<[${variavel}]>>`;
+                    return (
+                      <div
+                        key={variavel}
+                        className="grid grid-cols-2 items-center px-5 py-2.5 border-b border-gray-50 hover:bg-primary/5 transition-colors"
+                      >
+                        <span className="text-sm text-gray-700">{label}</span>
+                        <div className="flex items-center">
+                          <code className="text-xs font-mono text-primary bg-primary/5 px-2 py-1 rounded truncate">
+                            {sintaxe}
+                          </code>
+                          <CopiarBtn texto={sintaxe} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
         {/* Footer */}
-        <div className="flex justify-end px-6 py-4 border-t border-gray-100">
-          <button onClick={onClose}
-            className="text-primary font-semibold text-sm hover:underline px-2 transition-colors">
+        <div className="flex justify-end px-6 py-3 border-t border-gray-100">
+          <button onClick={onClose} className="text-primary font-semibold text-sm hover:underline px-2 transition-colors">
             FECHAR
           </button>
         </div>
