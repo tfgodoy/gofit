@@ -680,25 +680,54 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-1">
-                      <div>
-                        <p className="text-sm text-gray-700 font-medium">Bloquear acesso ao sistema</p>
-                        <p className="text-xs text-gray-400 mt-0.5">O membro não poderá fazer login</p>
-                      </div>
-                      <Toggle active={form.blocked} onToggle={() => set("blocked", !form.blocked)} />
-                    </div>
                   </SectionBlock>
 
-                  <SectionBlock title="Perfil de acesso">
-                    <div>
-                      <label className={LBL}>Cargo<Req /></label>
-                      <SelectWrap>
-                        <select className={SEL} value={form.role} onChange={e => set("role", e.target.value as StaffRole)}>
-                          <option value="">Selecionar cargo</option>
-                          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                      </SelectWrap>
-                      <FieldError msg={errors.role} />
+                  <SectionBlock title="Endereço">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className={LBL}>CEP</label>
+                        <div className="relative">
+                          <input
+                            className={INP}
+                            placeholder="00000-000"
+                            value={form.cep}
+                            onChange={e => set("cep", maskCEP(e.target.value))}
+                            onBlur={handleCEPBlur}
+                          />
+                          {cepLoading && <Loader2 className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <label className={LBL}>Logradouro</label>
+                        <input className={INP} placeholder="Rua, Av, etc." value={form.logradouro} onChange={e => set("logradouro", e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className={LBL}>Número</label>
+                        <input className={INP} placeholder="Nº" value={form.numero_endereco} onChange={e => set("numero_endereco", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={LBL}>Cidade</label>
+                        <input className={INP} placeholder="Cidade" value={form.cidade} onChange={e => set("cidade", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={LBL}>Bairro</label>
+                        <input className={INP} placeholder="Bairro" value={form.bairro} onChange={e => set("bairro", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={LBL}>Complemento</label>
+                        <input className={INP} placeholder="Apto, Bloco..." value={form.complemento} onChange={e => set("complemento", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={LBL}>UF</label>
+                        <SelectWrap>
+                          <select className={SEL} value={form.uf} onChange={e => set("uf", e.target.value)}>
+                            <option value="">UF</option>
+                            {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                          </select>
+                        </SelectWrap>
+                      </div>
                     </div>
                   </SectionBlock>
                 </>
@@ -838,52 +867,23 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
               ══════════════════════════════════════════════════════ */}
               {activeTab === "sistema" && (
                 <>
-                  <SectionBlock title="Endereço">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className={LBL}>CEP</label>
-                        <div className="relative">
-                          <input
-                            className={INP}
-                            placeholder="00000-000"
-                            value={form.cep}
-                            onChange={e => set("cep", maskCEP(e.target.value))}
-                            onBlur={handleCEPBlur}
-                          />
-                          {cepLoading && <Loader2 className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
-                        </div>
-                      </div>
-                      <div className="col-span-2">
-                        <label className={LBL}>Logradouro</label>
-                        <input className={INP} placeholder="Rua, Av, etc." value={form.logradouro} onChange={e => set("logradouro", e.target.value)} />
-                      </div>
+                  <SectionBlock title="Perfil de acesso">
+                    <div>
+                      <label className={LBL}>Cargo<Req /></label>
+                      <SelectWrap>
+                        <select className={SEL} value={form.role} onChange={e => set("role", e.target.value as StaffRole)}>
+                          <option value="">Selecionar cargo</option>
+                          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                      </SelectWrap>
+                      <FieldError msg={errors.role} />
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between pt-1">
                       <div>
-                        <label className={LBL}>Número</label>
-                        <input className={INP} placeholder="Nº" value={form.numero_endereco} onChange={e => set("numero_endereco", e.target.value)} />
+                        <p className="text-sm text-gray-700 font-medium">Bloquear acesso ao sistema</p>
+                        <p className="text-xs text-gray-400 mt-0.5">O membro não poderá fazer login</p>
                       </div>
-                      <div>
-                        <label className={LBL}>Cidade</label>
-                        <input className={INP} placeholder="Cidade" value={form.cidade} onChange={e => set("cidade", e.target.value)} />
-                      </div>
-                      <div>
-                        <label className={LBL}>Bairro</label>
-                        <input className={INP} placeholder="Bairro" value={form.bairro} onChange={e => set("bairro", e.target.value)} />
-                      </div>
-                      <div>
-                        <label className={LBL}>Complemento</label>
-                        <input className={INP} placeholder="Apto, Bloco..." value={form.complemento} onChange={e => set("complemento", e.target.value)} />
-                      </div>
-                      <div>
-                        <label className={LBL}>UF</label>
-                        <SelectWrap>
-                          <select className={SEL} value={form.uf} onChange={e => set("uf", e.target.value)}>
-                            <option value="">UF</option>
-                            {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                          </select>
-                        </SelectWrap>
-                      </div>
+                      <Toggle active={form.blocked} onToggle={() => set("blocked", !form.blocked)} />
                     </div>
                   </SectionBlock>
 
