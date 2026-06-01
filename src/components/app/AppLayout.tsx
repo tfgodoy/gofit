@@ -144,8 +144,9 @@ const bottomNav: NavItem[] = [
         icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/centros-custo",
         iconColor: "text-gray-500",
         children: [
-          { icon: TrendingDown, label: "Centros de custo",   to: "/app/configuracoes/centros-custo",   iconColor: "text-red-500" },
-          { icon: TrendingUp,   label: "Centros de receita", to: "/app/configuracoes/centros-receita", iconColor: "text-green-600" },
+          { icon: TrendingDown, label: "Centros de custo",   to: "/app/configuracoes/centros-custo",           iconColor: "text-red-500" },
+          { icon: TrendingUp,   label: "Centros de receita", to: "/app/configuracoes/centros-receita",         iconColor: "text-green-600" },
+          { icon: Tags,         label: "Categorias",         to: "/app/configuracoes/categorias-financeiras",  iconColor: "text-primary" },
         ],
       },
       { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
