@@ -355,6 +355,20 @@ export interface Database {
           uf: string | null;
           horarios_restricao: Json | null;
           observacoes: string | null;
+          data_admissao: string | null;
+          data_demissao: string | null;
+          tipo_contrato: "clt" | "pj" | "autonomo" | "estagiario" | null;
+          cargo_descricao: string | null;
+          carga_horaria_semanal: number | null;
+          valor_passagem: number | null;
+          pis_pasep: string | null;
+          ctps_numero: string | null;
+          ctps_serie: string | null;
+          banco: string | null;
+          agencia: string | null;
+          conta: string | null;
+          tipo_conta: "corrente" | "poupanca" | null;
+          chave_pix: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -384,6 +398,20 @@ export interface Database {
           uf?: string | null;
           horarios_restricao?: Json | null;
           observacoes?: string | null;
+          data_admissao?: string | null;
+          data_demissao?: string | null;
+          tipo_contrato?: "clt" | "pj" | "autonomo" | "estagiario" | null;
+          cargo_descricao?: string | null;
+          carga_horaria_semanal?: number | null;
+          valor_passagem?: number | null;
+          pis_pasep?: string | null;
+          ctps_numero?: string | null;
+          ctps_serie?: string | null;
+          banco?: string | null;
+          agencia?: string | null;
+          conta?: string | null;
+          tipo_conta?: "corrente" | "poupanca" | null;
+          chave_pix?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -413,6 +441,20 @@ export interface Database {
           uf?: string | null;
           horarios_restricao?: Json | null;
           observacoes?: string | null;
+          data_admissao?: string | null;
+          data_demissao?: string | null;
+          tipo_contrato?: "clt" | "pj" | "autonomo" | "estagiario" | null;
+          cargo_descricao?: string | null;
+          carga_horaria_semanal?: number | null;
+          valor_passagem?: number | null;
+          pis_pasep?: string | null;
+          ctps_numero?: string | null;
+          ctps_serie?: string | null;
+          banco?: string | null;
+          agencia?: string | null;
+          conta?: string | null;
+          tipo_conta?: "corrente" | "poupanca" | null;
+          chave_pix?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -421,6 +463,132 @@ export interface Database {
             foreignKeyName: "staff_contractor_id_fkey";
             columns: ["contractor_id"];
             referencedRelation: "contractors";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      staff_salarios: {
+        Row: {
+          id: string;
+          staff_id: string;
+          contractor_id: string;
+          data_vigencia: string;
+          valor: number;
+          motivo: "admissao" | "reajuste" | "promocao" | "correcao";
+          observacao: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          staff_id: string;
+          contractor_id: string;
+          data_vigencia: string;
+          valor: number;
+          motivo: "admissao" | "reajuste" | "promocao" | "correcao";
+          observacao?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          staff_id?: string;
+          contractor_id?: string;
+          data_vigencia?: string;
+          valor?: number;
+          motivo?: "admissao" | "reajuste" | "promocao" | "correcao";
+          observacao?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_salarios_staff_id_fkey";
+            columns: ["staff_id"];
+            referencedRelation: "staff";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      staff_ferias: {
+        Row: {
+          id: string;
+          staff_id: string;
+          contractor_id: string;
+          data_inicio: string;
+          data_fim: string;
+          dias: number;
+          status: "agendado" | "em_andamento" | "concluido" | "cancelado";
+          observacao: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          staff_id: string;
+          contractor_id: string;
+          data_inicio: string;
+          data_fim: string;
+          dias?: number;
+          status?: "agendado" | "em_andamento" | "concluido" | "cancelado";
+          observacao?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          staff_id?: string;
+          contractor_id?: string;
+          data_inicio?: string;
+          data_fim?: string;
+          dias?: number;
+          status?: "agendado" | "em_andamento" | "concluido" | "cancelado";
+          observacao?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_ferias_staff_id_fkey";
+            columns: ["staff_id"];
+            referencedRelation: "staff";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      staff_ocorrencias: {
+        Row: {
+          id: string;
+          staff_id: string;
+          contractor_id: string;
+          tipo: "falta" | "falta_justificada" | "dayoff" | "bonus_folga" | "licenca_medica" | "licenca" | "suspensao";
+          data_inicio: string;
+          data_fim: string | null;
+          descricao: string | null;
+          status: "pendente" | "aprovado" | "reprovado";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          staff_id: string;
+          contractor_id: string;
+          tipo: "falta" | "falta_justificada" | "dayoff" | "bonus_folga" | "licenca_medica" | "licenca" | "suspensao";
+          data_inicio: string;
+          data_fim?: string | null;
+          descricao?: string | null;
+          status?: "pendente" | "aprovado" | "reprovado";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          staff_id?: string;
+          contractor_id?: string;
+          tipo?: "falta" | "falta_justificada" | "dayoff" | "bonus_folga" | "licenca_medica" | "licenca" | "suspensao";
+          data_inicio?: string;
+          data_fim?: string | null;
+          descricao?: string | null;
+          status?: "pendente" | "aprovado" | "reprovado";
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_ocorrencias_staff_id_fkey";
+            columns: ["staff_id"];
+            referencedRelation: "staff";
             referencedColumns: ["id"];
           }
         ];
