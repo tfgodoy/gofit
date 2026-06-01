@@ -442,7 +442,7 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
         // Professional fields
         data_admissao:         form.data_admissao || null,
         data_demissao:         form.data_demissao || null,
-        tipo_contrato:         form.tipo_contrato || null,
+        tipo_contrato:         (form.tipo_contrato as "clt" | "pj" | "autonomo" | "estagiario") || null,
         cargo_descricao:       form.cargo_descricao.trim() || null,
         carga_horaria_semanal: form.carga_horaria_semanal ? parseInt(form.carga_horaria_semanal, 10) : null,
         valor_passagem:        parseCurrency(form.valor_passagem),

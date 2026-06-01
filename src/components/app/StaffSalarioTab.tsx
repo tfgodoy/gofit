@@ -124,7 +124,7 @@ export default function StaffSalarioTab({ staffId, contractorId }: Props) {
         contractor_id: contractorId,
         data_vigencia: form.data_vigencia,
         valor,
-        motivo: form.motivo,
+        motivo: form.motivo as "admissao" | "reajuste" | "promocao" | "correcao",
         observacao: form.observacao.trim() || null,
       }]);
       if (error) throw error;

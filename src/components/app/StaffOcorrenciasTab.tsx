@@ -75,11 +75,6 @@ const STATUS_BADGE: Record<string, string> = {
   reprovado: "bg-red-100 text-red-700",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  aprovado:  "Aprovado",
-  pendente:  "Pendente",
-  reprovado: "Reprovado",
-};
 
 const EMPTY: OcorrenciaForm = {
   tipo: "falta",
@@ -139,11 +134,11 @@ export default function StaffOcorrenciasTab({ staffId, contractorId }: Props) {
       const { error } = await supabase.from("staff_ocorrencias").insert([{
         staff_id: staffId,
         contractor_id: contractorId,
-        tipo: form.tipo,
+        tipo: form.tipo as OcorrenciaTipo,
         data_inicio: form.data_inicio,
         data_fim: form.data_fim || null,
         descricao: form.descricao.trim() || null,
-        status: form.status,
+        status: form.status as OcorrenciaStatus,
       }]);
       if (error) throw error;
     },
@@ -175,7 +170,7 @@ export default function StaffOcorrenciasTab({ staffId, contractorId }: Props) {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("staff_ocorrencias").update({ status }).eq("id", id);
+      const { error } = await supabase.from("staff_ocorrencias").update({ status: status as OcorrenciaStatus }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

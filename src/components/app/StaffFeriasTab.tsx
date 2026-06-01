@@ -40,12 +40,6 @@ const STATUS_BADGE: Record<string, string> = {
   cancelado:    "bg-gray-100 text-gray-500",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  agendado:     "Agendado",
-  em_andamento: "Em andamento",
-  concluido:    "Concluído",
-  cancelado:    "Cancelado",
-};
 
 const EMPTY: FeriasForm = {
   data_inicio: "",
@@ -115,7 +109,7 @@ export default function StaffFeriasTab({ staffId, contractorId }: Props) {
         data_inicio: form.data_inicio,
         data_fim: form.data_fim,
         dias,
-        status: form.status,
+        status: form.status as "agendado" | "em_andamento" | "concluido" | "cancelado",
         observacao: form.observacao.trim() || null,
       }]);
       if (error) throw error;
@@ -148,7 +142,7 @@ export default function StaffFeriasTab({ staffId, contractorId }: Props) {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("staff_ferias").update({ status }).eq("id", id);
+      const { error } = await supabase.from("staff_ferias").update({ status: status as "agendado" | "em_andamento" | "concluido" | "cancelado" }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
