@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 /* ── types ──────────────────────────────────────────────────── */
 
-type Etapa = "lead" | "visita" | "proposta" | "matricula" | "perdido";
+type Etapa = "Novo lead" | "Visita agendada" | "Proposta enviada" | "Matrícula" | "Perdido";
 
 interface Opportunity {
   id: string;
@@ -32,11 +32,11 @@ interface Opportunity {
 /* ── constants ──────────────────────────────────────────────── */
 
 const ETAPA_STYLE: Record<Etapa, { label: string; bg: string; text: string }> = {
-  lead:      { label: "Lead",      bg: "bg-blue-100",   text: "text-blue-700"   },
-  visita:    { label: "Visita",    bg: "bg-purple-100", text: "text-purple-700" },
-  proposta:  { label: "Proposta",  bg: "bg-orange-100", text: "text-orange-700" },
-  matricula: { label: "Matrícula", bg: "bg-green-100",  text: "text-green-700"  },
-  perdido:   { label: "Perdido",   bg: "bg-red-100",    text: "text-red-700"    },
+  "Novo lead":        { label: "Lead",      bg: "bg-blue-100",   text: "text-blue-700"   },
+  "Visita agendada":  { label: "Visita",    bg: "bg-purple-100", text: "text-purple-700" },
+  "Proposta enviada": { label: "Proposta",  bg: "bg-orange-100", text: "text-orange-700" },
+  "Matrícula":        { label: "Matrícula", bg: "bg-green-100",  text: "text-green-700"  },
+  "Perdido":          { label: "Perdido",   bg: "bg-red-100",    text: "text-red-700"    },
 };
 
 const inputClass =
@@ -53,7 +53,7 @@ interface QuickForm {
   nome: string; email: string; telefone: string;
   origem: string; etapa: Etapa;
 }
-const emptyQ: QuickForm = { nome: "", email: "", telefone: "", origem: "", etapa: "lead" };
+const emptyQ: QuickForm = { nome: "", email: "", telefone: "", origem: "", etapa: "Novo lead" };
 
 function QuickModal({ origens, onSave, onClose }: {
   origens: { nome: string }[];
@@ -150,7 +150,7 @@ export default function LeadsPage() {
       .from("opportunities")
       .select("*")
       .eq("contractor_id", user.contractorId!)
-      .in("etapa", ["lead", "visita", "proposta"])
+      .in("etapa", ["Novo lead", "Visita agendada", "Proposta enviada"])
       .order("created_at", { ascending: false });
     setOpps((data ?? []) as Opportunity[]);
     setLoading(false);

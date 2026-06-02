@@ -155,11 +155,11 @@ export default function DashboardGerencialPage() {
         etapaCount[o.etapa] = (etapaCount[o.etapa] ?? 0) + 1;
       }
       setFunilData([
-        { name: "Lead",      total: etapaCount["lead"]      ?? 0, fill: "#3b82f6" },
-        { name: "Visita",    total: etapaCount["visita"]    ?? 0, fill: "#8b5cf6" },
-        { name: "Proposta",  total: etapaCount["proposta"]  ?? 0, fill: "#f97316" },
-        { name: "Matrícula", total: etapaCount["matricula"] ?? 0, fill: "#22c55e" },
-        { name: "Perdido",   total: etapaCount["perdido"]   ?? 0, fill: "#ef4444" },
+        { name: "Lead",      total: etapaCount["Novo lead"]        ?? 0, fill: "#3b82f6" },
+        { name: "Visita",    total: etapaCount["Visita agendada"]  ?? 0, fill: "#8b5cf6" },
+        { name: "Proposta",  total: etapaCount["Proposta enviada"] ?? 0, fill: "#f97316" },
+        { name: "Matrícula", total: etapaCount["Matrícula"]        ?? 0, fill: "#22c55e" },
+        { name: "Perdido",   total: etapaCount["Perdido"]          ?? 0, fill: "#ef4444" },
       ]);
 
       setRecentActivities((actsData ?? []) as any[]);

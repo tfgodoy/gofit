@@ -249,8 +249,8 @@ export default function ConvitePage() {
       nome:          studentNome,
       email:         form.email.trim() || null,
       telefone:      form.telefone.replace(/\D/g, "") || null,
-      origem:        "convite",
-      etapa:         "lead",
+      origem:        "Convite (link)",
+      etapa:         "Novo lead",
       data_entrada:  new Date().toISOString().split("T")[0],
     });
 
