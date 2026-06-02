@@ -532,18 +532,14 @@ export default function OportunidadesPage() {
                     style={{ backgroundColor: bgLight, borderColor: border }}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold" style={{ color: etapa.cor }}>{etapa.nome}</span>
+                      <span className="text-sm font-bold text-gray-900">{etapa.nome}</span>
                       <div className="flex items-center gap-2">
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70"
-                          style={{ color: etapa.cor }}
-                        >
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 text-gray-700">
                           {cards.length}
                         </span>
                         <button
                           onClick={() => openNew(etapa.nome)}
-                          className="p-0.5 rounded hover:bg-white/50"
-                          style={{ color: etapa.cor }}
+                          className="p-0.5 rounded hover:bg-white/50 text-gray-600"
                           title="Adicionar"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -551,7 +547,7 @@ export default function OportunidadesPage() {
                       </div>
                     </div>
                     {etapaValor > 0 && (
-                      <p className="text-xs mt-0.5 opacity-70" style={{ color: etapa.cor }}>
+                      <p className="text-xs mt-0.5 font-semibold text-gray-600">
                         {fmtMoney(etapaValor)}
                       </p>
                     )}
