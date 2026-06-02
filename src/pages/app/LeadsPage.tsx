@@ -32,26 +32,12 @@ interface Opportunity {
 /* ── constants ──────────────────────────────────────────────── */
 
 const ETAPA_STYLE: Record<Etapa, { label: string; bg: string; text: string }> = {
-  lead:      { label: "Lead",             bg: "bg-blue-100",   text: "text-blue-700"   },
-  visita:    { label: "Visita",           bg: "bg-purple-100", text: "text-purple-700" },
-  proposta:  { label: "Proposta",         bg: "bg-orange-100", text: "text-orange-700" },
-  matricula: { label: "Matrícula",        bg: "bg-green-100",  text: "text-green-700"  },
-  perdido:   { label: "Perdido",          bg: "bg-red-100",    text: "text-red-700"    },
+  lead:      { label: "Lead",      bg: "bg-blue-100",   text: "text-blue-700"   },
+  visita:    { label: "Visita",    bg: "bg-purple-100", text: "text-purple-700" },
+  proposta:  { label: "Proposta",  bg: "bg-orange-100", text: "text-orange-700" },
+  matricula: { label: "Matrícula", bg: "bg-green-100",  text: "text-green-700"  },
+  perdido:   { label: "Perdido",   bg: "bg-red-100",    text: "text-red-700"    },
 };
-
-const ORIGENS = [
-  { value: "manual",    label: "Manual"    },
-  { value: "instagram", label: "Instagram" },
-  { value: "facebook",  label: "Facebook"  },
-  { value: "google",    label: "Google"    },
-  { value: "indicacao", label: "Indicação" },
-  { value: "site",      label: "Site"      },
-  { value: "evento",    label: "Evento"    },
-  { value: "whatsapp",  label: "WhatsApp"  },
-  { value: "convite",   label: "Convite (link)" },
-];
-
-const ORIGEM_LABEL: Record<string, string> = Object.fromEntries(ORIGENS.map(o => [o.value, o.label]));
 
 const inputClass =
   "w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition";
@@ -61,15 +47,16 @@ function fmtBR(iso: string | null) {
   return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR");
 }
 
-/* ── Quick-create modal (re-used from Oportunidades) ─────────── */
+/* ── Quick-create modal ─────────────────────────────────────── */
 
 interface QuickForm {
   nome: string; email: string; telefone: string;
   origem: string; etapa: Etapa;
 }
-const emptyQ: QuickForm = { nome: "", email: "", telefone: "", origem: "manual", etapa: "lead" };
+const emptyQ: QuickForm = { nome: "", email: "", telefone: "", origem: "", etapa: "lead" };
 
-function QuickModal({ onSave, onClose }: {
+function QuickModal({ origens, onSave, onClose }: {
+  origens: { nome: string }[];
   onSave: (f: QuickForm) => Promise<void>;
   onClose: () => void;
 }) {
@@ -114,7 +101,8 @@ function QuickModal({ onSave, onClose }: {
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Origem</label>
               <select value={form.origem} onChange={e => set("origem", e.target.value)} className={inputClass}>
-                {ORIGENS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <option value="">Selecione...</option>
+                {origens.map(o => <option key={o.nome} value={o.nome}>{o.nome}</option>)}
               </select>
             </div>
             <div>
@@ -154,6 +142,7 @@ export default function LeadsPage() {
   const [filterEtapa, setFilterEtapa] = useState<Etapa | "">("");
   const [modal, setModal]       = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [origens, setOrigens]   = useState<{ nome: string }[]>([]);
 
   async function load() {
     if (!user) return;
@@ -167,7 +156,19 @@ export default function LeadsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [user]);
+  async function loadOrigens() {
+    if (!user?.contractorId) return;
+    const { data } = await supabase
+      .from("crm_config")
+      .select("nome")
+      .eq("contractor_id", user.contractorId)
+      .eq("categoria", "como_conheceu")
+      .eq("ativo", true)
+      .order("ordem");
+    setOrigens((data ?? []) as { nome: string }[]);
+  }
+
+  useEffect(() => { load(); loadOrigens(); }, [user]);
 
   async function handleSave(form: QuickForm) {
     if (!user) return;
@@ -334,7 +335,7 @@ export default function LeadsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3">
-                        <span className="text-xs text-gray-600">{ORIGEM_LABEL[o.origem] ?? o.origem}</span>
+                        <span className="text-xs text-gray-600">{o.origem ?? "—"}</span>
                       </td>
                       <td className="px-5 py-3">
                         <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
@@ -374,7 +375,7 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {modal && <QuickModal onSave={handleSave} onClose={() => setModal(false)} />}
+      {modal && <QuickModal origens={origens} onSave={handleSave} onClose={() => setModal(false)} />}
 
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

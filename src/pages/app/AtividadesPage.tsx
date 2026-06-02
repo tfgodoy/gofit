@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   CheckSquare, Plus, X, Loader2, Pencil, Trash2,
-  Phone, Mail, MessageCircle, FileText, Calendar,
-  User, ChevronDown,
+  Calendar, User, ChevronDown,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,14 +10,15 @@ import { toast } from "sonner";
 
 /* ── types ──────────────────────────────────────────────────── */
 
-type TipoAtividade = "ligacao" | "visita" | "email" | "whatsapp" | "nota" | "tarefa";
+interface TipoDinamico { id: string; nome: string; }
+
 type StatusAtividade = "pendente" | "realizado" | "cancelado";
 
 interface Activity {
   id: string;
   opportunity_id: string | null;
   student_id: string | null;
-  tipo: TipoAtividade;
+  tipo: string;
   descricao: string | null;
   data_atividade: string;
   responsavel_nome: string | null;
@@ -27,20 +27,6 @@ interface Activity {
 }
 
 /* ── constants ──────────────────────────────────────────────── */
-
-const TIPO_CONFIG: Record<TipoAtividade, {
-  label: string;
-  icon: React.ReactNode;
-  bg: string;
-  color: string;
-}> = {
-  ligacao:   { label: "Ligação",    icon: <Phone className="w-3.5 h-3.5" />,          bg: "bg-blue-100",   color: "text-blue-700"   },
-  visita:    { label: "Visita",     icon: <User className="w-3.5 h-3.5" />,           bg: "bg-purple-100", color: "text-purple-700" },
-  email:     { label: "E-mail",     icon: <Mail className="w-3.5 h-3.5" />,           bg: "bg-indigo-100", color: "text-indigo-700" },
-  whatsapp:  { label: "WhatsApp",   icon: <MessageCircle className="w-3.5 h-3.5" />,  bg: "bg-green-100",  color: "text-green-700"  },
-  nota:      { label: "Nota",       icon: <FileText className="w-3.5 h-3.5" />,       bg: "bg-yellow-100", color: "text-yellow-700" },
-  tarefa:    { label: "Tarefa",     icon: <CheckSquare className="w-3.5 h-3.5" />,    bg: "bg-orange-100", color: "text-orange-700" },
-};
 
 const STATUS_CONFIG: Record<StatusAtividade, { label: string; bg: string; text: string }> = {
   pendente:  { label: "Pendente",  bg: "bg-yellow-100", text: "text-yellow-700" },
@@ -61,7 +47,7 @@ function fmtDateTime(iso: string) {
 /* ── Modal ──────────────────────────────────────────────────── */
 
 interface AtvForm {
-  tipo: TipoAtividade;
+  tipo: string;
   descricao: string;
   data_atividade: string;
   responsavel_nome: string;
@@ -75,12 +61,13 @@ function nowLocal() {
 }
 
 const emptyForm: AtvForm = {
-  tipo: "nota", descricao: "", data_atividade: nowLocal(),
+  tipo: "", descricao: "", data_atividade: nowLocal(),
   responsavel_nome: "", status: "realizado",
 };
 
-function AtvModal({ atv, onSave, onClose }: {
+function AtvModal({ atv, tiposDinamicos, onSave, onClose }: {
   atv: Activity | null;
+  tiposDinamicos: TipoDinamico[];
   onSave: (f: AtvForm) => Promise<void>;
   onClose: () => void;
 }) {
@@ -102,6 +89,7 @@ function AtvModal({ atv, onSave, onClose }: {
   }
 
   async function go() {
+    if (!form.tipo) { toast.error("Selecione o tipo de atividade"); return; }
     setSaving(true);
     await onSave(form);
     setSaving(false);
@@ -121,9 +109,11 @@ function AtvModal({ atv, onSave, onClose }: {
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Tipo</label>
               <select value={form.tipo} onChange={e => set("tipo", e.target.value)} className={inputClass}>
-                {(Object.entries(TIPO_CONFIG) as [TipoAtividade, { label: string }][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
+                <option value="">Selecione...</option>
+                {tiposDinamicos.length > 0
+                  ? tiposDinamicos.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)
+                  : <option disabled>Nenhum tipo cadastrado</option>
+                }
               </select>
             </div>
             <div>
@@ -179,11 +169,12 @@ function AtvModal({ atv, onSave, onClose }: {
 
 export default function AtividadesPage() {
   const { user } = useAuth();
-  const [ativs, setAtivs]       = useState<Activity[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [modal, setModal]       = useState<false | null | Activity>(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [filterTipo, setFilterTipo]     = useState<TipoAtividade | "">("");
+  const [ativs, setAtivs]               = useState<Activity[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [modal, setModal]               = useState<false | null | Activity>(false);
+  const [deleteId, setDeleteId]         = useState<string | null>(null);
+  const [tiposDinamicos, setTiposDinamicos] = useState<TipoDinamico[]>([]);
+  const [filterTipo, setFilterTipo]     = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<StatusAtividade | "">("");
 
   async function load() {
@@ -197,7 +188,19 @@ export default function AtividadesPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [user]);
+  async function loadTipos() {
+    if (!user?.contractorId) return;
+    const { data } = await supabase
+      .from("crm_config")
+      .select("id, nome")
+      .eq("contractor_id", user.contractorId)
+      .eq("categoria", "tipo_atividade")
+      .eq("ativo", true)
+      .order("ordem");
+    setTiposDinamicos((data ?? []) as TipoDinamico[]);
+  }
+
+  useEffect(() => { load(); loadTipos(); }, [user]);
 
   async function handleSave(form: AtvForm) {
     if (!user) return;
@@ -240,7 +243,6 @@ export default function AtividadesPage() {
     return matchTipo && matchStatus;
   });
 
-  /* counts */
   const pendentes  = ativs.filter(a => a.status === "pendente").length;
   const realizados = ativs.filter(a => a.status === "realizado").length;
 
@@ -277,17 +279,17 @@ export default function AtividadesPage() {
           >
             Todos
           </button>
-          {(Object.entries(TIPO_CONFIG) as [TipoAtividade, { label: string; bg: string; color: string }][]).map(([k, v]) => (
+          {tiposDinamicos.map(t => (
             <button
-              key={k}
-              onClick={() => setFilterTipo(prev => prev === k ? "" : k)}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                filterTipo === k
-                  ? `${v.bg} ${v.color} border-current`
+              key={t.id}
+              onClick={() => setFilterTipo(prev => prev === t.nome ? "" : t.nome)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                filterTipo === t.nome
+                  ? "bg-primary text-white border-primary"
                   : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"
               }`}
             >
-              {v.label}
+              {t.nome}
             </button>
           ))}
           <div className="ml-auto">
@@ -322,26 +324,27 @@ export default function AtividadesPage() {
         ) : (
           <div className="space-y-2">
             {filtered.map(atv => {
-              const tc = TIPO_CONFIG[atv.tipo] ?? TIPO_CONFIG.nota;
               const sc = STATUS_CONFIG[atv.status] ?? STATUS_CONFIG.realizado;
               return (
                 <div
                   key={atv.id}
                   className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-3.5 flex items-start gap-4 group"
                 >
-                  {/* Type icon */}
+                  {/* Toggle icon */}
                   <button
                     onClick={() => toggleStatus(atv)}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 transition-colors ${tc.bg} ${tc.color}`}
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 transition-colors bg-primary/10 text-primary hover:bg-primary/20"
                     title="Alternar status"
                   >
-                    {tc.icon}
+                    <CheckSquare className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <span className={`text-xs font-bold ${tc.color}`}>{tc.label}</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {atv.tipo}
+                      </span>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>
                         {sc.label}
                       </span>
@@ -388,7 +391,12 @@ export default function AtividadesPage() {
       </div>
 
       {modal !== false && (
-        <AtvModal atv={modal} onSave={handleSave} onClose={() => setModal(false)} />
+        <AtvModal
+          atv={modal}
+          tiposDinamicos={tiposDinamicos}
+          onSave={handleSave}
+          onClose={() => setModal(false)}
+        />
       )}
 
       {deleteId && (

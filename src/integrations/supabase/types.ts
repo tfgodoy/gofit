@@ -2019,6 +2019,7 @@ export interface Database {
           responsavel_nome: string | null;
           observacoes:      string | null;
           motivo_perda:     string | null;
+          nivel_interesse:  string | null;
           created_at:       string;
           updated_at:       string;
         };
@@ -2039,6 +2040,7 @@ export interface Database {
           responsavel_nome?: string | null;
           observacoes?:      string | null;
           motivo_perda?:     string | null;
+          nivel_interesse?:  string | null;
           created_at?:       string;
           updated_at?:       string;
         };
@@ -2059,6 +2061,7 @@ export interface Database {
           responsavel_nome?: string | null;
           observacoes?:      string | null;
           motivo_perda?:     string | null;
+          nivel_interesse?:  string | null;
           created_at?:       string;
           updated_at?:       string;
         };
