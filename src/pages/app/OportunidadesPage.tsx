@@ -465,10 +465,6 @@ export default function OportunidadesPage() {
 
   const byEtapa = (etapa: string) => opps.filter(o => o.etapa === etapa);
 
-  const totalValor = opps
-    .filter(o => o.etapa !== "Perdido")
-    .reduce((s, o) => s + (o.valor_estimado ?? 0), 0);
-
   return (
     <AppLayout>
       <div className="px-6 py-6 flex flex-col h-full">
@@ -480,10 +476,6 @@ export default function OportunidadesPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Funil de Oportunidades</h1>
-              <p className="text-sm text-gray-400">
-                {opps.length} ativas
-                {totalValor > 0 && ` · ${fmtMoney(totalValor)} em aberto`}
-              </p>
             </div>
           </div>
           <button
