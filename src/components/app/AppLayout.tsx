@@ -10,16 +10,25 @@ import {
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
   BookOpen, LayoutTemplate, ScrollText, Banknote, Plug, TrendingDown,
+  Tag, MapPin, Star, AlertCircle, GitBranch,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationBell from "@/components/app/NotificationBell";
 import type { ReactNode } from "react";
+
+interface GreatGrandNavItem {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  to: string;
+  iconColor: string;
+}
 
 interface GrandNavItem {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   to: string;
   iconColor: string;
+  children?: GreatGrandNavItem[];
 }
 
 interface SubNavItem {
@@ -153,6 +162,32 @@ const bottomNav: NavItem[] = [
       { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
       { icon: Plug,          label: "Integrações",            to: "/app/configuracoes/integracoes",  iconColor: "text-gray-500" },
       {
+        icon: Filter, label: "CRM", to: "/app/configuracoes/crm",
+        iconColor: "text-orange-400",
+        children: [
+          {
+            icon: CheckSquare, label: "Atividades", to: "/app/configuracoes/crm/atividades",
+            iconColor: "text-orange-400",
+            children: [
+              { icon: Tag,     label: "Tipos de atividades",  to: "/app/configuracoes/crm/atividades/tipos-atividade", iconColor: "text-orange-400" },
+              { icon: MapPin,  label: "Tipos de visitas",     to: "/app/configuracoes/crm/atividades/tipos-visita",    iconColor: "text-orange-400" },
+              { icon: Star,    label: "Níveis de interesse",  to: "/app/configuracoes/crm/atividades/niveis-interesse",iconColor: "text-orange-400" },
+            ],
+          },
+          {
+            icon: Lightbulb, label: "Oportunidades", to: "/app/configuracoes/crm/oportunidades",
+            iconColor: "text-orange-400",
+            children: [
+              { icon: Search,       label: "Como conheceu",       to: "/app/configuracoes/crm/oportunidades/como-conheceu",   iconColor: "text-orange-400" },
+              { icon: MapPin,       label: "Tipos de visitas",    to: "/app/configuracoes/crm/oportunidades/tipos-visita",    iconColor: "text-orange-400" },
+              { icon: Star,         label: "Níveis de interesse", to: "/app/configuracoes/crm/oportunidades/niveis-interesse",iconColor: "text-orange-400" },
+              { icon: AlertCircle,  label: "Motivos de Perda",    to: "/app/configuracoes/crm/oportunidades/motivos-perda",   iconColor: "text-orange-400" },
+              { icon: GitBranch,    label: "Funis e Etapas",      to: "/app/configuracoes/crm/oportunidades/funis-etapas",   iconColor: "text-orange-400" },
+            ],
+          },
+        ],
+      },
+      {
         icon: ClipboardList, label: "Anamnese", to: "/app/configuracoes/anamnese",
         iconColor: "text-gray-500",
         children: [
@@ -190,8 +225,18 @@ function NavItemLink({
   /* auto-detect which child sub-dropdown to open based on current path */
   const [expandedSub, setExpandedSub] = useState<string | null>(() => {
     for (const child of item.children ?? []) {
-      if (child.children?.some(gc => location.pathname.startsWith(gc.to))) {
-        return child.to;
+      if (child.children?.some(gc =>
+        location.pathname.startsWith(gc.to) ||
+        gc.children?.some(ggc => location.pathname.startsWith(ggc.to))
+      )) return child.to;
+    }
+    return null;
+  });
+
+  const [expandedGrand, setExpandedGrand] = useState<string | null>(() => {
+    for (const child of item.children ?? []) {
+      for (const gc of child.children ?? []) {
+        if (gc.children?.some(ggc => location.pathname.startsWith(ggc.to))) return gc.to;
       }
     }
     return null;
@@ -199,9 +244,17 @@ function NavItemLink({
 
   useEffect(() => {
     for (const child of item.children ?? []) {
-      if (child.children?.some(gc => location.pathname.startsWith(gc.to))) {
+      if (child.children?.some(gc =>
+        location.pathname.startsWith(gc.to) ||
+        gc.children?.some(ggc => location.pathname.startsWith(ggc.to))
+      )) {
         setExpandedSub(child.to);
-        return;
+      }
+      for (const gc of child.children ?? []) {
+        if (gc.children?.some(ggc => location.pathname.startsWith(ggc.to))) {
+          setExpandedGrand(gc.to);
+          return;
+        }
       }
     }
   }, [location.pathname]);
@@ -253,6 +306,52 @@ function NavItemLink({
                       <div className="ml-1 mt-0.5 mb-0.5 pl-2 border-l-2 border-gray-100 space-y-0.5">
                         {child.children.map(gc => {
                           const GcIcon = gc.icon;
+
+                          /* 4th level: gc has children → collapsible group */
+                          if (gc.children) {
+                            const isGcExpanded = expandedGrand === gc.to;
+                            return (
+                              <div key={gc.to}>
+                                <button
+                                  onClick={() => setExpandedGrand(isGcExpanded ? null : gc.to)}
+                                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                                    isGcExpanded ? "text-primary" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <GcIcon className={`w-3 h-3 flex-shrink-0 ${isGcExpanded ? "text-primary" : gc.iconColor}`} />
+                                  <span className="flex-1 text-left leading-tight">{gc.label}</span>
+                                  <ChevronDown className={`w-2.5 h-2.5 opacity-40 flex-shrink-0 transition-transform duration-200 ${isGcExpanded ? "rotate-180" : ""}`} />
+                                </button>
+                                {isGcExpanded && (
+                                  <div className="ml-1 mt-0.5 mb-0.5 pl-2 border-l-2 border-gray-100 space-y-0.5">
+                                    {gc.children.map(ggc => {
+                                      const GgcIcon = ggc.icon;
+                                      return (
+                                        <NavLink
+                                          key={ggc.to}
+                                          to={ggc.to}
+                                          className={({ isActive }) =>
+                                            `flex items-center gap-2 px-2 py-1 rounded-xl text-xs font-medium transition-colors ${
+                                              isActive ? "text-primary" : "text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+                                            }`
+                                          }
+                                        >
+                                          {({ isActive }) => (
+                                            <>
+                                              <GgcIcon className={`w-2.5 h-2.5 flex-shrink-0 ${isActive ? "text-primary" : ggc.iconColor}`} />
+                                              <span className="leading-tight">{ggc.label}</span>
+                                            </>
+                                          )}
+                                        </NavLink>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          /* regular grandchild NavLink */
                           return (
                             <NavLink
                               key={gc.to}
@@ -339,7 +438,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     for (const item of all) {
       const matched = item.children?.some(c =>
         location.pathname.startsWith(c.to) ||
-        c.children?.some(gc => location.pathname.startsWith(gc.to))
+        c.children?.some(gc =>
+          location.pathname.startsWith(gc.to) ||
+          gc.children?.some(ggc => location.pathname.startsWith(ggc.to))
+        )
       );
       if (matched) {
         setExpandedKey(item.to);

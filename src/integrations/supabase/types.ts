@@ -2881,6 +2881,93 @@ export interface Database {
         };
         Relationships: [];
       };
+      crm_config: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          categoria:     string;
+          nome:          string;
+          cor:           string | null;
+          ordem:         number;
+          ativo:         boolean;
+          created_at:    string;
+          updated_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          categoria:      string;
+          nome:           string;
+          cor?:           string | null;
+          ordem?:         number;
+          ativo?:         boolean;
+          created_at?:    string;
+          updated_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          categoria?:     string;
+          nome?:          string;
+          cor?:           string | null;
+          ordem?:         number;
+          ativo?:         boolean;
+          updated_at?:    string;
+        };
+        Relationships: [];
+      };
+      crm_funis: {
+        Row: {
+          id:            string;
+          contractor_id: string;
+          nome:          string;
+          padrao:        boolean;
+          ativo:         boolean;
+          created_at:    string;
+        };
+        Insert: {
+          id?:            string;
+          contractor_id:  string;
+          nome:           string;
+          padrao?:        boolean;
+          ativo?:         boolean;
+          created_at?:    string;
+        };
+        Update: {
+          id?:            string;
+          contractor_id?: string;
+          nome?:          string;
+          padrao?:        boolean;
+          ativo?:         boolean;
+        };
+        Relationships: [];
+      };
+      crm_funil_etapas: {
+        Row: {
+          id:         string;
+          funil_id:   string;
+          nome:       string;
+          cor:        string;
+          ordem:      number;
+          created_at: string;
+        };
+        Insert: {
+          id?:        string;
+          funil_id:   string;
+          nome:       string;
+          cor?:       string;
+          ordem?:     number;
+          created_at?: string;
+        };
+        Update: {
+          id?:      string;
+          funil_id?: string;
+          nome?:    string;
+          cor?:     string;
+          ordem?:   number;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

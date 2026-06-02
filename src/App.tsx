@@ -48,6 +48,8 @@ import PermissoesPage           from "@/pages/app/PermissoesPage";
 import ParametrosFinanceirosPage from "@/pages/app/ParametrosFinanceirosPage";
 import UnidadesPage             from "@/pages/app/UnidadesPage";
 import IntegracoesHubPage       from "@/pages/app/IntegracoesHubPage";
+import CrmConfigListPage        from "@/pages/app/CrmConfigListPage";
+import ConfigCrmFunisPage       from "@/pages/app/ConfigCrmFunisPage";
 import NfsePage                 from "@/pages/app/NfsePage";
 import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
@@ -158,6 +160,15 @@ export default function App() {
             <Route path="/app/configuracoes/categorias-financeiras" element={<AppGuard><CategoriasFinanceirasPage /></AppGuard>} />
             <Route path="/app/configuracoes/unidades"        element={<AppGuard><UnidadesPage /></AppGuard>} />
             <Route path="/app/configuracoes/integracoes"    element={<AppGuard><IntegracoesHubPage /></AppGuard>} />
+            {/* CRM Config */}
+            <Route path="/app/configuracoes/crm/atividades/tipos-atividade"  element={<AppGuard><CrmConfigListPage titulo="Tipos de atividades"  descricao="Categorias de atividades do CRM (ex: Ligação, WhatsApp, Email, Reunião)" categoria="tipo_atividade" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/atividades/tipos-visita"     element={<AppGuard><CrmConfigListPage titulo="Tipos de visitas"     descricao="Modalidades de visita para atividades (ex: Presencial, Online, Híbrido)" categoria="tipo_visita_atividade" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/atividades/niveis-interesse" element={<AppGuard><CrmConfigListPage titulo="Níveis de interesse"  descricao="Grau de interesse do lead em atividades (ex: Alto, Médio, Baixo)" categoria="nivel_interesse_atividade" comCor /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/como-conheceu"   element={<AppGuard><CrmConfigListPage titulo="Como conheceu"        descricao="Como o lead descobriu a academia (ex: Instagram, Indicação, Google)" categoria="como_conheceu" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/tipos-visita"    element={<AppGuard><CrmConfigListPage titulo="Tipos de visitas"     descricao="Modalidades de visita em oportunidades (ex: Presencial, Online)" categoria="tipo_visita_oportunidade" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/niveis-interesse"element={<AppGuard><CrmConfigListPage titulo="Níveis de interesse"  descricao="Grau de interesse do lead em oportunidades (ex: Alto, Médio, Baixo)" categoria="nivel_interesse_oportunidade" comCor /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/motivos-perda"   element={<AppGuard><CrmConfigListPage titulo="Motivos de Perda"     descricao="Razões pelo qual oportunidades são perdidas (ex: Preço, Concorrência)" categoria="motivo_perda" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/funis-etapas"    element={<AppGuard><ConfigCrmFunisPage /></AppGuard>} />
             <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />
