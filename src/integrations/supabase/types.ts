@@ -36,6 +36,7 @@ export interface Database {
           icone: string;
           utiliza_gonutri: boolean;
           ativo: boolean;
+          permite_agendamento_publico: boolean;
           created_at: string;
         };
         Insert: {
@@ -52,6 +53,7 @@ export interface Database {
           icone?: string;
           utiliza_gonutri?: boolean;
           ativo?: boolean;
+          permite_agendamento_publico?: boolean;
           created_at?: string;
         };
         Update: {
@@ -68,6 +70,7 @@ export interface Database {
           icone?: string;
           utiliza_gonutri?: boolean;
           ativo?: boolean;
+          permite_agendamento_publico?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -1289,28 +1292,31 @@ export interface Database {
       };
       anamnese_modelos: {
         Row: {
-          id:                      string;
-          contractor_id:           string;
-          descricao:               string;
-          respondido_pelo_cliente: boolean;
-          exigir_aceite:           boolean;
-          created_at:              string;
-        };
-        Insert: {
-          id?:                      string;
+          id:                       string;
           contractor_id:            string;
           descricao:                string;
-          respondido_pelo_cliente?: boolean;
-          exigir_aceite?:           boolean;
-          created_at?:              string;
+          respondido_pelo_cliente:  boolean;
+          exigir_aceite:            boolean;
+          para_aula_experimental:   boolean;
+          created_at:               string;
+        };
+        Insert: {
+          id?:                       string;
+          contractor_id:             string;
+          descricao:                 string;
+          respondido_pelo_cliente?:  boolean;
+          exigir_aceite?:            boolean;
+          para_aula_experimental?:   boolean;
+          created_at?:               string;
         };
         Update: {
-          id?:                      string;
-          contractor_id?:           string;
-          descricao?:               string;
-          respondido_pelo_cliente?: boolean;
-          exigir_aceite?:           boolean;
-          created_at?:              string;
+          id?:                       string;
+          contractor_id?:            string;
+          descricao?:                string;
+          respondido_pelo_cliente?:  boolean;
+          exigir_aceite?:            boolean;
+          para_aula_experimental?:   boolean;
+          created_at?:               string;
         };
         Relationships: [];
       };
@@ -1604,49 +1610,52 @@ export interface Database {
       };
       bookings: {
         Row: {
-          id:            string;
-          contractor_id: string;
-          slot_id:       string;
-          student_id:    string | null;
-          student_nome:  string | null;
-          tipo:          string;
-          lead_id:       string | null;
-          lead_nome:     string | null;
-          status:        string;
-          reservado_em:  string | null;
-          checkin_em:    string | null;
-          observacoes:   string | null;
-          created_at:    string;
+          id:                   string;
+          contractor_id:        string;
+          slot_id:              string;
+          student_id:           string | null;
+          student_nome:         string | null;
+          tipo:                 string;
+          lead_id:              string | null;
+          lead_nome:            string | null;
+          status:               string;
+          reservado_em:         string | null;
+          checkin_em:           string | null;
+          observacoes:          string | null;
+          anamnese_resposta_id: string | null;
+          created_at:           string;
         };
         Insert: {
-          id?:            string;
-          contractor_id:  string;
-          slot_id:        string;
-          student_id?:    string | null;
-          student_nome?:  string | null;
-          tipo?:          string;
-          lead_id?:       string | null;
-          lead_nome?:     string | null;
-          status?:        string;
-          reservado_em?:  string | null;
-          checkin_em?:    string | null;
-          observacoes?:   string | null;
-          created_at?:    string;
+          id?:                   string;
+          contractor_id:         string;
+          slot_id:               string;
+          student_id?:           string | null;
+          student_nome?:         string | null;
+          tipo?:                 string;
+          lead_id?:              string | null;
+          lead_nome?:            string | null;
+          status?:               string;
+          reservado_em?:         string | null;
+          checkin_em?:           string | null;
+          observacoes?:          string | null;
+          anamnese_resposta_id?: string | null;
+          created_at?:           string;
         };
         Update: {
-          id?:            string;
-          contractor_id?: string;
-          slot_id?:       string;
-          student_id?:    string | null;
-          student_nome?:  string | null;
-          tipo?:          string;
-          lead_id?:       string | null;
-          lead_nome?:     string | null;
-          status?:        string;
-          reservado_em?:  string | null;
-          checkin_em?:    string | null;
-          observacoes?:   string | null;
-          created_at?:    string;
+          id?:                   string;
+          contractor_id?:        string;
+          slot_id?:              string;
+          student_id?:           string | null;
+          student_nome?:         string | null;
+          tipo?:                 string;
+          lead_id?:              string | null;
+          lead_nome?:            string | null;
+          status?:               string;
+          reservado_em?:         string | null;
+          checkin_em?:           string | null;
+          observacoes?:          string | null;
+          anamnese_resposta_id?: string | null;
+          created_at?:           string;
         };
         Relationships: [];
       };
@@ -2973,7 +2982,12 @@ export interface Database {
       };
     };
     Views: {
-      [_ in never]: never;
+      public_slot_occupancy: {
+        Row: {
+          slot_id:       string;
+          total_reservas: number;
+        };
+      };
     };
     Functions: {
       [_ in never]: never;
