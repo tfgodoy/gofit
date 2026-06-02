@@ -242,12 +242,14 @@ function OppCard({
   onEdit,
   onDelete,
   onMove,
+  onDragStart,
 }: {
   opp: Opportunity;
   etapas: typeof ETAPAS;
   onEdit: (o: Opportunity) => void;
   onDelete: (id: string) => void;
   onMove: (id: string, etapa: Etapa) => void;
+  onDragStart: (id: string) => void;
 }) {
   const currentIdx = ETAPA_ORDER.indexOf(opp.etapa);
   const canPrev = currentIdx > 0;
@@ -256,7 +258,11 @@ function OppCard({
   const etapaInfo = etapas.find(e => e.key === opp.etapa);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 group">
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(opp.id); }}
+      className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 group cursor-grab active:cursor-grabbing active:opacity-60 active:shadow-md transition-opacity"
+    >
       <div className="flex items-start justify-between gap-2 mb-3">
         <p className="text-sm font-bold text-gray-800 leading-snug">{opp.nome}</p>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
@@ -346,6 +352,8 @@ export default function OportunidadesPage() {
   const [modal, setModal]       = useState<false | null | Opportunity>(false);
   const [modalEtapa, setModalEtapa] = useState<Etapa>("lead");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [dragId, setDragId]     = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<Etapa | null>(null);
 
   async function load() {
     if (!user) return;
@@ -461,10 +469,24 @@ export default function OportunidadesPage() {
             {ETAPAS.map(etapa => {
               const cards = byEtapa(etapa.key);
               const etapaValor = cards.reduce((s, o) => s + (o.valor_estimado ?? 0), 0);
+              const isOver = dragOver === etapa.key && dragId !== null;
               return (
                 <div
                   key={etapa.key}
-                  className="flex flex-col flex-shrink-0 w-72 bg-gray-50 rounded-2xl"
+                  className={`flex flex-col flex-shrink-0 w-72 rounded-2xl transition-colors ${
+                    isOver ? `${etapa.bg} ring-2 ring-offset-1 ${etapa.border}` : "bg-gray-50"
+                  }`}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOver(etapa.key); }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setDragOver(null);
+                    if (dragId) {
+                      const opp = opps.find(o => o.id === dragId);
+                      if (opp && opp.etapa !== etapa.key) handleMove(dragId, etapa.key);
+                      setDragId(null);
+                    }
+                  }}
                 >
                   {/* Column header */}
                   <div className={`px-4 py-3 rounded-t-2xl ${etapa.bg} ${etapa.border} border-b`}>
@@ -491,10 +513,14 @@ export default function OportunidadesPage() {
                   </div>
 
                   {/* Cards */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[80px]">
                     {cards.length === 0 ? (
-                      <div className="text-center py-8">
-                        <p className="text-xs text-gray-300">Nenhuma oportunidade</p>
+                      <div className={`text-center py-8 rounded-xl border-2 border-dashed transition-colors ${
+                        isOver ? `${etapa.border} ${etapa.bg}` : "border-gray-200"
+                      }`}>
+                        <p className={`text-xs transition-colors ${isOver ? etapa.color : "text-gray-300"}`}>
+                          {isOver ? "Soltar aqui" : "Nenhuma oportunidade"}
+                        </p>
                       </div>
                     ) : (
                       cards.map(opp => (
@@ -505,6 +531,7 @@ export default function OportunidadesPage() {
                           onEdit={o => setModal(o)}
                           onDelete={id => setDeleteId(id)}
                           onMove={handleMove}
+                          onDragStart={id => setDragId(id)}
                         />
                       ))
                     )}
