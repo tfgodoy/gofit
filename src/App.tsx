@@ -65,6 +65,7 @@ import ComissoesPage           from "@/pages/app/ComissoesPage";
 import OcupacaoPage            from "@/pages/app/OcupacaoPage";
 import ConvitePage            from "@/pages/public/ConvitePage";
 import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
+import BookingPage            from "@/pages/public/BookingPage";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/cadastro" element={<ContractorRegisterPage />} />
             <Route path="/convite/:token"   element={<ConvitePage />} />
             <Route path="/anamnese/:token"  element={<AnamnesePublicPage />} />
+            <Route path="/booking/:contractorId" element={<BookingPage />} />
 
             {/* Owner */}
             <Route path="/owner/dashboard" element={
