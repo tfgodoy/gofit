@@ -169,9 +169,7 @@ const bottomNav: NavItem[] = [
             icon: CheckSquare, label: "Atividades", to: "/app/configuracoes/crm/atividades",
             iconColor: "text-orange-400",
             children: [
-              { icon: Tag,     label: "Tipos de atividades",  to: "/app/configuracoes/crm/atividades/tipos-atividade", iconColor: "text-orange-400" },
-              { icon: MapPin,  label: "Tipos de visitas",     to: "/app/configuracoes/crm/atividades/tipos-visita",    iconColor: "text-orange-400" },
-              { icon: Star,    label: "Níveis de interesse",  to: "/app/configuracoes/crm/atividades/niveis-interesse",iconColor: "text-orange-400" },
+              { icon: Tag, label: "Tipos de atividades", to: "/app/configuracoes/crm/atividades/tipos-atividade", iconColor: "text-orange-400" },
             ],
           },
           {
