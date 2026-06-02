@@ -86,8 +86,6 @@ export default function DashboardCRMPage() {
 
   /* etapa → cor map (para badges dinâmicos) */
   const [etapaCorMap, setEtapaCorMap] = useState<Record<string, string>>({});
-  const [etapaMatricula, setEtapaMatricula] = useState("Matrícula");
-  const [etapaPerdido,   setEtapaPerdido]   = useState("Perdido");
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -113,8 +111,6 @@ export default function DashboardCRMPage() {
 
       const eMatr  = etapas.find(e => e.nome.toLowerCase().includes("matr"))?.nome  ?? "Matrícula";
       const ePerd  = etapas.find(e => e.nome.toLowerCase().includes("perd"))?.nome  ?? "Perdido";
-      setEtapaMatricula(eMatr);
-      setEtapaPerdido(ePerd);
 
       /* 2 — queries paralelas */
       const [
