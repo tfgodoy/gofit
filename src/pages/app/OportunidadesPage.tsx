@@ -15,6 +15,7 @@ type Etapa = "lead" | "visita" | "proposta" | "matricula" | "perdido";
 
 interface Opportunity {
   id: string;
+  student_id: string | null;
   nome: string;
   email: string | null;
   telefone: string | null;
@@ -399,6 +400,17 @@ export default function OportunidadesPage() {
       .from("opportunities")
       .update({ etapa, updated_at: new Date().toISOString() })
       .eq("id", id);
+
+    if (etapa === "matricula") {
+      const opp = opps.find(o => o.id === id);
+      if (opp?.student_id) {
+        await supabase
+          .from("students")
+          .update({ status: "ativo" })
+          .eq("id", opp.student_id);
+      }
+    }
+
     setOpps(prev => prev.map(o => o.id === id ? { ...o, etapa } : o));
   }
 

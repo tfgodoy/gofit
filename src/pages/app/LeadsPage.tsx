@@ -161,6 +161,7 @@ export default function LeadsPage() {
       .from("opportunities")
       .select("*")
       .eq("contractor_id", user.contractorId!)
+      .in("etapa", ["lead", "visita", "proposta"])
       .order("created_at", { ascending: false });
     setOpps((data ?? []) as Opportunity[]);
     setLoading(false);

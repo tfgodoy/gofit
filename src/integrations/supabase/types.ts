@@ -714,7 +714,7 @@ export interface Database {
           cpf: string | null;
           data_nascimento: string | null;
           sexo: "masculino" | "feminino" | "outro" | null;
-          status: "lead" | "ativo" | "inativo" | "cancelado";
+          status: "lead" | "ativo" | "inativo" | "cancelado" | "bloqueado";
           telefone: string | null;
           email: string | null;
           cep: string | null;
@@ -743,7 +743,7 @@ export interface Database {
           cpf?: string | null;
           data_nascimento?: string | null;
           sexo?: "masculino" | "feminino" | "outro" | null;
-          status?: "lead" | "ativo" | "inativo" | "cancelado";
+          status?: "lead" | "ativo" | "inativo" | "cancelado" | "bloqueado";
           telefone?: string | null;
           email?: string | null;
           cep?: string | null;
@@ -772,7 +772,7 @@ export interface Database {
           cpf?: string | null;
           data_nascimento?: string | null;
           sexo?: "masculino" | "feminino" | "outro" | null;
-          status?: "lead" | "ativo" | "inativo" | "cancelado";
+          status?: "lead" | "ativo" | "inativo" | "cancelado" | "bloqueado";
           telefone?: string | null;
           email?: string | null;
           cep?: string | null;

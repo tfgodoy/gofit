@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import InviteModal from "@/components/app/InviteModal";
 
-type StudentStatus = "lead" | "ativo" | "inativo" | "cancelado";
+type StudentStatus = "ativo" | "bloqueado" | "inativo" | "cancelado";
 
 interface Student {
   id: string;
@@ -22,12 +22,12 @@ interface Student {
 
 const STATUS_STYLE: Record<StudentStatus, string> = {
   ativo:     "bg-green-100 text-green-700",
-  lead:      "bg-blue-100 text-blue-700",
+  bloqueado: "bg-amber-100 text-amber-700",
   inativo:   "bg-gray-100 text-gray-500",
   cancelado: "bg-red-100 text-red-600",
 };
 const STATUS_LABEL: Record<StudentStatus, string> = {
-  ativo: "Ativo", lead: "Lead", inativo: "Inativo", cancelado: "Cancelado",
+  ativo: "Ativo", bloqueado: "Bloqueado", inativo: "Inativo", cancelado: "Cancelado",
 };
 const SEX_LABEL: Record<string, string> = {
   masculino: "Masculino", feminino: "Feminino", outro: "Outro",
@@ -36,7 +36,7 @@ const SEX_LABEL: Record<string, string> = {
 const ALL_STATUS: { value: StudentStatus | "todos"; label: string }[] = [
   { value: "todos",     label: "Todos" },
   { value: "ativo",     label: "Ativos" },
-  { value: "lead",      label: "Leads" },
+  { value: "bloqueado", label: "Bloqueados" },
   { value: "inativo",   label: "Inativos" },
   { value: "cancelado", label: "Cancelados" },
 ];
@@ -63,7 +63,7 @@ export default function ClientesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StudentStatus | "todos">("todos");
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState({ total: 0, ativo: 0, lead: 0, inativo: 0, cancelado: 0 });
+  const [counts, setCounts] = useState({ total: 0, ativo: 0, bloqueado: 0, inativo: 0, cancelado: 0 });
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
@@ -74,6 +74,7 @@ export default function ClientesPage() {
         .from("students")
         .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at")
         .eq("contractor_id", user!.contractorId!)
+        .neq("status", "lead")
         .order("nome_completo", { ascending: true });
 
       const list = (data ?? []) as Student[];
@@ -82,7 +83,7 @@ export default function ClientesPage() {
       setCounts({
         total:     list.length,
         ativo:     list.filter(s => s.status === "ativo").length,
-        lead:      list.filter(s => s.status === "lead").length,
+        bloqueado: list.filter(s => s.status === "bloqueado").length,
         inativo:   list.filter(s => s.status === "inativo").length,
         cancelado: list.filter(s => s.status === "cancelado").length,
       });
