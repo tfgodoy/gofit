@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Search, CheckCircle2, XCircle, UserPlus, Users } from "lucide-react";
+import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -24,14 +24,22 @@ interface GridPerms {
 }
 
 interface Booking {
+  id:                   string;
+  student_id:           string | null;
+  student_nome:         string | null;
+  lead_id:              string | null;
+  lead_nome:            string | null;
+  tipo:                 string;
+  status:               string;
+  checkin_em:           string | null;
+  anamnese_resposta_id: string | null;
+}
+
+interface AnamneseInfo {
   id:           string;
-  student_id:   string | null;
-  student_nome: string | null;
-  lead_id:      string | null;
-  lead_nome:    string | null;
-  tipo:         string;
   status:       string;
-  checkin_em:   string | null;
+  respondido_at: string | null;
+  token:        string;
 }
 
 interface Student { id: string; nome_completo: string }
@@ -62,6 +70,7 @@ type AddMode = "aluno" | "lead" | null;
 export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const { user } = useAuth();
   const [bookings, setBookings]       = useState<Booking[]>([]);
+  const [anamneseMap, setAnamneseMap] = useState<Record<string, AnamneseInfo>>({});
   const [loading, setLoading]         = useState(true);
   const [students, setStudents]       = useState<Student[]>([]);
   const [leads,    setLeads]          = useState<Lead[]>([]);
@@ -78,9 +87,28 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   async function loadBookings() {
     setLoading(true);
     const { data } = await supabase
-      .from("bookings").select("*")
+      .from("bookings")
+      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, status, checkin_em, anamnese_resposta_id")
       .eq("slot_id", slot.id).neq("status", "cancelado").order("created_at");
-    setBookings((data ?? []) as unknown as Booking[]);
+    const bks = (data ?? []) as Booking[];
+    setBookings(bks);
+
+    // Carrega status das anamneses vinculadas aos bookings experimentais
+    const anamIds = bks
+      .filter(b => b.tipo === "experimental" && b.anamnese_resposta_id)
+      .map(b => b.anamnese_resposta_id!);
+    if (anamIds.length > 0) {
+      const { data: aData } = await supabase
+        .from("anamnese_respostas")
+        .select("id, status, respondido_at, token")
+        .in("id", anamIds);
+      const map: Record<string, AnamneseInfo> = {};
+      for (const a of (aData ?? []) as AnamneseInfo[]) map[a.id] = a;
+      setAnamneseMap(map);
+    } else {
+      setAnamneseMap({});
+    }
+
     setLoading(false);
   }
 
@@ -247,20 +275,94 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
             <div className="flex flex-col items-center justify-center py-10 gap-1">
               <p className="text-sm text-gray-400">Nenhum aluno reservado ainda.</p>
             </div>
-          ) : bookings.map(b => {
-            const nome     = b.tipo === "lead" ? (b.lead_nome ?? "Lead") : (b.student_nome ?? "—");
-            const badge    = STATUS_BADGE[b.status] ?? STATUS_BADGE.reservado;
-            const canMark  = !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
-            const hasMark  = !isCanceled && (b.status === "presente"  || b.status === "faltou");
+          ) : (
+            <>
+              {/* Alunos e leads normais */}
+              {bookings.filter(b => b.tipo !== "experimental").map(b => {
+                const nome    = b.tipo === "lead" ? (b.lead_nome ?? "Lead") : (b.student_nome ?? "—");
+                const badge   = STATUS_BADGE[b.status] ?? STATUS_BADGE.reservado;
+                const canMark = !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
+                const hasMark = !isCanceled && (b.status === "presente"  || b.status === "faltou");
+                return (
+                  <div key={b.id} className="flex items-center gap-3 px-6 py-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${b.tipo === "lead" ? "bg-orange-100 text-orange-700" : "bg-primary/10 text-primary"}`}>
+                      {initials(nome)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
+                      {b.tipo === "lead" && <p className="text-xs text-orange-500">Lead</p>}
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                    {!isCanceled && (
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {canMark && (
+                          <>
+                            <button onClick={() => handleMarkStatus(b.id, "presente")} title="Marcar presente"
+                              className="p-1 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleMarkStatus(b.id, "faltou")} title="Marcar falta"
+                              className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {hasMark && (
+                          <button onClick={() => handleUndoStatus(b.id)}
+                            className="text-xs text-gray-400 hover:text-primary hover:underline px-1">
+                            desfazer
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+          {/* Bookings experimentais — com status de anamnese */}
+          {bookings.filter(b => b.tipo === "experimental").map(b => {
+            const nome    = b.lead_nome ?? "Lead";
+            const badge   = STATUS_BADGE[b.status] ?? STATUS_BADGE.reservado;
+            const canMark = !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
+            const hasMark = !isCanceled && (b.status === "presente"  || b.status === "faltou");
+            const anam    = b.anamnese_resposta_id ? anamneseMap[b.anamnese_resposta_id] : null;
+            const preenchida = !!anam?.respondido_at;
+            const anamLink = anam ? `${window.location.origin}/anamnese/${anam.token}` : null;
             return (
-              <div key={b.id} className="flex items-center gap-3 px-6 py-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${b.tipo === "lead" ? "bg-orange-100 text-orange-700" : "bg-primary/10 text-primary"}`}>
+              <div key={b.id} className={`flex items-center gap-3 px-6 py-3 ${!preenchida ? "bg-red-50/40" : ""}`}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-orange-100 text-orange-700">
                   {initials(nome)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
-                  {b.tipo === "lead" && <p className="text-xs text-orange-500">Lead</p>}
+                  <p className="text-xs text-orange-500">Aula experimental</p>
                 </div>
+
+                {/* Badge anamnese */}
+                {anam ? (
+                  preenchida ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 flex-shrink-0">
+                      <ClipboardCheck className="w-3 h-3" /> Ficha OK
+                    </span>
+                  ) : (
+                    anamLink ? (
+                      <a href={anamLink} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 flex-shrink-0 hover:bg-red-200 transition-colors"
+                        title="Abrir ficha de saúde">
+                        <ClipboardX className="w-3 h-3" /> Ficha pendente <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 flex-shrink-0">
+                        <ClipboardX className="w-3 h-3" /> Ficha pendente
+                      </span>
+                    )
+                  )
+                ) : (
+                  <span className="text-xs text-gray-400 flex-shrink-0">Sem ficha</span>
+                )}
+
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>
                   {badge.label}
                 </span>
@@ -289,6 +391,8 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               </div>
             );
           })}
+            </>
+          )}
         </div>
 
         {/* Add panel */}

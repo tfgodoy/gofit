@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, MoreVertical, Pencil, Trash2, ExternalLink, ClipboardList } from "lucide-react";
+import { Plus, Search, MoreVertical, Pencil, Trash2, ExternalLink, ClipboardList, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ interface Modelo {
   descricao: string;
   respondido_pelo_cliente: boolean;
   exigir_aceite: boolean;
+  para_aula_experimental: boolean;
   created_at: string;
   questoes_count?: number;
 }
@@ -62,7 +63,7 @@ export default function AnamneseModelosPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("anamnese_modelos")
-      .select("id, descricao, respondido_pelo_cliente, exigir_aceite, created_at")
+      .select("id, descricao, respondido_pelo_cliente, exigir_aceite, para_aula_experimental, created_at")
       .eq("contractor_id", user!.contractorId!)
       .order("created_at", { ascending: false });
 
@@ -145,6 +146,24 @@ export default function AnamneseModelosPage() {
     }
   }
 
+  async function handleToggleAE(m: Modelo) {
+    if (!user?.contractorId) return;
+    // Remove o flag de todos
+    await supabase.from("anamnese_modelos")
+      .update({ para_aula_experimental: false })
+      .eq("contractor_id", user.contractorId);
+    // Ativa no selecionado (ou desativa se já era o mesmo)
+    if (!m.para_aula_experimental) {
+      await supabase.from("anamnese_modelos")
+        .update({ para_aula_experimental: true })
+        .eq("id", m.id);
+      toast.success(`"${m.descricao}" definida como anamnese de aula experimental.`);
+    } else {
+      toast.success("Anamnese de aula experimental removida.");
+    }
+    load();
+  }
+
   async function handleDelete(m: Modelo) {
     if (!window.confirm(`Excluir o modelo "${m.descricao}"?`)) return;
     const { error } = await supabase
@@ -219,7 +238,16 @@ export default function AnamneseModelosPage() {
               ) : (
                 filtered.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-8 py-3 font-medium text-gray-800">{m.descricao}</td>
+                    <td className="px-8 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-800">{m.descricao}</span>
+                        {m.para_aula_experimental && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            <Zap className="w-2.5 h-2.5" /> Aula Experimental
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-center text-gray-600">{m.questoes_count ?? 0}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatDate(m.created_at)}</td>
                     <td className="px-4 py-3 text-right">
@@ -241,6 +269,15 @@ export default function AnamneseModelosPage() {
                             onClick={() => openRename(m)}
                           >
                             <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() => handleToggleAE(m)}
+                          >
+                            <Zap className="w-3.5 h-3.5 mr-2 text-amber-500" />
+                            {m.para_aula_experimental
+                              ? "Remover da aula experimental"
+                              : "Definir como aula experimental"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-red-600 focus:text-red-600 cursor-pointer"
