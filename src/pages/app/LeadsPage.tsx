@@ -48,6 +48,7 @@ const ORIGENS = [
   { value: "site",      label: "Site"      },
   { value: "evento",    label: "Evento"    },
   { value: "whatsapp",  label: "WhatsApp"  },
+  { value: "convite",   label: "Convite (link)" },
 ];
 
 const ORIGEM_LABEL: Record<string, string> = Object.fromEntries(ORIGENS.map(o => [o.value, o.label]));

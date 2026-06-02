@@ -243,6 +243,17 @@ export default function ConvitePage() {
       .update({ status: "used" as const, student_id: student.id })
       .eq("id", invite.id);
 
+    await supabase.from("opportunities").insert({
+      contractor_id: invite.contractor_id,
+      student_id:    student.id,
+      nome:          studentNome,
+      email:         form.email.trim() || null,
+      telefone:      form.telefone.replace(/\D/g, "") || null,
+      origem:        "convite",
+      etapa:         "lead",
+      data_entrada:  new Date().toISOString().split("T")[0],
+    });
+
     setStep("success");
     setSubmitting(false);
   }
