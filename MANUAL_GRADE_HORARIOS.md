@@ -170,17 +170,23 @@ Resultado:
 
 Configure quando o check-in abre e fecha.
 
+Nos campos de tempo, informe o número e escolha a unidade:
+
+- minutos
+- horas
+- dias
+
 ### Abre check-in
 
-Define quantos minutos antes da aula o aluno pode fazer check-in.
+Define quanto tempo antes da aula o aluno pode fazer check-in.
 
 Exemplo:
 
-- 60 minutos antes
+- 1 hora antes
 
 ### Fecha check-in
 
-Define quantos minutos antes da aula o check-in deixa de ser permitido.
+Define quanto tempo antes da aula o check-in deixa de ser permitido.
 
 Exemplo:
 
@@ -191,6 +197,8 @@ Exemplo:
 Ative Permite cancelar check-in se o aluno puder cancelar a presença pelo app.
 
 Depois informe até quantos minutos antes da aula ele pode cancelar.
+
+Você pode escolher a unidade em minutos, horas ou dias.
 
 Exemplo:
 
@@ -207,8 +215,14 @@ Use essa seção para configurar a janela de entrada em catraca, biometria ou co
 
 Campos:
 
-- Pode entrar minutos antes
-- Tolerância de atraso em minutos
+- Pode entrar antes
+- Tolerância de atraso
+
+Em ambos, informe o número e escolha a unidade:
+
+- minutos
+- horas
+- dias
 
 Exemplo:
 

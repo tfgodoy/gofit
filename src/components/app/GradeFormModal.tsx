@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 const INP = "w-full bg-transparent border-0 border-b border-gray-300 py-2 px-0 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-b-2 focus:border-primary transition-colors";
 const SEL = "w-full bg-transparent border-0 border-b border-gray-300 py-2 px-0 pr-6 text-sm text-gray-900 outline-none appearance-none focus:border-b-2 focus:border-primary transition-colors cursor-pointer";
+const TIME_SEL = "border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
 
 const DIAS = [
   { value: "seg", label: "Seg", js: 1 },
@@ -66,6 +67,13 @@ interface Props {
 }
 
 type Tab = "dados" | "permissoes" | "comissao";
+type TimeUnit = "minutos" | "horas" | "dias";
+
+const TIME_UNITS: { value: TimeUnit; label: string; factor: number }[] = [
+  { value: "minutos", label: "minutos", factor: 1 },
+  { value: "horas", label: "horas", factor: 60 },
+  { value: "dias", label: "dias", factor: 1440 },
+];
 
 function calcDurationMinutes(start?: string, end?: string) {
   if (!start || !end) return 50;
@@ -79,6 +87,25 @@ function addMinutesToTime(start: string, minutes: number) {
   const [h, m] = start.split(":").map(Number);
   const total = h * 60 + m + minutes;
   return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function getBestTimeUnit(minutesValue: string): TimeUnit {
+  const minutes = parseInt(minutesValue) || 0;
+  if (minutes > 0 && minutes % 1440 === 0) return "dias";
+  if (minutes > 0 && minutes % 60 === 0) return "horas";
+  return "minutos";
+}
+
+function getTimeAmount(minutesValue: string, unit: TimeUnit) {
+  const minutes = parseInt(minutesValue) || 0;
+  const factor = TIME_UNITS.find(u => u.value === unit)?.factor ?? 1;
+  return String(Math.floor(minutes / factor));
+}
+
+function minutesFromAmount(amount: string, unit: TimeUnit) {
+  const factor = TIME_UNITS.find(u => u.value === unit)?.factor ?? 1;
+  const parsed = parseInt(amount);
+  return String(Number.isFinite(parsed) && parsed > 0 ? parsed * factor : 0);
 }
 
 function Toggle({ value, onChange, label, description }: {
@@ -97,6 +124,52 @@ function Toggle({ value, onChange, label, description }: {
       >
         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? "translate-x-5" : "translate-x-0.5"}`} />
       </button>
+    </div>
+  );
+}
+
+function TimeAmountInput({
+  label,
+  valueMinutes,
+  onChangeMinutes,
+  description,
+  min = 0,
+}: {
+  label: string;
+  valueMinutes: string;
+  onChangeMinutes: (value: string) => void;
+  description?: string;
+  min?: number;
+}) {
+  const [unit, setUnit] = useState<TimeUnit>(() => getBestTimeUnit(valueMinutes));
+  const amount = getTimeAmount(valueMinutes, unit);
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={min}
+          value={amount}
+          onChange={e => onChangeMinutes(minutesFromAmount(e.target.value, unit))}
+          className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+        <select
+          value={unit}
+          onChange={e => {
+            const nextUnit = e.target.value as TimeUnit;
+            setUnit(nextUnit);
+            onChangeMinutes(minutesFromAmount(amount, nextUnit));
+          }}
+          className={TIME_SEL}
+        >
+          {TIME_UNITS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+      {description && <p className="text-xs text-gray-400 mt-0.5">{description}</p>}
     </div>
   );
 }
@@ -518,33 +591,21 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                   description="Quando lotado, alunos entram na fila e são promovidos automaticamente"
                 />
                 <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">
-                      Abre check-in (min antes)
-                    </label>
-                    <input
-                      type="number" min="0" max="1440"
-                      value={form.antecedencia_checkin_min}
-                      onChange={e => setForm(f => ({ ...f, antecedencia_checkin_min: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      placeholder="0 = qualquer hora"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">
-                      Fecha check-in (min antes)
-                    </label>
-                    <input
-                      type="number" min="0" max="1440"
-                      value={form.encerramento_checkin_min}
-                      onChange={e => setForm(f => ({ ...f, encerramento_checkin_min: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      placeholder="0 = não fecha"
-                    />
-                  </div>
+                  <TimeAmountInput
+                    label="Abre check-in antes da aula"
+                    valueMinutes={form.antecedencia_checkin_min}
+                    onChangeMinutes={value => setForm(f => ({ ...f, antecedencia_checkin_min: value }))}
+                    description="0 = qualquer hora"
+                  />
+                  <TimeAmountInput
+                    label="Fecha check-in antes da aula"
+                    valueMinutes={form.encerramento_checkin_min}
+                    onChangeMinutes={value => setForm(f => ({ ...f, encerramento_checkin_min: value }))}
+                    description="0 = não fecha"
+                  />
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
-                  Ex: Abre 60 min antes, fecha 15 min antes do início da aula.
+                  Ex: abre 1 hora antes, fecha 15 minutos antes do início da aula.
                 </p>
                 <div className="border-t border-gray-100 mt-3 pt-3">
                   <Toggle
@@ -555,17 +616,12 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                   />
                   {form.permite_cancelar_checkin && (
                     <div className="ml-4 mt-1">
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">
-                        Até quantos minutos antes pode cancelar
-                      </label>
-                      <input
-                        type="number" min="0" max="1440"
-                        value={form.cancelar_checkin_limite_min}
-                        onChange={e => setForm(f => ({ ...f, cancelar_checkin_limite_min: e.target.value }))}
-                        className="w-32 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Ex: 10"
+                      <TimeAmountInput
+                        label="Pode cancelar até"
+                        valueMinutes={form.cancelar_checkin_limite_min}
+                        onChangeMinutes={value => setForm(f => ({ ...f, cancelar_checkin_limite_min: value }))}
+                        description="Tempo antes do início da aula"
                       />
-                      <p className="text-xs text-gray-400 mt-0.5">Ex: 10 = pode cancelar até 10 min antes do início</p>
                     </div>
                   )}
                 </div>
@@ -586,28 +642,18 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                 <p className="text-xs text-gray-400 mt-1">Configure as janelas de tempo para integração com catraca ou biometria.</p>
                 {showAcesso && (
                   <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Pode entrar (min antes)</label>
-                      <input
-                        type="number" min="0" max="120"
-                        value={form.acesso_antecedencia_min}
-                        onChange={e => setForm(f => ({ ...f, acesso_antecedencia_min: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="10"
-                      />
-                      <p className="text-xs text-gray-400 mt-0.5">Antes do início</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Tolerância de atraso (min)</label>
-                      <input
-                        type="number" min="0" max="60"
-                        value={form.acesso_tolerancia_atraso_min}
-                        onChange={e => setForm(f => ({ ...f, acesso_tolerancia_atraso_min: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="5"
-                      />
-                      <p className="text-xs text-gray-400 mt-0.5">Após o início</p>
-                    </div>
+                    <TimeAmountInput
+                      label="Pode entrar antes"
+                      valueMinutes={form.acesso_antecedencia_min}
+                      onChangeMinutes={value => setForm(f => ({ ...f, acesso_antecedencia_min: value }))}
+                      description="Antes do início"
+                    />
+                    <TimeAmountInput
+                      label="Tolerância de atraso"
+                      valueMinutes={form.acesso_tolerancia_atraso_min}
+                      onChangeMinutes={value => setForm(f => ({ ...f, acesso_tolerancia_atraso_min: value }))}
+                      description="Depois do início"
+                    />
                   </div>
                 )}
               </div>
