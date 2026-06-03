@@ -366,7 +366,8 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     }
 
     for (let i = 0; i < slots.length; i += 100) {
-      await supabase.from("schedule_slots").insert(slots.slice(i, i + 100));
+      const { error } = await supabase.from("schedule_slots").insert(slots.slice(i, i + 100));
+      if (error) throw error;
     }
   }
 
@@ -435,26 +436,33 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
 
     setSaving(true);
 
-    if (isEdit) {
-      const { error } = await supabase.from("schedule_grids").update(payload).eq("id", grid!.id!);
-      if (error) { setSaving(false); toast.error("Erro ao atualizar grade."); return; }
-      const today = new Date().toISOString().split("T")[0];
-      await supabase.from("schedule_slots").delete().eq("grid_id", grid!.id!).gte("data", today);
-      await generateSlots(grid!.id!, user.contractorId!);
-    } else {
-      const { data, error } = await supabase
-        .from("schedule_grids")
-        .insert({ contractor_id: user.contractorId!, ...payload })
-        .select("id")
-        .single();
-      if (error || !data) { setSaving(false); toast.error("Erro ao criar grade."); return; }
-      await generateSlots(data.id, user.contractorId!);
-    }
+    try {
+      if (isEdit) {
+        const { error } = await supabase.from("schedule_grids").update(payload).eq("id", grid!.id!);
+        if (error) throw error;
+        const today = new Date().toISOString().split("T")[0];
+        const { error: deleteError } = await supabase.from("schedule_slots").delete().eq("grid_id", grid!.id!).gte("data", today);
+        if (deleteError) throw deleteError;
+        await generateSlots(grid!.id!, user.contractorId!);
+      } else {
+        const { data, error } = await supabase
+          .from("schedule_grids")
+          .insert({ contractor_id: user.contractorId!, ...payload })
+          .select("id")
+          .single();
+        if (error || !data) throw error ?? new Error("Grade não retornou ID.");
+        await generateSlots(data.id, user.contractorId!);
+      }
 
-    setSaving(false);
-    toast.success(isEdit ? "Grade atualizada." : "Grade criada e aulas geradas (90 dias).");
-    onSaved();
-    onClose();
+      toast.success(isEdit ? "Grade atualizada." : "Grade criada e aulas geradas (90 dias).");
+      onSaved();
+      onClose();
+    } catch (err) {
+      console.error("grade save error:", err);
+      toast.error("A grade foi salva, mas houve erro ao gerar as aulas da agenda. Tente salvar novamente.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const TABS: { key: Tab; label: string; Icon: React.ComponentType<{className?: string}> }[] = [
