@@ -359,6 +359,10 @@ export default function ModalidadeFormModal({ modalidade, onClose, onSaved }: Pr
       if (isEdit) {
         const { error } = await supabase.from("modalidades").update(payload).eq("id", modalidade.id);
         if (error) throw error;
+        await Promise.all([
+          supabase.from("schedule_grids").update({ modalidade_nome: payload.descricao }).eq("modalidade_id", modalidade.id),
+          supabase.from("schedule_slots").update({ modalidade_nome: payload.descricao }).eq("modalidade_id", modalidade.id),
+        ]);
       } else {
         const { error } = await supabase.from("modalidades").insert(payload);
         if (error) throw error;
