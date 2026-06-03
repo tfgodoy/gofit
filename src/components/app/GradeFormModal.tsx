@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign, SlidersHorizontal } from "lucide-react";
+import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign, SlidersHorizontal, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import ModalidadeFormModal from "@/components/app/ModalidadeFormModal";
+import StaffMemberModal from "@/components/app/StaffMemberModal";
 
 const INP = "w-full bg-transparent border-0 border-b border-gray-300 py-2 px-0 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-b-2 focus:border-primary transition-colors";
 const SEL = "w-full bg-transparent border-0 border-b border-gray-300 py-2 px-0 pr-6 text-sm text-gray-900 outline-none appearance-none focus:border-b-2 focus:border-primary transition-colors cursor-pointer";
@@ -202,6 +204,11 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   const [showAcesso, setShowAcesso]   = useState(false);
   const [showApp,    setShowApp]      = useState(false);
   const [showAvancado, setShowAvancado] = useState(false);
+  const [showModalidadeForm, setShowModalidadeForm] = useState(false);
+  const [showStaffForm, setShowStaffForm] = useState(false);
+  const [showUnitForm, setShowUnitForm] = useState(false);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [savingUnit, setSavingUnit] = useState(false);
 
   const [form, setForm] = useState({
     tipo:                       grid?.tipo                       ?? "contrato",
@@ -236,18 +243,81 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     agenda_livre:                 grid?.agenda_livre ?? false,
   });
 
-  useEffect(() => {
+  async function loadOptions() {
     if (!user?.contractorId) return;
-    Promise.all([
+    const [{ data: m }, { data: s }, { data: u }] = await Promise.all([
       supabase.from("modalidades").select("id, descricao").eq("contractor_id", user.contractorId).eq("ativo", true).order("descricao"),
       supabase.from("staff").select("id, name").eq("contractor_id", user.contractorId).eq("active", true).order("name"),
       supabase.from("units").select("id, nome").eq("contractor_id", user.contractorId).eq("ativo", true).order("nome"),
-    ]).then(([{ data: m }, { data: s }, { data: u }]) => {
-      setModalidades((m ?? []) as Modalidade[]);
-      setStaffList((s ?? []) as StaffMember[]);
-      setUnitList((u ?? []) as Unit[]);
-    });
+    ]);
+    setModalidades((m ?? []) as Modalidade[]);
+    setStaffList((s ?? []) as StaffMember[]);
+    setUnitList((u ?? []) as Unit[]);
+  }
+
+  useEffect(() => {
+    loadOptions();
   }, [user]);
+
+  async function handleModalidadeSaved() {
+    if (!user?.contractorId) return;
+    const { data } = await supabase
+      .from("modalidades")
+      .select("id, descricao")
+      .eq("contractor_id", user.contractorId)
+      .eq("ativo", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    await loadOptions();
+    if (data?.id) setForm(f => ({ ...f, modalidade_id: data.id }));
+    setShowModalidadeForm(false);
+  }
+
+  async function handleStaffSaved() {
+    if (!user?.contractorId) return;
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name")
+      .eq("contractor_id", user.contractorId)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    await loadOptions();
+    if (data?.id) setForm(f => ({ ...f, staff_id: data.id }));
+    setShowStaffForm(false);
+  }
+
+  async function handleCreateUnit() {
+    if (!user?.contractorId) return;
+    const nome = newUnitName.trim();
+    if (!nome) { toast.error("Informe o nome do local/sala."); return; }
+
+    setSavingUnit(true);
+    const { data, error } = await supabase
+      .from("units")
+      .insert({
+        contractor_id: user.contractorId,
+        nome,
+        ativo: true,
+        is_principal: false,
+      })
+      .select("id, nome")
+      .single();
+    setSavingUnit(false);
+
+    if (error || !data) {
+      toast.error("Erro ao criar local/sala.");
+      return;
+    }
+
+    toast.success("Local/sala criado.");
+    setNewUnitName("");
+    setShowUnitForm(false);
+    await loadOptions();
+    setForm(f => ({ ...f, unit_id: data.id }));
+  }
 
   function toggleDia(value: string) {
     setForm(f => ({
@@ -394,6 +464,7 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   ];
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -462,33 +533,69 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Modalidade</label>
-                  <select className={SEL} value={form.modalidade_id}
-                    onChange={e => setForm(f => ({ ...f, modalidade_id: e.target.value }))}>
-                    <option value="">Selecione</option>
-                    {modalidades.map(m => <option key={m.id} value={m.id}>{m.descricao}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-500">Modalidade</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowModalidadeForm(true)}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-primary hover:bg-primary/10 transition-colors"
+                      title="Cadastrar nova modalidade"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <select className={SEL} value={form.modalidade_id}
+                      onChange={e => setForm(f => ({ ...f, modalidade_id: e.target.value }))}>
+                      <option value="">Selecione</option>
+                      {modalidades.map(m => <option key={m.id} value={m.id}>{m.descricao}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
                 <div className="relative">
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Professor</label>
-                  <select className={SEL} value={form.staff_id}
-                    onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))}>
-                    <option value="">Sem professor</option>
-                    {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-500">Professor</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowStaffForm(true)}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-primary hover:bg-primary/10 transition-colors"
+                      title="Cadastrar novo professor"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <select className={SEL} value={form.staff_id}
+                      onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))}>
+                      <option value="">Sem professor</option>
+                      {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
 
               <div className="relative">
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Local / Sala</label>
-                <select className={SEL} value={form.unit_id}
-                  onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))}>
-                  <option value="">Sem local definido</option>
-                  {unitList.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                </select>
-                <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-500">Local / Sala</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnitForm(true)}
+                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-primary hover:bg-primary/10 transition-colors"
+                    title="Cadastrar novo local/sala"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="relative">
+                  <select className={SEL} value={form.unit_id}
+                    onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))}>
+                    <option value="">Sem local definido</option>
+                    {unitList.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
 
               <div>
@@ -960,5 +1067,62 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
         </div>
       </div>
     </div>
+
+    {showModalidadeForm && (
+      <ModalidadeFormModal
+        modalidade={null}
+        onClose={() => setShowModalidadeForm(false)}
+        onSaved={handleModalidadeSaved}
+      />
+    )}
+
+    {showStaffForm && (
+      <StaffMemberModal
+        editId={null}
+        onClose={() => setShowStaffForm(false)}
+        onSaved={handleStaffSaved}
+      />
+    )}
+
+    {showUnitForm && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900">Novo local/sala</h3>
+            <button
+              onClick={() => { setShowUnitForm(false); setNewUnitName(""); }}
+              className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Nome *</label>
+          <input
+            autoFocus
+            value={newUnitName}
+            onChange={e => setNewUnitName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleCreateUnit(); }}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            placeholder="Ex: Sala 1, Tatame, Unidade Centro"
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              onClick={() => { setShowUnitForm(false); setNewUnitName(""); }}
+              className="text-primary font-semibold text-sm hover:underline px-2"
+            >
+              CANCELAR
+            </button>
+            <button
+              onClick={handleCreateUnit}
+              disabled={savingUnit}
+              className="bg-primary text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {savingUnit ? "SALVANDO..." : "SALVAR"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

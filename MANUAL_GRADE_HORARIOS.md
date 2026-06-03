@@ -60,11 +60,15 @@ Exemplos:
 - Jiu-jitsu
 - Funcional
 
+Se a modalidade ainda não existir, clique no botão + ao lado do campo Modalidade para cadastrar uma nova sem sair da grade.
+
 ### Professor
 
 Selecione o professor responsável.
 
 Importante: para usar comissão automática, a grade precisa ter professor selecionado.
+
+Se o professor ainda não existir, clique no botão + ao lado do campo Professor para cadastrar diretamente dali.
 
 ### Local / Sala
 
@@ -76,6 +80,8 @@ Exemplos:
 - Sala 1
 - Tatame
 - Box Cross
+
+Se o local ou sala ainda não existir, clique no botão + ao lado de Local / Sala para criar rapidamente.
 
 ### Dias da Semana
 
