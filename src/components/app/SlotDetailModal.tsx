@@ -27,6 +27,13 @@ interface GridPerms {
   max_clientes_especiais?:    number | null;
 }
 
+interface GridComissao {
+  comissionar_instrutor:       boolean;
+  tipo_comissao:               string | null;
+  valor_comissao_centavos:     number | null;
+  staff_nome:                  string | null;
+}
+
 interface Booking {
   id:                   string;
   student_id:           string | null;
@@ -54,6 +61,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   presente:     { label: "Presente",         cls: "bg-green-100 text-green-700" },
   faltou:       { label: "Faltou",           cls: "bg-red-100 text-red-600"     },
   cancelado:    { label: "Cancelado",        cls: "bg-gray-100 text-gray-500"   },
+  concluido:    { label: "Concluída",        cls: "bg-green-100 text-green-700" },
   lista_espera: { label: "Fila de espera",   cls: "bg-yellow-100 text-yellow-700" },
 };
 
@@ -86,6 +94,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [students, setStudents]       = useState<Student[]>([]);
   const [leads,    setLeads]          = useState<Lead[]>([]);
   const [perms,    setPerms]          = useState<GridPerms | null>(null);
+  const [gridComissao, setGridComissao] = useState<GridComissao | null>(null);
   const [addMode,  setAddMode]        = useState<AddMode>(null);
   const [search,   setSearch]         = useState("");
   const [dropOpen, setDropOpen]       = useState(false);
@@ -93,6 +102,8 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [selectedLead,    setSelectedLead]    = useState<Lead    | null>(null);
   const [adding,          setAdding]          = useState(false);
   const [cancelingSlot,   setCancelingSlot]   = useState(false);
+  const [finalizando,     setFinalizando]     = useState(false);
+  const [confirmarFinalizar, setConfirmarFinalizar] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   async function loadBookings() {
@@ -133,9 +144,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
     if (slot.grid_id) {
       supabase.from("schedule_grids")
-        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa, max_leads, max_clientes_especiais")
+        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa, max_leads, max_clientes_especiais, comissionar_instrutor, tipo_comissao, valor_comissao_centavos, staff_nome")
         .eq("id", slot.grid_id).single()
-        .then(({ data }) => setPerms(data as GridPerms | null));
+        .then(({ data }) => {
+          setPerms(data as GridPerms | null);
+          setGridComissao(data as GridComissao | null);
+        });
     }
   }, [user, slot.grid_id]);
 
@@ -240,6 +254,46 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setCancelingSlot(false); onClose(); onChanged();
   }
 
+  async function handleFinalizarAula() {
+    setFinalizando(true);
+    try {
+      const { error: errSlot } = await supabase
+        .from("schedule_slots")
+        .update({ status: "concluido" })
+        .eq("id", slot.id);
+
+      if (errSlot) {
+        toast.error("Erro ao finalizar aula.");
+        return;
+      }
+
+      const { data: result, error: errComissao } = await supabase
+        .rpc("calcular_comissao_aula", { p_slot_id: slot.id });
+
+      if (errComissao) {
+        toast.success("Aula finalizada.");
+        toast.error("Erro ao calcular comissão: " + errComissao.message);
+      } else if (result && typeof result === "object" && "gerou" in result && result.gerou) {
+        const valor = typeof result.valor === "number"
+          ? result.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "R$ 0,00";
+        const instrutor = typeof result.staff_nome === "string" ? result.staff_nome : "instrutor";
+        toast.success(`Aula finalizada! Comissão de ${valor} gerada para ${instrutor}.`);
+      } else {
+        const motivo = result && typeof result === "object" && "motivo" in result && typeof result.motivo === "string"
+          ? result.motivo
+          : null;
+        toast.success(motivo ? `Aula finalizada. ${motivo}.` : "Aula finalizada.");
+      }
+
+      setConfirmarFinalizar(false);
+      onClose();
+      onChanged();
+    } finally {
+      setFinalizando(false);
+    }
+  }
+
   const filteredStudents = search
     ? students.filter(s => s.nome_completo.toLowerCase().includes(search.toLowerCase()))
     : students;
@@ -249,8 +303,10 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   const presentCount = bookings.filter(b => b.status === "presente").length;
   const isCanceled   = slot.status === "cancelado";
+  const isConcluido  = slot.status === "concluido";
   const duration      = slot.duracao_minutos ?? diffMinutes(slot.hora_inicio, slot.hora_fim);
   const leadCount     = bookings.filter(b => b.tipo === "lead" && b.status !== "cancelado").length;
+  const podeFinalizarAula = slot.status === "agendado" || slot.status === "em_andamento";
 
   function initials(name: string | null) {
     return (name ?? "?").split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
@@ -304,6 +360,9 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           )}
           {isCanceled && (
             <span className="ml-auto text-xs font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Cancelada</span>
+          )}
+          {isConcluido && (
+            <span className="ml-auto text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Concluída</span>
           )}
         </div>
 
@@ -438,7 +497,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         </div>
 
         {/* Add panel */}
-        {!isCanceled && (
+        {!isCanceled && !isConcluido && (
           <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0">
             {addMode ? (
               <div ref={searchRef} className="relative">
@@ -496,7 +555,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <button onClick={() => setAddMode("aluno")}
                     className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
@@ -509,9 +568,45 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                     </button>
                   )}
                 </div>
-                <button onClick={() => setCancelingSlot(true)}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors">
-                  Cancelar aula
+                <div className="flex items-center gap-3">
+                  {podeFinalizarAula && !confirmarFinalizar && (
+                    <button
+                      onClick={() => setConfirmarFinalizar(true)}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-green-600 hover:text-green-700 transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Finalizar aula
+                    </button>
+                  )}
+                  {!confirmarFinalizar && (
+                    <button onClick={() => setCancelingSlot(true)}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+                      Cancelar aula
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {confirmarFinalizar && (
+              <div className="flex flex-wrap items-center justify-end gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2 mt-3">
+                <span className="text-sm text-green-800 font-medium mr-auto">Confirmar finalização?</span>
+                {gridComissao?.comissionar_instrutor && (
+                  <span className="text-xs text-green-700">
+                    {gridComissao.tipo_comissao === "por_cliente" ? "Comissão por aluno" : "Comissão por aula"}
+                  </span>
+                )}
+                <button
+                  onClick={handleFinalizarAula}
+                  disabled={finalizando}
+                  className="text-sm font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded-lg disabled:opacity-50"
+                >
+                  {finalizando ? "..." : "Sim"}
+                </button>
+                <button
+                  onClick={() => setConfirmarFinalizar(false)}
+                  className="text-sm font-semibold text-gray-600 hover:text-gray-800 px-2 py-1"
+                >
+                  Não
                 </button>
               </div>
             )}

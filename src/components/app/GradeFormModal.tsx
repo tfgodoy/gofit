@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone } from "lucide-react";
+import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -50,6 +50,11 @@ export interface GridData {
   acesso_tolerancia_atraso_min?:number;
   exibir_app_modo?:             string;
   checkin_app_modo?:            string;
+  comissionar_instrutor?:       boolean;
+  tipo_comissao?:               string | null;
+  valor_comissao_centavos?:     number | null;
+  min_clientes_comissao?:       number | null;
+  considera_faltantes_comissao?:boolean;
 }
 
 interface Props {
@@ -58,7 +63,7 @@ interface Props {
   onSaved:  () => void;
 }
 
-type Tab = "dados" | "permissoes";
+type Tab = "dados" | "permissoes" | "comissao";
 
 function calcDurationMinutes(start?: string, end?: string) {
   if (!start || !end) return 50;
@@ -130,6 +135,11 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     acesso_tolerancia_atraso_min:String(grid?.acesso_tolerancia_atraso_min ?? 5),
     exibir_app_modo:             grid?.exibir_app_modo ?? "todos",
     checkin_app_modo:            grid?.checkin_app_modo ?? "todos",
+    comissionar_instrutor:        grid?.comissionar_instrutor ?? false,
+    tipo_comissao:                grid?.tipo_comissao ?? "por_aula",
+    valor_comissao_centavos:      String(grid?.valor_comissao_centavos ?? ""),
+    min_clientes_comissao:        String(grid?.min_clientes_comissao ?? ""),
+    considera_faltantes_comissao: grid?.considera_faltantes_comissao ?? false,
   });
 
   useEffect(() => {
@@ -238,6 +248,15 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
       acesso_tolerancia_atraso_min:parseInt(form.acesso_tolerancia_atraso_min) || 5,
       exibir_app_modo:             form.exibir_app_modo,
       checkin_app_modo:            form.checkin_app_modo,
+      comissionar_instrutor:        form.comissionar_instrutor,
+      tipo_comissao:                form.comissionar_instrutor ? form.tipo_comissao : null,
+      valor_comissao_centavos:      form.comissionar_instrutor && form.valor_comissao_centavos
+        ? parseInt(form.valor_comissao_centavos)
+        : null,
+      min_clientes_comissao:        form.comissionar_instrutor && form.min_clientes_comissao
+        ? parseInt(form.min_clientes_comissao)
+        : null,
+      considera_faltantes_comissao: form.comissionar_instrutor ? form.considera_faltantes_comissao : false,
     };
 
     setSaving(true);
@@ -267,6 +286,7 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   const TABS: { key: Tab; label: string; Icon: React.ComponentType<{className?: string}> }[] = [
     { key: "dados",      label: "Dados",      Icon: Clock },
     { key: "permissoes", label: "Permissões", Icon: Settings },
+    { key: "comissao",   label: "Comissão",   Icon: DollarSign },
   ];
 
   return (
@@ -619,6 +639,126 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                       <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "comissao" && (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400 mb-4">
+                Configure se e como o instrutor desta grade será comissionado ao finalizar cada aula.
+              </p>
+
+              {!form.staff_id && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4">
+                  <p className="text-xs text-yellow-800">
+                    Defina um professor na aba Dados para configurar comissão.
+                  </p>
+                </div>
+              )}
+
+              <div className={`space-y-2 ${!form.staff_id ? "opacity-40 pointer-events-none" : ""}`}>
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <Toggle
+                    value={form.comissionar_instrutor}
+                    onChange={v => setForm(f => ({ ...f, comissionar_instrutor: v }))}
+                    label="Comissionar instrutor"
+                    description="Gerar comissão automaticamente ao finalizar cada aula"
+                  />
+                </div>
+
+                {form.comissionar_instrutor && (
+                  <>
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">
+                        Tipo de comissão
+                      </p>
+                      <div className="flex gap-3">
+                        {[
+                          { value: "por_aula", label: "Por aula", desc: "Valor fixo por aula dada" },
+                          { value: "por_cliente", label: "Por aluno", desc: "Valor x nº de alunos presentes" },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, tipo_comissao: opt.value }))}
+                            className={`flex-1 border rounded-xl p-3 text-left transition-colors ${
+                              form.tipo_comissao === opt.value
+                                ? "border-primary bg-primary/5"
+                                : "border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <p className={`text-sm font-semibold ${form.tipo_comissao === opt.value ? "text-primary" : "text-gray-700"}`}>
+                              {opt.label}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">
+                        Valor {form.tipo_comissao === "por_cliente" ? "por aluno presente" : "por aula"} *
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">R$</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={form.valor_comissao_centavos
+                            ? (parseInt(form.valor_comissao_centavos) / 100).toFixed(2).replace(".", ",")
+                            : ""}
+                          onChange={e => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            setForm(f => ({ ...f, valor_comissao_centavos: digits }));
+                          }}
+                          className="w-36 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          placeholder="0,00"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {form.tipo_comissao === "por_cliente"
+                          ? "Ex: R$ 3,00 por aluno, 6 alunos = R$ 18,00"
+                          : "Ex: R$ 15,00 independente do número de alunos"}
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <Toggle
+                        value={!!form.min_clientes_comissao}
+                        onChange={v => setForm(f => ({
+                          ...f,
+                          min_clientes_comissao: v ? "4" : "",
+                        }))}
+                        label="Exigir mínimo de alunos"
+                        description="Só comissiona se houver pelo menos N alunos presentes"
+                      />
+                      {!!form.min_clientes_comissao && (
+                        <div className="mt-3 ml-4">
+                          <label className="block text-xs font-semibold text-gray-500 mb-1">
+                            Mínimo de alunos
+                          </label>
+                          <input
+                            type="number" min="1" max="100"
+                            value={form.min_clientes_comissao}
+                            onChange={e => setForm(f => ({ ...f, min_clientes_comissao: e.target.value }))}
+                            className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <Toggle
+                        value={form.considera_faltantes_comissao}
+                        onChange={v => setForm(f => ({ ...f, considera_faltantes_comissao: v }))}
+                        label="Considerar clientes faltantes"
+                        description="Alunos com falta contam no cálculo da comissão"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             </div>

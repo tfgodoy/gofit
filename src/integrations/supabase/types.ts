@@ -1520,6 +1520,11 @@ export interface Database {
           acesso_tolerancia_atraso_min:number | null;
           exibir_app_modo:            string;
           checkin_app_modo:           string;
+          comissionar_instrutor:      boolean;
+          tipo_comissao:              string | null;
+          valor_comissao_centavos:    number | null;
+          min_clientes_comissao:      number | null;
+          considera_faltantes_comissao:boolean;
           created_at:                 string;
         };
         Insert: {
@@ -1553,6 +1558,11 @@ export interface Database {
           acesso_tolerancia_atraso_min?:number | null;
           exibir_app_modo?:           string;
           checkin_app_modo?:          string;
+          comissionar_instrutor?:     boolean;
+          tipo_comissao?:             string | null;
+          valor_comissao_centavos?:   number | null;
+          min_clientes_comissao?:     number | null;
+          considera_faltantes_comissao?:boolean;
           created_at?:                string;
         };
         Update: {
@@ -1586,6 +1596,11 @@ export interface Database {
           acesso_tolerancia_atraso_min?:number | null;
           exibir_app_modo?:           string;
           checkin_app_modo?:          string;
+          comissionar_instrutor?:     boolean;
+          tipo_comissao?:             string | null;
+          valor_comissao_centavos?:   number | null;
+          min_clientes_comissao?:     number | null;
+          considera_faltantes_comissao?:boolean;
           created_at?:                string;
         };
         Relationships: [];
@@ -3035,7 +3050,12 @@ export interface Database {
       };
     };
     Functions: {
-      [_ in never]: never;
+      calcular_comissao_aula: {
+        Args: {
+          p_slot_id: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       staff_role: StaffRole;

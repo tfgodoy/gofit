@@ -36,6 +36,11 @@ interface Grid {
   acesso_tolerancia_atraso_min:number;
   exibir_app_modo:             string;
   checkin_app_modo:            string;
+  comissionar_instrutor:       boolean;
+  tipo_comissao:               string | null;
+  valor_comissao_centavos:     number | null;
+  min_clientes_comissao:       number | null;
+  considera_faltantes_comissao:boolean;
   created_at:        string;
 }
 
@@ -214,6 +219,11 @@ export default function GradesPage() {
                                   acesso_tolerancia_atraso_min:g.acesso_tolerancia_atraso_min,
                                   exibir_app_modo:             g.exibir_app_modo,
                                   checkin_app_modo:            g.checkin_app_modo,
+                                  comissionar_instrutor:        g.comissionar_instrutor,
+                                  tipo_comissao:                g.tipo_comissao,
+                                  valor_comissao_centavos:      g.valor_comissao_centavos,
+                                  min_clientes_comissao:        g.min_clientes_comissao,
+                                  considera_faltantes_comissao: g.considera_faltantes_comissao,
                                 });
                                 setShowForm(true);
                               }}
