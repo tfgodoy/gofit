@@ -23,6 +23,8 @@ interface GridPerms {
   permite_leads:              boolean;
   permite_clientes_especiais: boolean;
   fila_espera_ativa:          boolean;
+  max_leads?:                 number | null;
+  max_clientes_especiais?:    number | null;
 }
 
 interface Booking {
@@ -131,7 +133,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
     if (slot.grid_id) {
       supabase.from("schedule_grids")
-        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa")
+        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa, max_leads, max_clientes_especiais")
         .eq("id", slot.grid_id).single()
         .then(({ data }) => setPerms(data as GridPerms | null));
     }
@@ -182,6 +184,15 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     let insertPayload: Record<string, unknown>;
 
     if (addMode === "aluno" && selectedStudent) {
+      if (perms?.max_clientes_especiais) {
+        const countEspeciais = bookings.filter(b => b.tipo === "especial" && b.status !== "cancelado").length;
+        if (countEspeciais >= perms.max_clientes_especiais) {
+          toast.error(`Limite atingido: máximo de ${perms.max_clientes_especiais} clientes especiais.`);
+          setAdding(false);
+          return;
+        }
+      }
+
       insertPayload = {
         contractor_id: user.contractorId!,
         slot_id:       slot.id,
@@ -191,6 +202,15 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         status,
       };
     } else if (addMode === "lead" && selectedLead) {
+      if (perms?.max_leads) {
+        const countLeads = bookings.filter(b => b.tipo === "lead" && b.status !== "cancelado").length;
+        if (countLeads >= perms.max_leads) {
+          toast.error(`Limite atingido: máximo de ${perms.max_leads} leads nesta aula.`);
+          setAdding(false);
+          return;
+        }
+      }
+
       insertPayload = {
         contractor_id: user.contractorId!,
         slot_id:       slot.id,
@@ -230,6 +250,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const presentCount = bookings.filter(b => b.status === "presente").length;
   const isCanceled   = slot.status === "cancelado";
   const duration      = slot.duracao_minutos ?? diffMinutes(slot.hora_inicio, slot.hora_fim);
+  const leadCount     = bookings.filter(b => b.tipo === "lead" && b.status !== "cancelado").length;
 
   function initials(name: string | null) {
     return (name ?? "?").split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
@@ -274,6 +295,11 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           {bookings.filter(b => b.status === "lista_espera").length > 0 && (
             <span className="text-yellow-600 font-medium text-xs">
               {bookings.filter(b => b.status === "lista_espera").length} na fila
+            </span>
+          )}
+          {perms?.max_leads && (
+            <span className="text-orange-600 font-medium text-xs">
+              {leadCount}/{perms.max_leads} leads
             </span>
           )}
           {isCanceled && (

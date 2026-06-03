@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, ChevronDown, Settings, Clock, Users } from "lucide-react";
+import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -39,9 +39,17 @@ export interface GridData {
   cor?:                       string;
   permite_leads?:             boolean;
   permite_clientes_especiais?:boolean;
+  max_clientes_especiais?:    number | null;
+  max_leads?:                 number | null;
   fila_espera_ativa?:         boolean;
   antecedencia_checkin_min?:  number;
   encerramento_checkin_min?:  number;
+  permite_cancelar_checkin?:    boolean;
+  cancelar_checkin_limite_min?: number;
+  acesso_antecedencia_min?:     number;
+  acesso_tolerancia_atraso_min?:number;
+  exibir_app_modo?:             string;
+  checkin_app_modo?:            string;
 }
 
 interface Props {
@@ -95,6 +103,8 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   const [staffList,   setStaffList]   = useState<StaffMember[]>([]);
   const [unitList,    setUnitList]    = useState<Unit[]>([]);
   const [saving, setSaving]           = useState(false);
+  const [showAcesso, setShowAcesso]   = useState(false);
+  const [showApp,    setShowApp]      = useState(false);
 
   const [form, setForm] = useState({
     tipo:                       grid?.tipo                       ?? "contrato",
@@ -109,9 +119,17 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     cor:                        grid?.cor                        ?? "#f97316",
     permite_leads:              grid?.permite_leads              ?? false,
     permite_clientes_especiais: grid?.permite_clientes_especiais ?? false,
+    max_clientes_especiais:     String(grid?.max_clientes_especiais ?? ""),
+    max_leads:                  String(grid?.max_leads ?? ""),
     fila_espera_ativa:          grid?.fila_espera_ativa          ?? false,
     antecedencia_checkin_min:   String(grid?.antecedencia_checkin_min  ?? 0),
     encerramento_checkin_min:   String(grid?.encerramento_checkin_min  ?? 0),
+    permite_cancelar_checkin:    grid?.permite_cancelar_checkin ?? true,
+    cancelar_checkin_limite_min: String(grid?.cancelar_checkin_limite_min ?? 10),
+    acesso_antecedencia_min:     String(grid?.acesso_antecedencia_min ?? 10),
+    acesso_tolerancia_atraso_min:String(grid?.acesso_tolerancia_atraso_min ?? 5),
+    exibir_app_modo:             grid?.exibir_app_modo ?? "todos",
+    checkin_app_modo:            grid?.checkin_app_modo ?? "todos",
   });
 
   useEffect(() => {
@@ -209,9 +227,17 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
       cor:                        form.cor,
       permite_leads:              form.permite_leads,
       permite_clientes_especiais: form.permite_clientes_especiais,
+      max_clientes_especiais:     form.max_clientes_especiais ? parseInt(form.max_clientes_especiais) : null,
+      max_leads:                  form.max_leads ? parseInt(form.max_leads) : null,
       fila_espera_ativa:          form.fila_espera_ativa,
       antecedencia_checkin_min:   parseInt(form.antecedencia_checkin_min) || 0,
       encerramento_checkin_min:   parseInt(form.encerramento_checkin_min) || 0,
+      permite_cancelar_checkin:    form.permite_cancelar_checkin,
+      cancelar_checkin_limite_min: parseInt(form.cancelar_checkin_limite_min) || 10,
+      acesso_antecedencia_min:     parseInt(form.acesso_antecedencia_min) || 10,
+      acesso_tolerancia_atraso_min:parseInt(form.acesso_tolerancia_atraso_min) || 5,
+      exibir_app_modo:             form.exibir_app_modo,
+      checkin_app_modo:            form.checkin_app_modo,
     };
 
     setSaving(true);
@@ -419,12 +445,38 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                   label="Permite agendar leads"
                   description="Leads do CRM podem ser adicionados nesta aula"
                 />
+                {form.permite_leads && (
+                  <div className="ml-4 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Máximo de leads por aula</label>
+                    <input
+                      type="number" min="0" max="100"
+                      value={form.max_leads}
+                      onChange={e => setForm(f => ({ ...f, max_leads: e.target.value }))}
+                      className="w-32 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      placeholder="sem limite"
+                    />
+                    <p className="text-xs text-gray-400 mt-0.5">Deixe em branco para ilimitado</p>
+                  </div>
+                )}
                 <Toggle
                   value={form.permite_clientes_especiais}
                   onChange={v => setForm(f => ({ ...f, permite_clientes_especiais: v }))}
                   label="Permite clientes especiais"
                   description="Alunos sem contrato ativo na modalidade"
                 />
+                {form.permite_clientes_especiais && (
+                  <div className="ml-4 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Máximo de clientes especiais por aula</label>
+                    <input
+                      type="number" min="0" max="100"
+                      value={form.max_clientes_especiais}
+                      onChange={e => setForm(f => ({ ...f, max_clientes_especiais: e.target.value }))}
+                      className="w-32 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      placeholder="sem limite"
+                    />
+                    <p className="text-xs text-gray-400 mt-0.5">Deixe em branco para ilimitado</p>
+                  </div>
+                )}
               </div>
 
               <div className="bg-gray-50 rounded-xl p-4">
@@ -467,6 +519,107 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                 <p className="text-xs text-gray-400 mt-2">
                   Ex: Abre 60 min antes, fecha 15 min antes do início da aula.
                 </p>
+                <div className="border-t border-gray-100 mt-3 pt-3">
+                  <Toggle
+                    value={form.permite_cancelar_checkin}
+                    onChange={v => setForm(f => ({ ...f, permite_cancelar_checkin: v }))}
+                    label="Permite cancelar check-in"
+                    description="O aluno pode cancelar sua presença pelo app"
+                  />
+                  {form.permite_cancelar_checkin && (
+                    <div className="ml-4 mt-1">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">
+                        Até quantos minutos antes pode cancelar
+                      </label>
+                      <input
+                        type="number" min="0" max="1440"
+                        value={form.cancelar_checkin_limite_min}
+                        onChange={e => setForm(f => ({ ...f, cancelar_checkin_limite_min: e.target.value }))}
+                        className="w-32 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        placeholder="Ex: 10"
+                      />
+                      <p className="text-xs text-gray-400 mt-0.5">Ex: 10 = pode cancelar até 10 min antes do início</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAcesso(v => !v)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-gray-500" />
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Controle de Acesso Físico</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAcesso ? "rotate-180" : ""}`} />
+                </button>
+                <p className="text-xs text-gray-400 mt-1">Configure as janelas de tempo para integração com catraca ou biometria.</p>
+                {showAcesso && (
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Pode entrar (min antes)</label>
+                      <input
+                        type="number" min="0" max="120"
+                        value={form.acesso_antecedencia_min}
+                        onChange={e => setForm(f => ({ ...f, acesso_antecedencia_min: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        placeholder="10"
+                      />
+                      <p className="text-xs text-gray-400 mt-0.5">Antes do início</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Tolerância de atraso (min)</label>
+                      <input
+                        type="number" min="0" max="60"
+                        value={form.acesso_tolerancia_atraso_min}
+                        onChange={e => setForm(f => ({ ...f, acesso_tolerancia_atraso_min: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        placeholder="5"
+                      />
+                      <p className="text-xs text-gray-400 mt-0.5">Após o início</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <button
+                  type="button"
+                  onClick={() => setShowApp(v => !v)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-gray-500" />
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">App do Aluno</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showApp ? "rotate-180" : ""}`} />
+                </button>
+                <p className="text-xs text-gray-400 mt-1">Controle quem vê e quem pode fazer check-in pelo aplicativo.</p>
+                {showApp && (
+                  <div className="space-y-4 mt-4">
+                    <div className="relative">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Exibir grade no app para</label>
+                      <select className={SEL} value={form.exibir_app_modo}
+                        onChange={e => setForm(f => ({ ...f, exibir_app_modo: e.target.value }))}>
+                        <option value="todos">Todos os alunos</option>
+                        <option value="contrato_ativo">Só alunos com contrato ativo na modalidade</option>
+                      </select>
+                      <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                    </div>
+                    <div className="relative">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Permite check-in pelo app para</label>
+                      <select className={SEL} value={form.checkin_app_modo}
+                        onChange={e => setForm(f => ({ ...f, checkin_app_modo: e.target.value }))}>
+                        <option value="todos">Todos os alunos</option>
+                        <option value="contrato_ativo">Só alunos com contrato ativo na modalidade</option>
+                      </select>
+                      <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

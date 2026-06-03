@@ -1509,9 +1509,17 @@ export interface Database {
           ativo:                      boolean;
           permite_leads:              boolean;
           permite_clientes_especiais: boolean;
+          max_clientes_especiais:     number | null;
+          max_leads:                  number | null;
           fila_espera_ativa:          boolean;
           antecedencia_checkin_min:   number;
           encerramento_checkin_min:   number;
+          permite_cancelar_checkin:   boolean;
+          cancelar_checkin_limite_min:number | null;
+          acesso_antecedencia_min:    number | null;
+          acesso_tolerancia_atraso_min:number | null;
+          exibir_app_modo:            string;
+          checkin_app_modo:           string;
           created_at:                 string;
         };
         Insert: {
@@ -1534,9 +1542,17 @@ export interface Database {
           ativo?:                     boolean;
           permite_leads?:             boolean;
           permite_clientes_especiais?:boolean;
+          max_clientes_especiais?:    number | null;
+          max_leads?:                 number | null;
           fila_espera_ativa?:         boolean;
           antecedencia_checkin_min?:  number;
           encerramento_checkin_min?:  number;
+          permite_cancelar_checkin?:  boolean;
+          cancelar_checkin_limite_min?:number | null;
+          acesso_antecedencia_min?:   number | null;
+          acesso_tolerancia_atraso_min?:number | null;
+          exibir_app_modo?:           string;
+          checkin_app_modo?:          string;
           created_at?:                string;
         };
         Update: {
@@ -1559,9 +1575,17 @@ export interface Database {
           ativo?:                     boolean;
           permite_leads?:             boolean;
           permite_clientes_especiais?:boolean;
+          max_clientes_especiais?:    number | null;
+          max_leads?:                 number | null;
           fila_espera_ativa?:         boolean;
           antecedencia_checkin_min?:  number;
           encerramento_checkin_min?:  number;
+          permite_cancelar_checkin?:  boolean;
+          cancelar_checkin_limite_min?:number | null;
+          acesso_antecedencia_min?:   number | null;
+          acesso_tolerancia_atraso_min?:number | null;
+          exibir_app_modo?:           string;
+          checkin_app_modo?:          string;
           created_at?:                string;
         };
         Relationships: [];

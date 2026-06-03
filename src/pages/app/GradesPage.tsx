@@ -25,9 +25,17 @@ interface Grid {
   ativo:             boolean;
   permite_leads:              boolean;
   permite_clientes_especiais: boolean;
+  max_clientes_especiais:     number | null;
+  max_leads:                  number | null;
   fila_espera_ativa:          boolean;
   antecedencia_checkin_min:   number;
   encerramento_checkin_min:   number;
+  permite_cancelar_checkin:    boolean;
+  cancelar_checkin_limite_min: number;
+  acesso_antecedencia_min:     number;
+  acesso_tolerancia_atraso_min:number;
+  exibir_app_modo:             string;
+  checkin_app_modo:            string;
   created_at:        string;
 }
 
@@ -195,9 +203,17 @@ export default function GradesPage() {
                                   cor:                        g.cor,
                                   permite_leads:              g.permite_leads,
                                   permite_clientes_especiais: g.permite_clientes_especiais,
+                                  max_clientes_especiais:     g.max_clientes_especiais,
+                                  max_leads:                  g.max_leads,
                                   fila_espera_ativa:          g.fila_espera_ativa,
                                   antecedencia_checkin_min:   g.antecedencia_checkin_min,
                                   encerramento_checkin_min:   g.encerramento_checkin_min,
+                                  permite_cancelar_checkin:    g.permite_cancelar_checkin,
+                                  cancelar_checkin_limite_min: g.cancelar_checkin_limite_min,
+                                  acesso_antecedencia_min:     g.acesso_antecedencia_min,
+                                  acesso_tolerancia_atraso_min:g.acesso_tolerancia_atraso_min,
+                                  exibir_app_modo:             g.exibir_app_modo,
+                                  checkin_app_modo:            g.checkin_app_modo,
                                 });
                                 setShowForm(true);
                               }}
