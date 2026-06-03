@@ -3,8 +3,8 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2,
-  MapPin, Phone, Calendar, Clock, Users, ClipboardList,
-  Dumbbell, ArrowRight, AlertCircle,
+  MapPin, Phone, Calendar, Clock, ClipboardList,
+  Dumbbell, ArrowRight, AlertCircle, Copy, MessageCircle,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
@@ -372,7 +372,61 @@ export default function BookingPage() {
         .update({ anamnese_resposta_id: anamRec.id })
         .eq("id", booking.id);
 
-      setAnamneseLink(`${window.location.origin}/anamnese/${token}`);
+      const origem = window.location.origin;
+      const aLink  = `${origem}/anamnese/${token}`;
+      setAnamneseLink(aLink);
+
+      /* 6 — Notificação in-app para a academia */
+      const dataFormatada = selectedDate
+        ? new Date(selectedDate + "T12:00:00").toLocaleDateString("pt-BR", {
+            weekday: "short", day: "numeric", month: "short",
+          })
+        : "";
+      await supabase.from("notifications").insert({
+        contractor_id: contractorId!,
+        tipo:          "novo_agendamento",
+        titulo:        "Nova aula experimental agendada",
+        mensagem:      `${form.nome} agendou ${selectedMod?.descricao ?? ""} para ${dataFormatada} às ${selectedSlot ? fmtHora(selectedSlot.hora_inicio) : ""}`,
+        lido:          false,
+        student_id:    studentId,
+        link:          "/app/crm/oportunidades",
+      });
+
+      /* 7 — Edge Function: email de confirmação para o lead */
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey     = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const enderecoAcademia = contractor
+        ? [contractor.logradouro, contractor.numero, contractor.bairro, contractor.cidade, contractor.uf]
+            .filter(Boolean).join(", ")
+        : null;
+      fetch(`${supabaseUrl}/functions/v1/booking-confirmacao`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey":        anonKey,
+        },
+        body: JSON.stringify({
+          lead_email:    form.email.trim() || null,
+          lead_nome:     form.nome.trim(),
+          lead_telefone: form.telefone.replace(/\D/g, "") || null,
+          anamnese_link: aLink,
+          modalidade:    selectedMod?.descricao ?? "",
+          data_fmt:      selectedDate
+            ? new Date(selectedDate + "T12:00:00").toLocaleDateString("pt-BR", {
+                weekday: "long", day: "numeric", month: "long",
+              })
+            : "",
+          hora_fmt:      selectedSlot
+            ? `${fmtHora(selectedSlot.hora_inicio)} — ${fmtHora(selectedSlot.hora_fim)}`
+            : "",
+          professor:     selectedSlot?.staff_nome ?? null,
+          academia_nome: contractor?.nome_fantasia || contractor?.razao_social || "",
+          academia_fone: contractor?.fone ?? null,
+          academia_end:  enderecoAcademia,
+        }),
+      }).catch(() => {}); // fire-and-forget, não bloqueia confirmação
+
       setStep("confirmacao");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado. Tente novamente.");
@@ -821,9 +875,40 @@ export default function BookingPage() {
               )}
             </div>
 
-            <div className="text-xs text-gray-400 space-y-1">
-              <p>O link da ficha de saúde também ficou salvo no seu cadastro.</p>
-              <p>Qualquer dúvida, entre em contato: <strong>{contractor?.fone}</strong></p>
+            {/* Compartilhar ficha */}
+            {anamneseLink && (
+              <div className="w-full grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    const msg = encodeURIComponent(
+                      `Olá! Acabei de agendar minha aula experimental na ${nome}.\n\nPreciso preencher minha ficha de saúde antes da aula:\n${anamneseLink}`
+                    );
+                    window.open(`https://wa.me/?text=${msg}`, "_blank");
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                  style={{ backgroundColor: "#25d366" }}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Enviar pelo WhatsApp
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(anamneseLink);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold border-2 active:scale-95 transition-transform"
+                  style={{ borderColor: cor, color: cor }}
+                >
+                  <Copy className="w-4 h-4" />
+                  Copiar link
+                </button>
+              </div>
+            )}
+
+            <div className="text-xs text-gray-400 space-y-1 text-center">
+              <p>O link da ficha fica salvo no seu cadastro.</p>
+              {contractor?.fone && (
+                <p>Dúvidas? <strong>{contractor.fone}</strong></p>
+              )}
             </div>
           </div>
         )}
