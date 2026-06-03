@@ -209,6 +209,12 @@ Resultado:
 
 - O aluno consegue cancelar até 10 minutos antes da aula.
 
+Regra importante:
+
+- O tempo para cancelar check-in precisa ser igual ou maior que o tempo de fechamento do check-in.
+- Exemplo: se o check-in fecha 10 minutos antes da aula, o cancelamento também deve ser permitido até pelo menos 10 minutos antes.
+- O sistema ajusta ou bloqueia valores menores para evitar inconsistência.
+
 ## 10. Controle de Acesso Físico
 
 Use essa seção para configurar a janela de entrada em catraca, biometria ou controle físico.

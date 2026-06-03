@@ -108,6 +108,18 @@ function minutesFromAmount(amount: string, unit: TimeUnit) {
   return String(Number.isFinite(parsed) && parsed > 0 ? parsed * factor : 0);
 }
 
+function formatMinutesLabel(minutes: number) {
+  if (minutes > 0 && minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `${days} dia${days !== 1 ? "s" : ""}`;
+  }
+  if (minutes > 0 && minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} hora${hours !== 1 ? "s" : ""}`;
+  }
+  return `${minutes} minuto${minutes !== 1 ? "s" : ""}`;
+}
+
 function Toggle({ value, onChange, label, description }: {
   value: boolean; onChange: (v: boolean) => void; label: string; description?: string;
 }) {
@@ -143,6 +155,10 @@ function TimeAmountInput({
 }) {
   const [unit, setUnit] = useState<TimeUnit>(() => getBestTimeUnit(valueMinutes));
   const amount = getTimeAmount(valueMinutes, unit);
+
+  useEffect(() => {
+    setUnit(getBestTimeUnit(valueMinutes));
+  }, [valueMinutes]);
 
   return (
     <div>
@@ -292,6 +308,14 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
       toast.error("Informe uma duração válida (mínimo 5 minutos).");
       return;
     }
+    const encerramentoCheckin = parseInt(form.encerramento_checkin_min) || 0;
+    const limiteCancelamento = parseInt(form.cancelar_checkin_limite_min) || 0;
+    if (form.permite_cancelar_checkin && limiteCancelamento < encerramentoCheckin) {
+      toast.error(
+        `O cancelamento deve ser permitido até pelo menos ${formatMinutesLabel(encerramentoCheckin)} antes da aula, igual ou maior que o fechamento do check-in.`
+      );
+      return;
+    }
 
     const selectedMod   = modalidades.find(m => m.id === form.modalidade_id);
     const selectedStaff = staffList.find(s => s.id === form.staff_id);
@@ -319,9 +343,9 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
       max_leads:                  form.max_leads ? parseInt(form.max_leads) : null,
       fila_espera_ativa:          form.fila_espera_ativa,
       antecedencia_checkin_min:   parseInt(form.antecedencia_checkin_min) || 0,
-      encerramento_checkin_min:   parseInt(form.encerramento_checkin_min) || 0,
+      encerramento_checkin_min:   encerramentoCheckin,
       permite_cancelar_checkin:    form.permite_cancelar_checkin,
-      cancelar_checkin_limite_min: parseInt(form.cancelar_checkin_limite_min) || 10,
+      cancelar_checkin_limite_min: form.permite_cancelar_checkin ? Math.max(limiteCancelamento, encerramentoCheckin) : 10,
       acesso_antecedencia_min:     parseInt(form.acesso_antecedencia_min) || 10,
       acesso_tolerancia_atraso_min:parseInt(form.acesso_tolerancia_atraso_min) || 5,
       exibir_app_modo:             form.exibir_app_modo,
@@ -600,7 +624,17 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                   <TimeAmountInput
                     label="Fecha check-in antes da aula"
                     valueMinutes={form.encerramento_checkin_min}
-                    onChangeMinutes={value => setForm(f => ({ ...f, encerramento_checkin_min: value }))}
+                    onChangeMinutes={value => setForm(f => {
+                      const nextEncerramento = parseInt(value) || 0;
+                      const cancelamentoAtual = parseInt(f.cancelar_checkin_limite_min) || 0;
+                      return {
+                        ...f,
+                        encerramento_checkin_min: value,
+                        cancelar_checkin_limite_min: f.permite_cancelar_checkin && cancelamentoAtual < nextEncerramento
+                          ? value
+                          : f.cancelar_checkin_limite_min,
+                      };
+                    })}
                     description="0 = não fecha"
                   />
                 </div>
@@ -619,8 +653,15 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                       <TimeAmountInput
                         label="Pode cancelar até"
                         valueMinutes={form.cancelar_checkin_limite_min}
-                        onChangeMinutes={value => setForm(f => ({ ...f, cancelar_checkin_limite_min: value }))}
-                        description="Tempo antes do início da aula"
+                        onChangeMinutes={value => setForm(f => {
+                          const encerramento = parseInt(f.encerramento_checkin_min) || 0;
+                          const cancelamento = parseInt(value) || 0;
+                          return {
+                            ...f,
+                            cancelar_checkin_limite_min: String(Math.max(cancelamento, encerramento)),
+                          };
+                        })}
+                        description={`Mínimo: ${formatMinutesLabel(parseInt(form.encerramento_checkin_min) || 0)} antes da aula`}
                       />
                     </div>
                   )}
