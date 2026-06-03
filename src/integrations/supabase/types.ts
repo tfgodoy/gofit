@@ -1525,6 +1525,8 @@ export interface Database {
           valor_comissao_centavos:    number | null;
           min_clientes_comissao:      number | null;
           considera_faltantes_comissao:boolean;
+          restricao_genero:           string | null;
+          agenda_livre:               boolean;
           created_at:                 string;
         };
         Insert: {
@@ -1563,6 +1565,8 @@ export interface Database {
           valor_comissao_centavos?:   number | null;
           min_clientes_comissao?:     number | null;
           considera_faltantes_comissao?:boolean;
+          restricao_genero?:          string | null;
+          agenda_livre?:              boolean;
           created_at?:                string;
         };
         Update: {
@@ -1601,6 +1605,8 @@ export interface Database {
           valor_comissao_centavos?:   number | null;
           min_clientes_comissao?:     number | null;
           considera_faltantes_comissao?:boolean;
+          restricao_genero?:          string | null;
+          agenda_livre?:              boolean;
           created_at?:                string;
         };
         Relationships: [];
@@ -1683,6 +1689,7 @@ export interface Database {
           checkin_em:           string | null;
           observacoes:          string | null;
           anamnese_resposta_id: string | null;
+          descontou_contrato:   boolean;
           created_at:           string;
         };
         Insert: {
@@ -1699,6 +1706,7 @@ export interface Database {
           checkin_em?:           string | null;
           observacoes?:          string | null;
           anamnese_resposta_id?: string | null;
+          descontou_contrato?:   boolean;
           created_at?:           string;
         };
         Update: {
@@ -1715,6 +1723,7 @@ export interface Database {
           checkin_em?:           string | null;
           observacoes?:          string | null;
           anamnese_resposta_id?: string | null;
+          descontou_contrato?:   boolean;
           created_at?:           string;
         };
         Relationships: [];

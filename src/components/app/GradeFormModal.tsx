@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign } from "lucide-react";
+import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -55,6 +55,8 @@ export interface GridData {
   valor_comissao_centavos?:     number | null;
   min_clientes_comissao?:       number | null;
   considera_faltantes_comissao?:boolean;
+  restricao_genero?:            string | null;
+  agenda_livre?:                boolean;
 }
 
 interface Props {
@@ -110,6 +112,7 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   const [saving, setSaving]           = useState(false);
   const [showAcesso, setShowAcesso]   = useState(false);
   const [showApp,    setShowApp]      = useState(false);
+  const [showAvancado, setShowAvancado] = useState(false);
 
   const [form, setForm] = useState({
     tipo:                       grid?.tipo                       ?? "contrato",
@@ -140,6 +143,8 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     valor_comissao_centavos:      String(grid?.valor_comissao_centavos ?? ""),
     min_clientes_comissao:        String(grid?.min_clientes_comissao ?? ""),
     considera_faltantes_comissao: grid?.considera_faltantes_comissao ?? false,
+    restricao_genero:             grid?.restricao_genero ?? "",
+    agenda_livre:                 grid?.agenda_livre ?? false,
   });
 
   useEffect(() => {
@@ -257,6 +262,8 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
         ? parseInt(form.min_clientes_comissao)
         : null,
       considera_faltantes_comissao: form.comissionar_instrutor ? form.considera_faltantes_comissao : false,
+      restricao_genero:             form.restricao_genero || null,
+      agenda_livre:                 form.agenda_livre,
     };
 
     setSaving(true);
@@ -637,6 +644,97 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                         <option value="contrato_ativo">Só alunos com contrato ativo na modalidade</option>
                       </select>
                       <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAvancado(v => !v)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-gray-500" />
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                      Configurações Avançadas
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAvancado ? "rotate-180" : ""}`} />
+                </button>
+                <p className="text-xs text-gray-400 mt-1">
+                  Restrições de público e comportamento de cobrança.
+                </p>
+
+                {showAvancado && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <div className="flex items-start justify-between gap-4 py-2">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800">Restringir por gênero</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Somente alunos do gênero selecionado poderão ser adicionados nesta aula
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            restricao_genero: f.restricao_genero ? "" : "feminino",
+                          }))}
+                          className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 mt-0.5 ${
+                            form.restricao_genero ? "bg-primary" : "bg-gray-200"
+                          }`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                            form.restricao_genero ? "translate-x-5" : "translate-x-0.5"
+                          }`} />
+                        </button>
+                      </div>
+
+                      {form.restricao_genero && (
+                        <div className="ml-4 flex gap-2 mt-1">
+                          {[
+                            { value: "feminino", label: "Feminino" },
+                            { value: "masculino", label: "Masculino" },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, restricao_genero: opt.value }))}
+                              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                                form.restricao_genero === opt.value
+                                  ? "bg-primary text-white"
+                                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between gap-4 py-2 border-t border-gray-100 pt-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800">Agenda livre</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Alunos com contrato ativo podem participar sem consumir sessões ou créditos do plano.
+                          Útil para aulas de demonstração, eventos e aulas bônus.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, agenda_livre: !f.agenda_livre }))}
+                        className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 mt-0.5 ${
+                          form.agenda_livre ? "bg-primary" : "bg-gray-200"
+                        }`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          form.agenda_livre ? "translate-x-5" : "translate-x-0.5"
+                        }`} />
+                      </button>
                     </div>
                   </div>
                 )}

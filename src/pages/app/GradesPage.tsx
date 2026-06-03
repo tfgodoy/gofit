@@ -41,6 +41,8 @@ interface Grid {
   valor_comissao_centavos:     number | null;
   min_clientes_comissao:       number | null;
   considera_faltantes_comissao:boolean;
+  restricao_genero:            string | null;
+  agenda_livre:                boolean;
   created_at:        string;
 }
 
@@ -224,6 +226,8 @@ export default function GradesPage() {
                                   valor_comissao_centavos:      g.valor_comissao_centavos,
                                   min_clientes_comissao:        g.min_clientes_comissao,
                                   considera_faltantes_comissao: g.considera_faltantes_comissao,
+                                  restricao_genero:             g.restricao_genero,
+                                  agenda_livre:                 g.agenda_livre,
                                 });
                                 setShowForm(true);
                               }}

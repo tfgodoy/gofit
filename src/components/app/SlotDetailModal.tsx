@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink, MapPin } from "lucide-react";
+import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink, MapPin, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -25,6 +25,8 @@ interface GridPerms {
   fila_espera_ativa:          boolean;
   max_leads?:                 number | null;
   max_clientes_especiais?:    number | null;
+  restricao_genero?:          string | null;
+  agenda_livre?:              boolean;
 }
 
 interface GridComissao {
@@ -144,7 +146,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
     if (slot.grid_id) {
       supabase.from("schedule_grids")
-        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa, max_leads, max_clientes_especiais, comissionar_instrutor, tipo_comissao, valor_comissao_centavos, staff_nome")
+        .select("permite_leads, permite_clientes_especiais, fila_espera_ativa, max_leads, max_clientes_especiais, comissionar_instrutor, tipo_comissao, valor_comissao_centavos, staff_nome, restricao_genero, agenda_livre")
         .eq("id", slot.grid_id).single()
         .then(({ data }) => {
           setPerms(data as GridPerms | null);
@@ -207,6 +209,23 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         }
       }
 
+      if (perms?.restricao_genero) {
+        const { data: studentData } = await supabase
+          .from("students")
+          .select("sexo")
+          .eq("id", selectedStudent.id)
+          .single();
+
+        const sexoAluno = studentData?.sexo;
+
+        if (sexoAluno && sexoAluno !== perms.restricao_genero) {
+          const label = perms.restricao_genero === "feminino" ? "feminino" : "masculino";
+          toast.error(`Esta grade é restrita ao público ${label}.`);
+          setAdding(false);
+          return;
+        }
+      }
+
       insertPayload = {
         contractor_id: user.contractorId!,
         slot_id:       slot.id,
@@ -214,6 +233,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         student_nome:  selectedStudent.nome_completo,
         tipo:          "aluno",
         status,
+        descontou_contrato: !(perms?.agenda_livre ?? false),
       };
     } else if (addMode === "lead" && selectedLead) {
       if (perms?.max_leads) {
@@ -232,6 +252,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         lead_nome:     selectedLead.nome,
         tipo:          "lead",
         status,
+        descontou_contrato: !(perms?.agenda_livre ?? false),
       };
     } else {
       toast.error("Selecione um aluno ou lead."); setAdding(false); return;
@@ -322,6 +343,11 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           <div className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: slot.cor }} />
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-900">{slot.modalidade_nome ?? "Aula"}</p>
+            {perms?.agenda_livre && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 mt-1">
+                <Zap className="w-3 h-3" /> Agenda livre
+              </span>
+            )}
             <p className="text-sm text-gray-500">
               {fmtDataLong(slot.data)} · {slot.hora_inicio.slice(0, 5)}–{slot.hora_fim.slice(0, 5)}
               {duration && <span className="text-gray-400 ml-1">({duration} min)</span>}
