@@ -63,9 +63,10 @@ import DashboardOperacionalPage from "@/pages/app/DashboardOperacionalPage";
 import DashboardAgendaPage     from "@/pages/app/DashboardAgendaPage";
 import ComissoesPage           from "@/pages/app/ComissoesPage";
 import OcupacaoPage            from "@/pages/app/OcupacaoPage";
-import ConvitePage            from "@/pages/public/ConvitePage";
-import AnamnesePublicPage     from "@/pages/public/AnamnesePublicPage";
-import BookingPage            from "@/pages/public/BookingPage";
+import ConvitePage                  from "@/pages/public/ConvitePage";
+import AnamnesePublicPage           from "@/pages/public/AnamnesePublicPage";
+import BookingPage                  from "@/pages/public/BookingPage";
+import ConfigAgendamentoPublicoPage from "@/pages/app/ConfigAgendamentoPublicoPage";
 
 const queryClient = new QueryClient();
 
@@ -152,6 +153,7 @@ export default function App() {
             <Route path="/app/administrativo/templates"           element={<AppGuard><TemplatesContratosPage /></AppGuard>} />
             <Route path="/app/administrativo/*"          element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
             <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><ModalidadesPage /></AppGuard>} />
+            <Route path="/app/configuracoes/agendamento-publico"         element={<AppGuard><ConfigAgendamentoPublicoPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
             <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />

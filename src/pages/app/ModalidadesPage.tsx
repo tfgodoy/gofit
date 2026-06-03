@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, MoreVertical, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, MoreVertical, ChevronLeft, ChevronRight, SlidersHorizontal, Globe } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ interface Modalidade {
   icone: string;
   utiliza_gonutri: boolean;
   ativo: boolean;
+  permite_agendamento_publico: boolean;
   created_at: string;
 }
 
@@ -65,6 +66,16 @@ export default function ModalidadesPage() {
     if (error) { toast.error("Erro ao excluir modalidade."); return; }
     toast.success("Modalidade excluída.");
     setDeleteId(null);
+    load();
+  }
+
+  async function handleToggleAgendamento(m: Modalidade) {
+    const novo = !m.permite_agendamento_publico;
+    await supabase.from("modalidades")
+      .update({ permite_agendamento_publico: novo })
+      .eq("id", m.id);
+    toast.success(novo ? "Agendamento público habilitado." : "Agendamento público desabilitado.");
+    setMenuOpen(null);
     load();
   }
 
@@ -171,6 +182,11 @@ export default function ModalidadesPage() {
                                     GoNutri
                                   </span>
                                 )}
+                                {m.permite_agendamento_publico && (
+                                  <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                    <Globe className="w-2.5 h-2.5" /> Agendamento público
+                                  </span>
+                                )}
                                 {!m.ativo && (
                                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
                                     Inativo
@@ -189,12 +205,19 @@ export default function ModalidadesPage() {
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                               {menuOpen === m.id && (
-                                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-36">
+                                <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52">
                                   <button
                                     onClick={() => openEdit(m)}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                   >
                                     Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleAgendamento(m)}
+                                    className="w-full text-left px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 flex items-center gap-2"
+                                  >
+                                    <Globe className="w-3.5 h-3.5" />
+                                    {m.permite_agendamento_publico ? "Desabilitar agendamento" : "Habilitar agendamento público"}
                                   </button>
                                   <button
                                     onClick={() => { setDeleteId(m.id); setMenuOpen(null); }}

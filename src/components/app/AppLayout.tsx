@@ -10,7 +10,7 @@ import {
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
   BookOpen, LayoutTemplate, ScrollText, Banknote, Plug, TrendingDown,
-  Tag, MapPin, Star, AlertCircle, GitBranch,
+  Tag, MapPin, Star, AlertCircle, GitBranch, Globe,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationBell from "@/components/app/NotificationBell";
@@ -148,6 +148,7 @@ const bottomNav: NavItem[] = [
     iconColor: "text-gray-500",
     children: [
       { icon: LayoutGrid,    label: "Modalidades",            to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
+      { icon: Globe,         label: "Agendamento Público",    to: "/app/configuracoes/agendamento-publico", iconColor: "text-purple-500" },
       { icon: GraduationCap, label: "Graduações",             to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
       {
         icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/financeiro",
