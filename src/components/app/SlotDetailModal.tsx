@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink } from "lucide-react";
+import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -9,6 +9,8 @@ export interface SlotInfo {
   grid_id:                    string | null;
   modalidade_nome:            string | null;
   staff_nome:                 string | null;
+  unit_nome?:                 string | null;
+  duracao_minutos?:           number | null;
   data:                       string;
   hora_inicio:                string;
   hora_fim:                   string;
@@ -57,6 +59,13 @@ function fmtDataLong(s: string) {
   return new Date(s + "T12:00:00").toLocaleDateString("pt-BR", {
     weekday: "long", day: "2-digit", month: "long",
   });
+}
+
+function diffMinutes(start: string, end: string) {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? diff : null;
 }
 
 interface Props {
@@ -220,6 +229,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   const presentCount = bookings.filter(b => b.status === "presente").length;
   const isCanceled   = slot.status === "cancelado";
+  const duration      = slot.duracao_minutos ?? diffMinutes(slot.hora_inicio, slot.hora_fim);
 
   function initials(name: string | null) {
     return (name ?? "?").split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
@@ -237,7 +247,13 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
             <p className="font-bold text-gray-900">{slot.modalidade_nome ?? "Aula"}</p>
             <p className="text-sm text-gray-500">
               {fmtDataLong(slot.data)} · {slot.hora_inicio.slice(0, 5)}–{slot.hora_fim.slice(0, 5)}
+              {duration && <span className="text-gray-400 ml-1">({duration} min)</span>}
             </p>
+            {slot.unit_nome && (
+              <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                <MapPin className="w-3 h-3" /> {slot.unit_nome}
+              </p>
+            )}
             {slot.staff_nome && <p className="text-xs text-gray-400 mt-0.5">{slot.staff_nome}</p>}
           </div>
           <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">

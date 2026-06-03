@@ -19,9 +19,14 @@ const DIAS = [
 
 interface Modalidade { id: string; descricao: string }
 interface StaffMember { id: string; name: string }
+interface Unit { id: string; nome: string }
 
 export interface GridData {
   id?:                        string;
+  tipo?:                      string;
+  unit_id?:                   string | null;
+  unit_nome?:                 string | null;
+  duracao_minutos?:           number | null;
   modalidade_id?:             string | null;
   modalidade_nome?:           string | null;
   staff_id?:                  string | null;
@@ -46,6 +51,20 @@ interface Props {
 }
 
 type Tab = "dados" | "permissoes";
+
+function calcDurationMinutes(start?: string, end?: string) {
+  if (!start || !end) return 50;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? diff : 50;
+}
+
+function addMinutesToTime(start: string, minutes: number) {
+  const [h, m] = start.split(":").map(Number);
+  const total = h * 60 + m + minutes;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
 
 function Toggle({ value, onChange, label, description }: {
   value: boolean; onChange: (v: boolean) => void; label: string; description?: string;
@@ -74,15 +93,18 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
 
   const [modalidades, setModalidades] = useState<Modalidade[]>([]);
   const [staffList,   setStaffList]   = useState<StaffMember[]>([]);
+  const [unitList,    setUnitList]    = useState<Unit[]>([]);
   const [saving, setSaving]           = useState(false);
 
   const [form, setForm] = useState({
+    tipo:                       grid?.tipo                       ?? "contrato",
+    unit_id:                    grid?.unit_id                    ?? "",
+    duracao_minutos:            String(grid?.duracao_minutos ?? calcDurationMinutes(grid?.hora_inicio, grid?.hora_fim)),
     modalidade_id:              grid?.modalidade_id              ?? "",
     staff_id:                   grid?.staff_id                   ?? "",
     nome:                       grid?.nome                       ?? "",
     dias_semana:                grid?.dias_semana                ?? [] as string[],
     hora_inicio:                grid?.hora_inicio                ?? "06:00",
-    hora_fim:                   grid?.hora_fim                   ?? "07:00",
     capacidade_maxima:          String(grid?.capacidade_maxima   ?? 20),
     cor:                        grid?.cor                        ?? "#f97316",
     permite_leads:              grid?.permite_leads              ?? false,
@@ -97,9 +119,11 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
     Promise.all([
       supabase.from("modalidades").select("id, descricao").eq("contractor_id", user.contractorId).eq("ativo", true).order("descricao"),
       supabase.from("staff").select("id, name").eq("contractor_id", user.contractorId).eq("active", true).order("name"),
-    ]).then(([{ data: m }, { data: s }]) => {
+      supabase.from("units").select("id, nome").eq("contractor_id", user.contractorId).eq("ativo", true).order("nome"),
+    ]).then(([{ data: m }, { data: s }, { data: u }]) => {
       setModalidades((m ?? []) as Modalidade[]);
       setStaffList((s ?? []) as StaffMember[]);
+      setUnitList((u ?? []) as Unit[]);
     });
   }, [user]);
 
@@ -118,6 +142,8 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
 
     const selectedMod   = modalidades.find(m => m.id === form.modalidade_id);
     const selectedStaff = staffList.find(s => s.id === form.staff_id);
+    const selectedUnit  = unitList.find(u => u.id === form.unit_id);
+    const horaFimCalc   = addMinutesToTime(form.hora_inicio, parseInt(form.duracao_minutos) || 50);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -134,9 +160,12 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
           modalidade_nome:   selectedMod?.descricao ?? null,
           staff_id:          form.staff_id || null,
           staff_nome:        selectedStaff?.name ?? null,
+          tipo:              form.tipo,
+          unit_id:           form.unit_id || null,
+          unit_nome:         selectedUnit?.nome ?? null,
           data:              d.toISOString().split("T")[0],
           hora_inicio:       form.hora_inicio,
-          hora_fim:          form.hora_fim,
+          hora_fim:          horaFimCalc,
           capacidade_maxima: parseInt(form.capacidade_maxima) || 20,
           cor:               form.cor,
           status:            "agendado",
@@ -152,13 +181,22 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
   async function handleSave() {
     if (!user?.contractorId) return;
     if (form.dias_semana.length === 0) { toast.error("Selecione ao menos um dia."); return; }
-    if (!form.hora_inicio || !form.hora_fim)   { toast.error("Informe os horários."); return; }
-    if (form.hora_fim <= form.hora_inicio)     { toast.error("Hora fim deve ser após hora início."); return; }
+    if (!form.hora_inicio) { toast.error("Informe o horário de início."); return; }
+    if (!form.duracao_minutos || parseInt(form.duracao_minutos) < 5) {
+      toast.error("Informe uma duração válida (mínimo 5 minutos).");
+      return;
+    }
 
     const selectedMod   = modalidades.find(m => m.id === form.modalidade_id);
     const selectedStaff = staffList.find(s => s.id === form.staff_id);
+    const selectedUnit  = unitList.find(u => u.id === form.unit_id);
+    const horaFimCalc   = addMinutesToTime(form.hora_inicio, parseInt(form.duracao_minutos) || 50);
 
     const payload = {
+      tipo:                       form.tipo,
+      unit_id:                    form.unit_id || null,
+      unit_nome:                  selectedUnit?.nome ?? null,
+      duracao_minutos:            parseInt(form.duracao_minutos) || 50,
       modalidade_id:              form.modalidade_id || null,
       modalidade_nome:            selectedMod?.descricao ?? null,
       staff_id:                   form.staff_id || null,
@@ -166,7 +204,7 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
       nome:                       form.nome,
       dias_semana:                form.dias_semana,
       hora_inicio:                form.hora_inicio,
-      hora_fim:                   form.hora_fim,
+      hora_fim:                   horaFimCalc,
       capacidade_maxima:          parseInt(form.capacidade_maxima) || 20,
       cor:                        form.cor,
       permite_leads:              form.permite_leads,
@@ -241,6 +279,32 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
           {activeTab === "dados" && (
             <div className="space-y-5">
               <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-2">Tipo da grade *</label>
+                <div className="flex gap-3">
+                  {[
+                    { value: "contrato", label: "Contrato", desc: "Acesso via plano do aluno" },
+                    { value: "servico", label: "Serviço", desc: "Acesso via serviço avulso" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, tipo: opt.value }))}
+                      className={`flex-1 border rounded-xl p-3 text-left transition-colors ${
+                        form.tipo === opt.value
+                          ? "border-primary bg-primary/5"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${form.tipo === opt.value ? "text-primary" : "text-gray-700"}`}>
+                        {opt.label}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Nome (opcional)</label>
                 <input className={INP} placeholder="Ex: Musculação Manhã" value={form.nome}
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
@@ -267,6 +331,16 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                 </div>
               </div>
 
+              <div className="relative">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Local / Sala</label>
+                <select className={SEL} value={form.unit_id}
+                  onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))}>
+                  <option value="">Sem local definido</option>
+                  {unitList.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                </select>
+                <ChevronDown className="absolute right-0 bottom-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-2">Dias da semana *</label>
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -290,9 +364,14 @@ export default function GradeFormModal({ grid, onClose, onSaved }: Props) {
                     onChange={e => setForm(f => ({ ...f, hora_inicio: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Hora fim *</label>
-                  <input type="time" className={INP} value={form.hora_fim}
-                    onChange={e => setForm(f => ({ ...f, hora_fim: e.target.value }))} />
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Duração (minutos) *</label>
+                  <input type="number" min="5" max="480" className={INP} value={form.duracao_minutos}
+                    onChange={e => setForm(f => ({ ...f, duracao_minutos: e.target.value }))} />
+                  {form.hora_inicio && form.duracao_minutos && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Término: {addMinutesToTime(form.hora_inicio, parseInt(form.duracao_minutos) || 0)}
+                    </p>
+                  )}
                 </div>
               </div>
 

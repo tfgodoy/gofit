@@ -223,6 +223,9 @@ export default function AgendaPage() {
                                   {slot.staff_nome && (
                                     <p className="text-xs text-gray-400 truncate mt-0.5">{slot.staff_nome}</p>
                                   )}
+                                  {slot.unit_nome && (
+                                    <p className="text-xs text-gray-400 truncate mt-0.5">{slot.unit_nome}</p>
+                                  )}
                                   <div className={`mt-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold ${ocupacaoCls(count, slot.capacidade_maxima)}`}>
                                     {count}/{slot.capacidade_maxima}
                                   </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,10 @@ import GradeFormModal, { type GridData } from "@/components/app/GradeFormModal";
 
 interface Grid {
   id:                string;
+  tipo:              string;
+  unit_id:           string | null;
+  unit_nome:         string | null;
+  duracao_minutos:   number | null;
   modalidade_id:     string | null;
   modalidade_nome:   string | null;
   staff_id:          string | null;
@@ -19,6 +23,11 @@ interface Grid {
   capacidade_maxima: number;
   cor:               string;
   ativo:             boolean;
+  permite_leads:              boolean;
+  permite_clientes_especiais: boolean;
+  fila_espera_ativa:          boolean;
+  antecedencia_checkin_min:   number;
+  encerramento_checkin_min:   number;
   created_at:        string;
 }
 
@@ -106,6 +115,8 @@ export default function GradesPage() {
                   <thead>
                     <tr className="border-b border-gray-100 text-xs text-gray-500 font-semibold">
                       <th className="text-left px-6 py-3">Modalidade / Nome</th>
+                      <th className="text-left px-4 py-3">Tipo</th>
+                      <th className="text-left px-4 py-3">Local</th>
                       <th className="text-left px-4 py-3">Professor</th>
                       <th className="text-left px-4 py-3">Dias</th>
                       <th className="text-left px-4 py-3">Horário</th>
@@ -130,6 +141,14 @@ export default function GradesPage() {
                             </div>
                           </div>
                         </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            g.tipo === "servico" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                          }`}>
+                            {g.tipo === "servico" ? "Serviço" : "Contrato"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{g.unit_nome ?? "—"}</td>
                         <td className="px-4 py-3 text-gray-600">{g.staff_nome ?? "—"}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
@@ -157,6 +176,36 @@ export default function GradesPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => {
+                                setEditGrid({
+                                  tipo:                       g.tipo,
+                                  unit_id:                    g.unit_id,
+                                  unit_nome:                  g.unit_nome,
+                                  duracao_minutos:            g.duracao_minutos,
+                                  modalidade_id:              g.modalidade_id,
+                                  modalidade_nome:            g.modalidade_nome,
+                                  staff_id:                   g.staff_id,
+                                  staff_nome:                 g.staff_nome,
+                                  nome:                       g.nome ? `${g.nome} (cópia)` : "",
+                                  dias_semana:                g.dias_semana,
+                                  hora_inicio:                g.hora_inicio,
+                                  hora_fim:                   g.hora_fim,
+                                  capacidade_maxima:          g.capacidade_maxima,
+                                  cor:                        g.cor,
+                                  permite_leads:              g.permite_leads,
+                                  permite_clientes_especiais: g.permite_clientes_especiais,
+                                  fila_espera_ativa:          g.fila_espera_ativa,
+                                  antecedencia_checkin_min:   g.antecedencia_checkin_min,
+                                  encerramento_checkin_min:   g.encerramento_checkin_min,
+                                });
+                                setShowForm(true);
+                              }}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                              title="Duplicar"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => { setEditGrid(g); setShowForm(true); }}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"

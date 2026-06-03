@@ -1496,6 +1496,10 @@ export interface Database {
           modalidade_nome:            string | null;
           staff_id:                   string | null;
           staff_nome:                 string | null;
+          tipo:                       string;
+          unit_id:                    string | null;
+          unit_nome:                  string | null;
+          duracao_minutos:            number | null;
           nome:                       string;
           dias_semana:                string[];
           hora_inicio:                string;
@@ -1517,6 +1521,10 @@ export interface Database {
           modalidade_nome?:           string | null;
           staff_id?:                  string | null;
           staff_nome?:                string | null;
+          tipo?:                      string;
+          unit_id?:                   string | null;
+          unit_nome?:                 string | null;
+          duracao_minutos?:           number | null;
           nome?:                      string;
           dias_semana?:               string[];
           hora_inicio:                string;
@@ -1538,6 +1546,10 @@ export interface Database {
           modalidade_nome?:           string | null;
           staff_id?:                  string | null;
           staff_nome?:                string | null;
+          tipo?:                      string;
+          unit_id?:                   string | null;
+          unit_nome?:                 string | null;
+          duracao_minutos?:           number | null;
           nome?:                      string;
           dias_semana?:               string[];
           hora_inicio?:               string;
@@ -1563,6 +1575,9 @@ export interface Database {
           modalidade_nome:   string | null;
           staff_id:          string | null;
           staff_nome:        string | null;
+          tipo:              string;
+          unit_id:           string | null;
+          unit_nome:         string | null;
           data:              string;
           hora_inicio:       string;
           hora_fim:          string;
@@ -1580,6 +1595,9 @@ export interface Database {
           modalidade_nome?:   string | null;
           staff_id?:          string | null;
           staff_nome?:        string | null;
+          tipo?:              string;
+          unit_id?:           string | null;
+          unit_nome?:         string | null;
           data:               string;
           hora_inicio:        string;
           hora_fim:           string;
@@ -1597,6 +1615,9 @@ export interface Database {
           modalidade_nome?:   string | null;
           staff_id?:          string | null;
           staff_nome?:        string | null;
+          tipo?:              string;
+          unit_id?:           string | null;
+          unit_nome?:         string | null;
           data?:              string;
           hora_inicio?:       string;
           hora_fim?:          string;
