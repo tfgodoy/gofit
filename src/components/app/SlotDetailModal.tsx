@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink, MapPin, Zap } from "lucide-react";
+import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, ClipboardX, ExternalLink, MapPin, Zap, Pencil, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -9,7 +9,9 @@ export interface SlotInfo {
   grid_id:                    string | null;
   modalidade_id?:             string | null;
   modalidade_nome:            string | null;
+  staff_id?:                  string | null;
   staff_nome:                 string | null;
+  unit_id?:                   string | null;
   unit_nome?:                 string | null;
   duracao_minutos?:           number | null;
   data:                       string;
@@ -18,6 +20,8 @@ export interface SlotInfo {
   capacidade_maxima:          number;
   cor:                        string;
   status:                     string;
+  observacoes?:               string | null;
+  link_online?:               string | null;
 }
 
 interface GridPerms {
@@ -67,6 +71,9 @@ interface AnamneseInfo {
 
 interface Student { id: string; nome_completo: string }
 interface Lead    { id: string; nome: string; telefone: string | null }
+interface ModalidadeOption { id: string; descricao: string; cor: string }
+interface StaffOption { id: string; name: string }
+interface UnitOption { id: string; nome: string }
 interface ContractStudent {
   student_id:          string;
   student_nome:        string;
@@ -96,6 +103,21 @@ interface SessionUsage {
 }
 
 type ActiveTab = "ativos" | "cancelados" | "fila" | "historico";
+interface SlotEditForm {
+  modalidade_id: string;
+  modalidade_nome: string;
+  staff_id: string;
+  staff_nome: string;
+  unit_id: string;
+  unit_nome: string;
+  data: string;
+  hora_inicio: string;
+  duracao_minutos: string;
+  capacidade_maxima: string;
+  cor: string;
+  observacoes: string;
+  link_online: string;
+}
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   reservado:    { label: "Reservado",        cls: "bg-blue-100 text-blue-700"   },
@@ -130,6 +152,42 @@ function diffMinutes(start: string, end: string) {
   return diff > 0 ? diff : null;
 }
 
+function normalizeTime(value: string) {
+  return value.slice(0, 5);
+}
+
+function addMinutesToTime(start: string, minutes: number) {
+  const [h, m] = start.split(":").map(Number);
+  const total = h * 60 + m + minutes;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function createSlotEditForm(slot: SlotInfo): SlotEditForm {
+  const horaInicio = normalizeTime(slot.hora_inicio);
+  const horaFim = normalizeTime(slot.hora_fim);
+  const duration = slot.duracao_minutos ?? diffMinutes(horaInicio, horaFim) ?? 50;
+
+  return {
+    modalidade_id: slot.modalidade_id ?? "",
+    modalidade_nome: slot.modalidade_nome ?? "",
+    staff_id: slot.staff_id ?? "",
+    staff_nome: slot.staff_nome ?? "",
+    unit_id: slot.unit_id ?? "",
+    unit_nome: slot.unit_nome ?? "",
+    data: slot.data,
+    hora_inicio: horaInicio,
+    duracao_minutos: String(duration),
+    capacidade_maxima: String(slot.capacidade_maxima),
+    cor: slot.cor,
+    observacoes: slot.observacoes ?? "",
+    link_online: slot.link_online ?? "",
+  };
+}
+
 interface Props {
   slot:      SlotInfo;
   onClose:   () => void;
@@ -148,6 +206,9 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [students, setStudents]       = useState<Student[]>([]);
   const [contractStudents, setContractStudents] = useState<ContractStudent[]>([]);
   const [leads,    setLeads]          = useState<Lead[]>([]);
+  const [modalidades, setModalidades] = useState<ModalidadeOption[]>([]);
+  const [staffList, setStaffList]     = useState<StaffOption[]>([]);
+  const [unitList, setUnitList]       = useState<UnitOption[]>([]);
   const [perms,    setPerms]          = useState<GridPerms | null>(null);
   const [gridComissao, setGridComissao] = useState<GridComissao | null>(null);
   const [addMode,  setAddMode]        = useState<AddMode>(null);
@@ -167,6 +228,10 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [finalizando,     setFinalizando]     = useState(false);
   const [confirmarFinalizar, setConfirmarFinalizar] = useState(false);
   const [activeTab,       setActiveTab]       = useState<ActiveTab>("ativos");
+  const [editingSlot,     setEditingSlot]     = useState(false);
+  const [savingSlot,      setSavingSlot]      = useState(false);
+  const [confirmCriticalEdit, setConfirmCriticalEdit] = useState(false);
+  const [slotEditForm,    setSlotEditForm]    = useState<SlotEditForm>(() => createSlotEditForm(slot));
   const searchRef = useRef<HTMLDivElement>(null);
 
   async function loadBookings() {
@@ -226,13 +291,29 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setHistory((data ?? []) as SlotHistory[]);
   }
 
-  useEffect(() => { loadBookings(); loadHistory(); }, [slot.id]);
+  useEffect(() => {
+    setSlotEditForm(createSlotEditForm(slot));
+    setEditingSlot(false);
+    setConfirmCriticalEdit(false);
+    loadBookings();
+    loadHistory();
+  }, [slot.id]);
 
   useEffect(() => {
     if (!user?.contractorId) return;
     supabase.from("students").select("id, nome_completo")
       .eq("contractor_id", user.contractorId).order("nome_completo")
       .then(({ data }) => setStudents((data ?? []) as Student[]));
+
+    Promise.all([
+      supabase.from("modalidades").select("id, descricao, cor").eq("contractor_id", user.contractorId).eq("ativo", true).order("descricao"),
+      supabase.from("staff").select("id, name").eq("contractor_id", user.contractorId).eq("active", true).order("name"),
+      supabase.from("units").select("id, nome").eq("contractor_id", user.contractorId).eq("ativo", true).order("nome"),
+    ]).then(([modalidadeRes, staffRes, unitRes]) => {
+      setModalidades((modalidadeRes.data ?? []) as ModalidadeOption[]);
+      setStaffList((staffRes.data ?? []) as StaffOption[]);
+      setUnitList((unitRes.data ?? []) as UnitOption[]);
+    });
 
     if (slot.grid_id) {
       supabase.from("schedule_grids")
@@ -337,6 +418,123 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setSelectedStudent(null); setSelectedContractStudent(null); setSelectedLead(null);
     setCreatingLead(false);
     setNewLead({ nome: "", telefone: "", email: "", origem: "" });
+  }
+
+  function openSlotEdit() {
+    setSlotEditForm(createSlotEditForm(slot));
+    setConfirmCriticalEdit(false);
+    setEditingSlot(true);
+  }
+
+  function setSlotEditField<K extends keyof SlotEditForm>(key: K, value: SlotEditForm[K]) {
+    setConfirmCriticalEdit(false);
+    setSlotEditForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  async function handleSaveSlotEdit(forceCritical = false) {
+    if (!user?.contractorId) return;
+
+    const duracao = parseInt(slotEditForm.duracao_minutos, 10);
+    const capacidade = parseInt(slotEditForm.capacidade_maxima, 10);
+    const horaInicio = normalizeTime(slotEditForm.hora_inicio);
+
+    if (!slotEditForm.data || !horaInicio) {
+      toast.error("Informe data e horário de início.");
+      return;
+    }
+    if (!Number.isFinite(duracao) || duracao <= 0) {
+      toast.error("Informe uma duração válida.");
+      return;
+    }
+    if (!Number.isFinite(capacidade) || capacidade <= 0) {
+      toast.error("Informe uma capacidade válida.");
+      return;
+    }
+    if (capacidade < activeBookings.length) {
+      toast.error(`A capacidade não pode ficar abaixo de ${activeBookings.length} reserva(s) ativa(s).`);
+      return;
+    }
+
+    const horaFim = addMinutesToTime(horaInicio, duracao);
+    const payload = {
+      modalidade_id: slotEditForm.modalidade_id || null,
+      modalidade_nome: slotEditForm.modalidade_nome.trim() || null,
+      staff_id: slotEditForm.staff_id || null,
+      staff_nome: slotEditForm.staff_nome.trim() || null,
+      unit_id: slotEditForm.unit_id || null,
+      unit_nome: slotEditForm.unit_nome.trim() || null,
+      data: slotEditForm.data,
+      hora_inicio: horaInicio,
+      hora_fim: horaFim,
+      capacidade_maxima: capacidade,
+      cor: isHexColor(slotEditForm.cor) ? slotEditForm.cor : "#22c55e",
+      observacoes: slotEditForm.observacoes.trim() || null,
+      link_online: slotEditForm.link_online.trim() || null,
+    };
+
+    const changes: Record<string, { label: string; de: string | number | null; para: string | number | null }> = {};
+    const addChange = (field: string, label: string, de: string | number | null | undefined, para: string | number | null | undefined) => {
+      const before = de ?? null;
+      const after = para ?? null;
+      if (before !== after) changes[field] = { label, de: before, para: after };
+    };
+
+    addChange("modalidade_id", "modalidade", slot.modalidade_id ?? null, payload.modalidade_id);
+    addChange("modalidade_nome", "nome da modalidade", slot.modalidade_nome ?? null, payload.modalidade_nome);
+    addChange("staff_id", "professor", slot.staff_id ?? null, payload.staff_id);
+    addChange("staff_nome", "nome do professor", slot.staff_nome ?? null, payload.staff_nome);
+    addChange("unit_id", "local/sala", slot.unit_id ?? null, payload.unit_id);
+    addChange("unit_nome", "nome do local/sala", slot.unit_nome ?? null, payload.unit_nome);
+    addChange("data", "data", slot.data, payload.data);
+    addChange("hora_inicio", "horário de início", normalizeTime(slot.hora_inicio), payload.hora_inicio);
+    addChange("hora_fim", "horário de término", normalizeTime(slot.hora_fim), payload.hora_fim);
+    addChange("capacidade_maxima", "capacidade", slot.capacidade_maxima, payload.capacidade_maxima);
+    addChange("cor", "cor", slot.cor, payload.cor);
+    addChange("observacoes", "descrição", slot.observacoes ?? null, payload.observacoes);
+    addChange("link_online", "link online", slot.link_online ?? null, payload.link_online);
+
+    if (Object.keys(changes).length === 0) {
+      toast.success("Nenhuma alteração para salvar.");
+      setEditingSlot(false);
+      return;
+    }
+
+    const criticalFields = ["modalidade_id", "staff_id", "unit_id", "data", "hora_inicio", "hora_fim", "capacidade_maxima"];
+    const hasCriticalChange = criticalFields.some(field => changes[field]);
+    if (activeBookings.length > 0 && hasCriticalChange && !forceCritical) {
+      setConfirmCriticalEdit(true);
+      return;
+    }
+
+    setSavingSlot(true);
+    const { error } = await supabase
+      .from("schedule_slots")
+      .update(payload)
+      .eq("id", slot.id);
+
+    if (error) {
+      setSavingSlot(false);
+      toast.error("Erro ao alterar a aula.");
+      return;
+    }
+
+    await logHistory({
+      evento: "aula_alterada",
+      descricao: "Aula alterada somente neste horário.",
+      dados: {
+        alteracao_pontual: true,
+        grid_id: slot.grid_id,
+        campos: Object.values(changes).map(change => change.label),
+        alteracoes: changes,
+      },
+    });
+
+    setSavingSlot(false);
+    setEditingSlot(false);
+    setConfirmCriticalEdit(false);
+    toast.success("Aula atualizada somente neste horário.");
+    onChanged();
+    onClose();
   }
 
   async function handleCreateLead() {
@@ -1056,10 +1254,31 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               </p>
             )}
             {slot.staff_nome && <p className="text-xs text-gray-400 mt-0.5">{slot.staff_nome}</p>}
+            {slot.link_online && (
+              <a
+                href={slot.link_online}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary font-semibold inline-flex items-center gap-1 mt-1 hover:underline"
+              >
+                Link online <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors flex-shrink-0">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!isCanceled && !isConcluido && (
+              <button
+                onClick={openSlotEdit}
+                title="Alterar somente esta aula"
+                className="p-1 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Stats bar */}
@@ -1369,6 +1588,219 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           </div>
         )}
       </div>
+
+      {editingSlot && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Alterar somente esta aula</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {fmtDataLong(slot.data)} · {normalizeTime(slot.hora_inicio)}
+                </p>
+              </div>
+              <button
+                onClick={() => { setEditingSlot(false); setConfirmCriticalEdit(false); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Modalidade</label>
+                  <select
+                    value={slotEditForm.modalidade_id}
+                    onChange={e => {
+                      const selected = modalidades.find(m => m.id === e.target.value);
+                      setConfirmCriticalEdit(false);
+                      setSlotEditForm(prev => ({
+                        ...prev,
+                        modalidade_id: selected?.id ?? "",
+                        modalidade_nome: selected?.descricao ?? "",
+                        cor: selected?.cor ?? prev.cor,
+                      }));
+                    }}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm bg-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    <option value="">Sem modalidade</option>
+                    {slotEditForm.modalidade_id && !modalidades.some(m => m.id === slotEditForm.modalidade_id) && (
+                      <option value={slotEditForm.modalidade_id}>{slotEditForm.modalidade_nome || "Modalidade atual"}</option>
+                    )}
+                    {modalidades.map(m => (
+                      <option key={m.id} value={m.id}>{m.descricao}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Professor</label>
+                  <select
+                    value={slotEditForm.staff_id}
+                    onChange={e => {
+                      const selected = staffList.find(s => s.id === e.target.value);
+                      setConfirmCriticalEdit(false);
+                      setSlotEditForm(prev => ({
+                        ...prev,
+                        staff_id: selected?.id ?? "",
+                        staff_nome: selected?.name ?? "",
+                      }));
+                    }}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm bg-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    <option value="">Sem professor</option>
+                    {slotEditForm.staff_id && !staffList.some(s => s.id === slotEditForm.staff_id) && (
+                      <option value={slotEditForm.staff_id}>{slotEditForm.staff_nome || "Professor atual"}</option>
+                    )}
+                    {staffList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Local / sala</label>
+                  <select
+                    value={slotEditForm.unit_id}
+                    onChange={e => {
+                      const selected = unitList.find(u => u.id === e.target.value);
+                      setConfirmCriticalEdit(false);
+                      setSlotEditForm(prev => ({
+                        ...prev,
+                        unit_id: selected?.id ?? "",
+                        unit_nome: selected?.nome ?? "",
+                      }));
+                    }}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm bg-white outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    <option value="">Sem local</option>
+                    {slotEditForm.unit_id && !unitList.some(u => u.id === slotEditForm.unit_id) && (
+                      <option value={slotEditForm.unit_id}>{slotEditForm.unit_nome || "Local atual"}</option>
+                    )}
+                    {unitList.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Cor</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={isHexColor(slotEditForm.cor) ? slotEditForm.cor : "#22c55e"}
+                      onChange={e => setSlotEditField("cor", e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-gray-200 bg-white p-1"
+                    />
+                    <input
+                      value={slotEditForm.cor}
+                      onChange={e => setSlotEditField("cor", e.target.value)}
+                      className="flex-1 h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={slotEditForm.data}
+                    onChange={e => setSlotEditField("data", e.target.value)}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Horário de início</label>
+                  <input
+                    type="time"
+                    value={slotEditForm.hora_inicio}
+                    onChange={e => setSlotEditField("hora_inicio", e.target.value)}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Duração em minutos</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={slotEditForm.duracao_minutos}
+                    onChange={e => setSlotEditField("duracao_minutos", e.target.value)}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Término: {addMinutesToTime(slotEditForm.hora_inicio || "00:00", parseInt(slotEditForm.duracao_minutos, 10) || 0)}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Capacidade</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={slotEditForm.capacidade_maxima}
+                    onChange={e => setSlotEditField("capacidade_maxima", e.target.value)}
+                    className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Descrição</label>
+                <textarea
+                  rows={3}
+                  value={slotEditForm.observacoes}
+                  onChange={e => setSlotEditField("observacoes", e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Link online</label>
+                <input
+                  type="url"
+                  value={slotEditForm.link_online}
+                  onChange={e => setSlotEditField("link_online", e.target.value)}
+                  placeholder="https://"
+                  className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              {confirmCriticalEdit && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-sm font-bold text-amber-900">Confirmar alteração com reservas?</p>
+                  <p className="text-xs text-amber-800 mt-1">
+                    Esta aula possui {activeBookings.length} reserva(s) ativa(s). A alteração será aplicada somente a esta aula e ficará registrada no histórico.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (confirmCriticalEdit) setConfirmCriticalEdit(false);
+                  else setEditingSlot(false);
+                }}
+                className="text-sm font-semibold text-gray-500 hover:text-gray-700 px-3 py-2"
+              >
+                {confirmCriticalEdit ? "VOLTAR" : "CANCELAR"}
+              </button>
+              <button
+                onClick={() => handleSaveSlotEdit(confirmCriticalEdit)}
+                disabled={savingSlot}
+                className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {savingSlot ? "Salvando..." : confirmCriticalEdit ? "Confirmar e salvar" : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cancelingSlot && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">

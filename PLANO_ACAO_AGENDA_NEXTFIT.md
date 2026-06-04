@@ -1,6 +1,8 @@
 # Plano de ação - Agenda estilo NextFit
 
-Este documento registra o planejamento para evoluir a agenda do GoFit com base no fluxo observado nas telas da NextFit. Nenhuma implantação foi realizada neste plano; ele serve como guia por fases para implementação futura.
+Data/hora da última atualização do estado: 04/06/2026 09:46:33 -03:00
+
+Este documento registra o planejamento para evoluir a agenda do GoFit com base no fluxo observado nas telas da NextFit. A implantação já avançou além da Fase 0; este arquivo agora serve como plano e também como controle do estado atual por fase.
 
 ## Objetivo
 
@@ -14,30 +16,51 @@ O foco principal é evitar inconsistências no dia a dia, principalmente em trê
 
 ## Situação atual do GoFit
 
-O GoFit já possui a base inicial da grade de horários:
+O GoFit já possui uma implantação operacional avançada da agenda estilo NextFit:
 
-- criação de grades recorrentes;
-- geração de aulas na agenda;
-- professor, local/sala e modalidade;
-- capacidade da aula;
-- regras de check-in, cancelamento e acesso;
-- modal básico da aula;
-- adição de aluno/lead de forma inicial;
+- criação de grades recorrentes e geração de aulas na agenda;
+- professor, local/sala, modalidade, capacidade, cor e status da aula;
+- regras de check-in, cancelamento, acesso, gênero, leads, clientes especiais, fila de espera e agenda livre;
+- agenda semanal visual por horários, dias da semana e aulas simultâneas;
+- filtros por busca, modalidade, professor, local e status;
+- contadores de aulas, reservas, lotação e fila;
+- modal da aula com abas Clientes / Leads, Cancelados, Fila e Histórico;
+- adição de cliente com contrato, lead e cliente especial;
+- cadastro rápido de lead pelo modal;
 - presença, falta e desfazer presença/falta;
+- cancelamento de participação com motivo, responsável e registro de cancelamento;
+- geração básica de crédito de reposição no cancelamento elegível;
+- fila de espera com movimentação para a aula quando houver vaga;
+- histórico operacional da aula;
+- consumo de sessão registrado em tabela própria e estorno ao desfazer presença/falta;
 - cancelamento e conclusão da aula;
-- geração de comissão por aula concluída;
-- restrições avançadas como gênero e agenda livre.
+- geração de comissão por aula concluída.
+- alteração pontual de uma aula específica sem alterar a grade recorrente.
+
+## Estado de implantação por fase
+
+| Fase | Estado | Observação |
+| --- | --- | --- |
+| Fase 0 - Backup e auditoria | Concluída | Backup, bundle, tag e auditoria inicial foram registrados. |
+| Fase 1 - Modelagem de origem e tipo de agendamento | Implantada | `bookings` recebeu origem, tipo de pessoa, vínculo com contrato, controle de crédito e dados de cancelamento. Também foi criada a base de histórico. |
+| Fase 2 - Abas do modal da aula | Implantada | Modal separado em Clientes / Leads, Cancelados, Fila e Histórico. |
+| Fase 3 - Adicionar cliente com contrato | Parcialmente implantada | O fluxo adiciona cliente com contrato ativo e valida modalidade/bloqueio/gênero. Ainda falta validar saldo real disponível antes da entrada e tratar uso explícito de reposição. |
+| Fase 4 - Adicionar lead | Implantada | Busca lead existente e permite cadastro rápido no próprio modal. O agendamento público também grava origem de lead e histórico. |
+| Fase 5 - Adicionar cliente especial | Implantada | Cliente especial entra sem consumo de crédito e com origem própria. |
+| Fase 6 - Cancelados, desistentes e reposição | Parcialmente implantada | Cancelados aparecem em aba própria e podem gerar crédito de reposição. Ainda falta fluxo para usar o crédito gerado e regras configuráveis de prazo/elegibilidade. |
+| Fase 7 - Fila de espera | Implantada com regra básica | Pessoas entram como `lista_espera` quando a aula está cheia e podem ser movidas para a aula. Ainda pode evoluir em regras de prazo e permissões administrativas. |
+| Fase 8 - Presença, falta e consumo real de sessões | Parcialmente implantada | Presença/falta gravam consumo em `schedule_session_usage` e desfazer estorna. Ainda falta consolidar saldo real do contrato/pacote e bloquear entrada por saldo insuficiente. |
+| Fase 9 - Histórico da aula | Implantada | Histórico registra criação, inclusão, cancelamento, fila, presença/falta, desfazer, cancelamento, conclusão e alteração pontual da aula. |
+| Fase 10 - Alterar somente esta aula | Implantada | Modal permite editar modalidade, professor, local/sala, data, horário, duração, capacidade, cor, descrição e link online somente em `schedule_slots`, com histórico e confirmação quando há reservas. |
+| Fase 11 - Agenda visual semanal | Implantada | Agenda semanal por horários, filtros, busca, lotação, fila, aulas simultâneas e ajustes visuais posteriores. |
 
 O que ainda falta para chegar no fluxo completo observado na NextFit:
 
-- separar claramente alunos ativos, cancelados/desistentes e fila de espera;
-- registrar origem detalhada do agendamento;
-- diferenciar cliente com contrato, lead e cliente especial;
-- controlar consumo real de crédito/sessão do contrato;
-- permitir reposição de aula cancelada;
-- exibir histórico completo da aula;
-- permitir alteração apenas daquela aula, sem alterar a grade inteira;
-- criar fluxo operacional mais claro para recepção e professor.
+- permitir usar crédito de reposição disponível ao adicionar aluno em nova aula;
+- validar e exibir saldo real de sessões/aulas do contrato antes de adicionar cliente com contrato;
+- consolidar relatórios ou cálculo de saldo com base em `schedule_session_usage`;
+- transformar regras de reposição em configuração operacional, incluindo prazo, modalidade permitida e professor/local;
+- testar o fluxo completo contra o Supabase publicado após aplicar as migrations no ambiente alvo.
 
 ## Uso real no dia a dia
 
@@ -406,18 +429,18 @@ Critério de conclusão:
 
 ## Ordem recomendada de implantação
 
-1. Backup e auditoria.
-2. Modelagem de origem e tipo de agendamento.
-3. Abas do modal da aula.
-4. Adicionar cliente com contrato.
-5. Adicionar lead com cadastro rápido.
-6. Adicionar cliente especial sem consumo de crédito.
-7. Cancelados/desistentes e reposição.
-8. Fila de espera.
-9. Presença/falta com consumo real de sessões.
-10. Histórico da aula.
-11. Alterar somente esta aula.
-12. Melhorias visuais da agenda semanal.
+1. Backup e auditoria - concluído.
+2. Modelagem de origem e tipo de agendamento - implantado.
+3. Abas do modal da aula - implantado.
+4. Adicionar cliente com contrato - implantado parcialmente; falta saldo real e reposição.
+5. Adicionar lead com cadastro rápido - implantado.
+6. Adicionar cliente especial sem consumo de crédito - implantado.
+7. Cancelados/desistentes e reposição - implantado parcialmente; falta uso do crédito gerado.
+8. Fila de espera - implantado com regra básica.
+9. Presença/falta com consumo real de sessões - implantado parcialmente; falta saldo consolidado do contrato.
+10. Histórico da aula - implantado.
+11. Alterar somente esta aula - implantado.
+12. Melhorias visuais da agenda semanal - implantado antes da Fase 10, com ajustes posteriores.
 
 ## Riscos principais
 

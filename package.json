@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "migrate:run": "pwsh ./scripts/run_migrations.ps1",
+    "migrate:run:sh": "bash ./scripts/run_migrations.sh",
     "lint": "eslint .",
     "preview": "vite preview"
   },

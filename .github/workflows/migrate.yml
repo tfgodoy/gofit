@@ -1,0 +1,67 @@
+name: Apply DB Migrations
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Verify DATABASE_URL
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "DATABASE_URL secret is not set. Set it in repository secrets." >&2
+            exit 2
+          fi
+
+      - name: Optional DB backup (pg_dump)
+        if: env.DATABASE_URL != ''
+        run: |
+          echo "Creating backup..."
+          pg_dump "$DATABASE_URL" -Fc -f db_backup.dump || (echo "pg_dump failed" >&2; exit 3)
+          echo "Backup created: db_backup.dump"
+        # Upload backup as artifact for review
+      - name: Upload DB backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: db_backup.dump
+
+      - name: Run migrations
+        run: |
+          set -euxo pipefail
+          MIGRATIONS_DIR="${{ github.workspace }}/supabase/migrations"
+          if [ ! -d "$MIGRATIONS_DIR" ]; then
+            echo "Migrations dir not found: $MIGRATIONS_DIR" >&2
+            exit 1
+          fi
+          for f in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+            echo "Applying: $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Upload migration logs
+        if: always()
+        run: echo "Migrations completed"
+
+  notify:
+    needs: migrate
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify
+        run: echo "Migrations job finished with status ${{ needs.migrate.result }}"
