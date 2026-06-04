@@ -46,6 +46,8 @@ interface Booking {
   pessoa_tipo:          string | null;
   origem_agendamento:   string | null;
   consome_credito:      boolean | null;
+  contrato_id:          string | null;
+  student_contract_id:  string | null;
   status:               string;
   checkin_em:           string | null;
   anamnese_resposta_id: string | null;
@@ -60,6 +62,16 @@ interface AnamneseInfo {
 
 interface Student { id: string; nome_completo: string }
 interface Lead    { id: string; nome: string; telefone: string | null }
+interface ContractStudent {
+  student_id:          string;
+  student_nome:        string;
+  contrato_id:         string;
+  contrato_nome:       string;
+  student_contract_id: string;
+  data_fim:            string | null;
+  modalidade_ok:       boolean;
+  motivo_bloqueio:     string | null;
+}
 
 interface SlotHistory {
   id:                 string;
@@ -112,7 +124,7 @@ interface Props {
   onChanged: () => void;
 }
 
-type AddMode = "aluno" | "lead" | null;
+type AddMode = "contrato" | "aluno" | "lead" | null;
 
 export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const { user } = useAuth();
@@ -121,6 +133,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [anamneseMap, setAnamneseMap] = useState<Record<string, AnamneseInfo>>({});
   const [loading, setLoading]         = useState(true);
   const [students, setStudents]       = useState<Student[]>([]);
+  const [contractStudents, setContractStudents] = useState<ContractStudent[]>([]);
   const [leads,    setLeads]          = useState<Lead[]>([]);
   const [perms,    setPerms]          = useState<GridPerms | null>(null);
   const [gridComissao, setGridComissao] = useState<GridComissao | null>(null);
@@ -128,6 +141,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [search,   setSearch]         = useState("");
   const [dropOpen, setDropOpen]       = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedContractStudent, setSelectedContractStudent] = useState<ContractStudent | null>(null);
   const [selectedLead,    setSelectedLead]    = useState<Lead    | null>(null);
   const [adding,          setAdding]          = useState(false);
   const [cancelingSlot,   setCancelingSlot]   = useState(false);
@@ -140,7 +154,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setLoading(true);
     const { data } = await supabase
       .from("bookings")
-      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, pessoa_tipo, origem_agendamento, consome_credito, status, checkin_em, anamnese_resposta_id")
+      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, pessoa_tipo, origem_agendamento, consome_credito, contrato_id, student_contract_id, status, checkin_em, anamnese_resposta_id")
       .eq("slot_id", slot.id).order("created_at");
     const bks = (data ?? []) as Booking[];
     setBookings(bks);
@@ -201,6 +215,78 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   }, [user, addMode]);
 
   useEffect(() => {
+    if (!user?.contractorId || addMode !== "contrato") return;
+
+    async function loadContractStudents() {
+      const { data: scData } = await supabase
+        .from("student_contracts")
+        .select("id, student_id, contrato_id, data_inicio, data_fim, status, bloqueado, motivo_bloqueio")
+        .eq("contractor_id", user!.contractorId!)
+        .eq("status", "ativo")
+        .lte("data_inicio", slot.data)
+        .or(`data_fim.is.null,data_fim.gte.${slot.data}`);
+
+      const contracts = (scData ?? []) as {
+        id: string;
+        student_id: string;
+        contrato_id: string;
+        data_fim: string | null;
+        bloqueado: boolean | null;
+        motivo_bloqueio: string | null;
+      }[];
+
+      if (contracts.length === 0) {
+        setContractStudents([]);
+        return;
+      }
+
+      const studentIds = [...new Set(contracts.map(c => c.student_id))];
+      const contratoIds = [...new Set(contracts.map(c => c.contrato_id))];
+
+      const [{ data: studentData }, { data: contratoData }, { data: modalidadeData }] = await Promise.all([
+        supabase.from("students").select("id, nome_completo").in("id", studentIds),
+        supabase.from("contratos").select("id, descricao").in("id", contratoIds),
+        supabase.from("contrato_modalidades").select("contrato_id, modalidade_id, nome").in("contrato_id", contratoIds),
+      ]);
+
+      const studentMap = new Map(((studentData ?? []) as Student[]).map(s => [s.id, s.nome_completo]));
+      const contratoMap = new Map(((contratoData ?? []) as { id: string; descricao: string }[]).map(c => [c.id, c.descricao]));
+      const modalidadesByContrato = new Map<string, { modalidade_id: string | null; nome: string | null }[]>();
+
+      for (const mod of (modalidadeData ?? []) as { contrato_id: string; modalidade_id: string | null; nome: string | null }[]) {
+        const arr = modalidadesByContrato.get(mod.contrato_id) ?? [];
+        arr.push({ modalidade_id: mod.modalidade_id, nome: mod.nome });
+        modalidadesByContrato.set(mod.contrato_id, arr);
+      }
+
+      const eligible = contracts.map(sc => {
+        const mods = modalidadesByContrato.get(sc.contrato_id) ?? [];
+        const hasModalidadeRules = mods.length > 0;
+        const modalidadeOk = !hasModalidadeRules || mods.some(mod => {
+          if (slot.modalidade_id && mod.modalidade_id === slot.modalidade_id) return true;
+          if (!slot.modalidade_nome || !mod.nome) return false;
+          return mod.nome.trim().toLowerCase() === slot.modalidade_nome.trim().toLowerCase();
+        });
+
+        return {
+          student_id: sc.student_id,
+          student_nome: studentMap.get(sc.student_id) ?? "Aluno sem nome",
+          contrato_id: sc.contrato_id,
+          contrato_nome: contratoMap.get(sc.contrato_id) ?? "Contrato",
+          student_contract_id: sc.id,
+          data_fim: sc.data_fim,
+          modalidade_ok: modalidadeOk,
+          motivo_bloqueio: sc.bloqueado ? (sc.motivo_bloqueio ?? "Contrato bloqueado") : null,
+        };
+      }).sort((a, b) => a.student_nome.localeCompare(b.student_nome, "pt-BR"));
+
+      setContractStudents(eligible);
+    }
+
+    loadContractStudents();
+  }, [user, addMode, slot.data, slot.modalidade_id, slot.modalidade_nome]);
+
+  useEffect(() => {
     function handler(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setDropOpen(false);
     }
@@ -210,7 +296,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   function resetAdd() {
     setAddMode(null); setSearch(""); setDropOpen(false);
-    setSelectedStudent(null); setSelectedLead(null);
+    setSelectedStudent(null); setSelectedContractStudent(null); setSelectedLead(null);
   }
 
   async function logHistory(params: {
@@ -278,7 +364,52 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setAdding(true);
     let insertPayload: Record<string, unknown>;
 
-    if (addMode === "aluno" && selectedStudent) {
+    if (addMode === "contrato" && selectedContractStudent) {
+      if (selectedContractStudent.motivo_bloqueio) {
+        toast.error(selectedContractStudent.motivo_bloqueio);
+        setAdding(false);
+        return;
+      }
+
+      if (!selectedContractStudent.modalidade_ok) {
+        toast.error("O contrato deste aluno não libera esta modalidade.");
+        setAdding(false);
+        return;
+      }
+
+      if (perms?.restricao_genero) {
+        const { data: studentData } = await supabase
+          .from("students")
+          .select("sexo")
+          .eq("id", selectedContractStudent.student_id)
+          .single();
+
+        const sexoAluno = studentData?.sexo;
+
+        if (sexoAluno && sexoAluno !== perms.restricao_genero) {
+          const label = perms.restricao_genero === "feminino" ? "feminino" : "masculino";
+          toast.error(`Esta grade é restrita ao público ${label}.`);
+          setAdding(false);
+          return;
+        }
+      }
+
+      insertPayload = {
+        contractor_id: user.contractorId!,
+        slot_id:       slot.id,
+        student_id:    selectedContractStudent.student_id,
+        student_nome:  selectedContractStudent.student_nome,
+        tipo:          "aluno",
+        pessoa_tipo:   "cliente",
+        origem_agendamento: "contrato",
+        consome_credito: !(perms?.agenda_livre ?? false),
+        contrato_id: selectedContractStudent.contrato_id,
+        student_contract_id: selectedContractStudent.student_contract_id,
+        status,
+        descontou_contrato: !(perms?.agenda_livre ?? false),
+        criado_por: user.email ?? user.name ?? "sistema",
+      };
+    } else if (addMode === "aluno" && selectedStudent) {
       if (perms?.max_clientes_especiais) {
         const countEspeciais = bookings.filter(b => b.tipo === "especial" && b.status !== "cancelado").length;
         if (countEspeciais >= perms.max_clientes_especiais) {
@@ -355,12 +486,18 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     await logHistory({
       bookingId: inserted?.id ?? null,
       evento: "pessoa_adicionada",
-      descricao: `${addMode === "lead" ? selectedLead?.nome : selectedStudent?.nome_completo} adicionado à aula${status === "lista_espera" ? " na fila de espera" : ""}.`,
+      descricao: `${addMode === "lead" ? selectedLead?.nome : addMode === "contrato" ? selectedContractStudent?.student_nome : selectedStudent?.nome_completo} adicionado à aula${status === "lista_espera" ? " na fila de espera" : ""}.`,
       origem_agendamento: (insertPayload.origem_agendamento as string) ?? null,
       pessoa_tipo: (insertPayload.pessoa_tipo as string) ?? null,
       student_id: (insertPayload.student_id as string) ?? null,
       lead_id: (insertPayload.lead_id as string) ?? null,
-      dados: { status, tipo: insertPayload.tipo, consome_credito: insertPayload.consome_credito },
+      dados: {
+        status,
+        tipo: insertPayload.tipo,
+        consome_credito: insertPayload.consome_credito,
+        contrato_id: insertPayload.contrato_id ?? null,
+        student_contract_id: insertPayload.student_contract_id ?? null,
+      },
     });
     toast.success(status === "lista_espera" ? "Adicionado na fila de espera." : "Adicionado com sucesso.");
     resetAdd(); loadBookings(); loadHistory(); onChanged();
@@ -428,6 +565,11 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const filteredStudents = search
     ? students.filter(s => s.nome_completo.toLowerCase().includes(search.toLowerCase()))
     : students;
+  const filteredContractStudents = search
+    ? contractStudents.filter(s =>
+        `${s.student_nome} ${s.contrato_nome}`.toLowerCase().includes(search.toLowerCase())
+      )
+    : contractStudents;
   const filteredLeads = search
     ? leads.filter(l => l.nome.toLowerCase().includes(search.toLowerCase()))
     : leads;
@@ -479,6 +621,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
           <p className={`text-xs ${isLeadLike ? "text-orange-500" : "text-gray-400"}`}>
             {b.tipo === "experimental" ? "Aula experimental" : ORIGEM_LABEL[b.origem_agendamento ?? ""] ?? (isLeadLike ? "Lead" : "Manual")}
+            {b.origem_agendamento === "contrato" && b.student_contract_id && <span> · contrato vinculado</span>}
             {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
           </p>
         </div>
@@ -672,24 +815,45 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                 <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2">
                   <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <input autoFocus type="text"
-                    placeholder={addMode === "lead" ? "Buscar lead..." : "Buscar aluno..."}
-                    value={(addMode === "aluno" ? selectedStudent?.nome_completo : selectedLead?.nome) ?? search}
+                    placeholder={addMode === "lead" ? "Buscar lead..." : addMode === "contrato" ? "Buscar cliente com contrato..." : "Buscar aluno..."}
+                    value={(addMode === "lead" ? selectedLead?.nome : addMode === "contrato" ? selectedContractStudent?.student_nome : selectedStudent?.nome_completo) ?? search}
                     onChange={e => {
                       setSearch(e.target.value);
-                      setSelectedStudent(null); setSelectedLead(null);
+                      setSelectedStudent(null); setSelectedContractStudent(null); setSelectedLead(null);
                       setDropOpen(true);
                     }}
                     onClick={() => setDropOpen(true)}
                     className="flex-1 text-sm text-gray-900 outline-none bg-transparent"
                   />
-                  {(selectedStudent || selectedLead) && (
-                    <button onClick={() => { setSelectedStudent(null); setSelectedLead(null); setSearch(""); }}
+                  {(selectedStudent || selectedContractStudent || selectedLead) && (
+                    <button onClick={() => { setSelectedStudent(null); setSelectedContractStudent(null); setSelectedLead(null); setSearch(""); }}
                       className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
                   )}
                 </div>
 
-                {dropOpen && !selectedStudent && !selectedLead && (
+                {dropOpen && !selectedStudent && !selectedContractStudent && !selectedLead && (
                   <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
+                    {addMode === "contrato" && (
+                      filteredContractStudents.length === 0
+                        ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente com contrato ativo encontrado</p>
+                        : filteredContractStudents.slice(0, 30).map(s => {
+                          const disabled = !s.modalidade_ok || !!s.motivo_bloqueio;
+                          return (
+                            <button key={s.student_contract_id}
+                              disabled={disabled}
+                              onClick={() => { setSelectedContractStudent(s); setSearch(""); setDropOpen(false); }}
+                              className={`w-full text-left px-3 py-2 text-sm transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"}`}>
+                              <span className="block font-medium text-gray-800">{s.student_nome}</span>
+                              <span className="block text-xs text-gray-400">
+                                {s.contrato_nome}
+                                {s.data_fim && <span> · até {new Date(s.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}</span>}
+                                {!s.modalidade_ok && <span className="text-red-500"> · modalidade não liberada</span>}
+                                {s.motivo_bloqueio && <span className="text-red-500"> · bloqueado</span>}
+                              </span>
+                            </button>
+                          );
+                        })
+                    )}
                     {addMode === "aluno" && (
                       filteredStudents.length === 0
                         ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum aluno encontrado</p>
@@ -716,7 +880,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
                 <div className="flex items-center gap-2 mt-2">
                   <button onClick={resetAdd} className="text-primary text-sm font-semibold hover:underline">Cancelar</button>
-                  <button onClick={handleAddBooking} disabled={(!selectedStudent && !selectedLead) || adding}
+                  <button onClick={handleAddBooking} disabled={(!selectedStudent && !selectedContractStudent && !selectedLead) || adding}
                     className="ml-auto bg-primary text-white text-sm font-semibold px-4 py-1.5 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50">
                     {adding ? "Adicionando..." : "Adicionar"}
                   </button>
@@ -725,9 +889,13 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
             ) : (
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setAddMode("aluno")}
+                  <button onClick={() => setAddMode("contrato")}
                     className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
-                    <UserPlus className="w-4 h-4" /> Adicionar aluno
+                    <UserPlus className="w-4 h-4" /> Cliente com contrato
+                  </button>
+                  <button onClick={() => setAddMode("aluno")}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:underline">
+                    <UserPlus className="w-4 h-4" /> Aluno manual
                   </button>
                   {canAddLeads && (
                     <button onClick={() => setAddMode("lead")}
