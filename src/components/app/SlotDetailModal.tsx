@@ -124,7 +124,7 @@ interface Props {
   onChanged: () => void;
 }
 
-type AddMode = "contrato" | "aluno" | "lead" | null;
+type AddMode = "contrato" | "especial" | "lead" | null;
 
 export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const { user } = useAuth();
@@ -453,7 +453,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         descontou_contrato: !(perms?.agenda_livre ?? false),
         criado_por: user.email ?? user.name ?? "sistema",
       };
-    } else if (addMode === "aluno" && selectedStudent) {
+    } else if (addMode === "especial" && selectedStudent) {
       if (perms?.max_clientes_especiais) {
         const countEspeciais = bookings.filter(b => b.tipo === "especial" && b.status !== "cancelado").length;
         if (countEspeciais >= perms.max_clientes_especiais) {
@@ -485,12 +485,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         slot_id:       slot.id,
         student_id:    selectedStudent.id,
         student_nome:  selectedStudent.nome_completo,
-        tipo:          "aluno",
-        pessoa_tipo:   "cliente",
-        origem_agendamento: "manual",
-        consome_credito: !(perms?.agenda_livre ?? false),
+        tipo:          "especial",
+        pessoa_tipo:   "cliente_especial",
+        origem_agendamento: "cliente_especial",
+        consome_credito: false,
         status,
-        descontou_contrato: !(perms?.agenda_livre ?? false),
+        descontou_contrato: false,
         criado_por: user.email ?? user.name ?? "sistema",
       };
     } else if (addMode === "lead" && selectedLead) {
@@ -517,7 +517,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         criado_por: user.email ?? user.name ?? "sistema",
       };
     } else {
-      toast.error("Selecione um aluno ou lead."); setAdding(false); return;
+      toast.error("Selecione uma pessoa para adicionar."); setAdding(false); return;
     }
 
     const { data: inserted, error } = await supabase.from("bookings").insert(insertPayload as any).select("id").single();
@@ -530,7 +530,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     await logHistory({
       bookingId: inserted?.id ?? null,
       evento: "pessoa_adicionada",
-      descricao: `${addMode === "lead" ? selectedLead?.nome : addMode === "contrato" ? selectedContractStudent?.student_nome : selectedStudent?.nome_completo} adicionado à aula${status === "lista_espera" ? " na fila de espera" : ""}.`,
+      descricao: `${addMode === "lead" ? selectedLead?.nome : addMode === "contrato" ? selectedContractStudent?.student_nome : selectedStudent?.nome_completo} adicionado à aula${addMode === "especial" ? " como cliente especial" : ""}${status === "lista_espera" ? " na fila de espera" : ""}.`,
       origem_agendamento: (insertPayload.origem_agendamento as string) ?? null,
       pessoa_tipo: (insertPayload.pessoa_tipo as string) ?? null,
       student_id: (insertPayload.student_id as string) ?? null,
@@ -652,6 +652,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     const canMark = mode !== "cancelados" && !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
     const hasMark = mode !== "cancelados" && !isCanceled && (b.status === "presente" || b.status === "faltou");
     const isLeadLike = b.tipo === "lead" || b.tipo === "experimental";
+    const isSpecial = b.tipo === "especial" || b.pessoa_tipo === "cliente_especial";
     const anam = b.tipo === "experimental" && b.anamnese_resposta_id ? anamneseMap[b.anamnese_resposta_id] : null;
     const preenchida = !!anam?.respondido_at;
     const anamLink = anam ? `${window.location.origin}/anamnese/${anam.token}` : null;
@@ -664,7 +665,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
           <p className={`text-xs ${isLeadLike ? "text-orange-500" : "text-gray-400"}`}>
-            {b.tipo === "experimental" ? "Aula experimental" : ORIGEM_LABEL[b.origem_agendamento ?? ""] ?? (isLeadLike ? "Lead" : "Manual")}
+            {isSpecial ? "Cliente especial" : b.tipo === "experimental" ? "Aula experimental" : ORIGEM_LABEL[b.origem_agendamento ?? ""] ?? (isLeadLike ? "Lead" : "Manual")}
             {b.origem_agendamento === "contrato" && b.student_contract_id && <span> · contrato vinculado</span>}
             {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
           </p>
@@ -859,7 +860,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                 <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2">
                   <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <input autoFocus type="text"
-                    placeholder={addMode === "lead" ? "Buscar lead..." : addMode === "contrato" ? "Buscar cliente com contrato..." : "Buscar aluno..."}
+                    placeholder={addMode === "lead" ? "Buscar lead..." : addMode === "contrato" ? "Buscar cliente com contrato..." : "Buscar cliente especial..."}
                     value={(addMode === "lead" ? selectedLead?.nome : addMode === "contrato" ? selectedContractStudent?.student_nome : selectedStudent?.nome_completo) ?? search}
                     onChange={e => {
                       setSearch(e.target.value);
@@ -920,6 +921,14 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                   </div>
                 )}
 
+                {addMode === "especial" && (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+                    <p className="text-xs font-semibold text-amber-800">
+                      Cliente especial entra na ocupação da aula, mas não consome crédito/aula do contrato.
+                    </p>
+                  </div>
+                )}
+
                 {dropOpen && !selectedStudent && !selectedContractStudent && !selectedLead && (
                   <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
                     {addMode === "contrato" && (
@@ -943,9 +952,9 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                           );
                         })
                     )}
-                    {addMode === "aluno" && (
+                    {addMode === "especial" && (
                       filteredStudents.length === 0
-                        ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum aluno encontrado</p>
+                        ? <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
                         : filteredStudents.slice(0, 20).map(s => (
                           <button key={s.id} onClick={() => { setSelectedStudent(s); setSearch(""); setDropOpen(false); }}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
@@ -982,10 +991,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                     className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
                     <UserPlus className="w-4 h-4" /> Cliente com contrato
                   </button>
-                  <button onClick={() => setAddMode("aluno")}
-                    className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:underline">
-                    <UserPlus className="w-4 h-4" /> Aluno manual
-                  </button>
+                  {perms?.permite_clientes_especiais && (
+                    <button onClick={() => setAddMode("especial")}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-amber-700 hover:text-amber-800 hover:underline">
+                      <UserPlus className="w-4 h-4" /> Cliente especial
+                    </button>
+                  )}
                   {canAddLeads && (
                     <button onClick={() => setAddMode("lead")}
                       className="flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:underline">
