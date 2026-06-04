@@ -32,6 +32,10 @@ export interface ModalidadeContrato {
   tipo_duracao_acessos: string;
   limitar_horarios: boolean;
   periodos_horario: PeriodoHorario[];
+  permite_reposicao: boolean;
+  max_reposicoes: string;
+  limite_reposicoes_periodo: string;
+  matricula_obrigatoria_na_venda: boolean;
 }
 
 interface DBModalidade {
@@ -316,6 +320,10 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
     tipo_duracao_acessos: initial?.tipo_duracao_acessos ?? "semana",
     limitar_horarios: initial?.limitar_horarios ?? false,
     periodos_horario: initial?.periodos_horario ?? [],
+    permite_reposicao: initial?.permite_reposicao ?? true,
+    max_reposicoes: initial?.max_reposicoes ?? "10",
+    limite_reposicoes_periodo: initial?.limite_reposicoes_periodo ?? "semana",
+    matricula_obrigatoria_na_venda: initial?.matricula_obrigatoria_na_venda ?? false,
   });
 
   useEffect(() => {
@@ -489,6 +497,58 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
 
                   {showAvancadas && (
                     <div className="px-5 pb-5 border-t border-gray-100 space-y-4 pt-4">
+                      <Toggle
+                        label={
+                          <span className="flex items-center gap-1">
+                            Permite reposições
+                            <Tooltip text="Quando o aluno cancelar uma aula, o sistema gera um crédito de reposição para uso posterior." />
+                          </span>
+                        }
+                        checked={form.permite_reposicao}
+                        onChange={v => setForm(f => ({ ...f, permite_reposicao: v }))}
+                      />
+                      {form.permite_reposicao && (
+                        <div className="ml-4 grid grid-cols-2 gap-4">
+                          <div>
+                            <label className={LBL}>Quantidade máxima</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={form.max_reposicoes}
+                              onChange={e => setForm(f => ({ ...f, max_reposicoes: e.target.value }))}
+                              className={INP}
+                              placeholder="Ex: 10"
+                            />
+                          </div>
+                          <div>
+                            <label className={LBL}>Limite por</label>
+                            <div className="relative">
+                              <select
+                                value={form.limite_reposicoes_periodo}
+                                onChange={e => setForm(f => ({ ...f, limite_reposicoes_periodo: e.target.value }))}
+                                className={SEL}
+                              >
+                                <option value="semana">Semana</option>
+                                <option value="mes">Mês</option>
+                                <option value="contrato">Contrato (total)</option>
+                              </select>
+                              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <Toggle
+                        label={
+                          <span className="flex items-center gap-1">
+                            Matrícula obrigatória no ato da venda
+                            <Tooltip text="Ao habilitar, será solicitado ao vendedor que escolha a turma do aluno no momento da venda deste contrato." />
+                          </span>
+                        }
+                        checked={form.matricula_obrigatoria_na_venda}
+                        onChange={v => setForm(f => ({ ...f, matricula_obrigatoria_na_venda: v }))}
+                      />
+
                       <Toggle
                         label={
                           <span className="flex items-center gap-1">

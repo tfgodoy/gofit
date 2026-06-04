@@ -3,6 +3,7 @@ import { X, Search, CheckCircle2, XCircle, UserPlus, Users, ClipboardCheck, Clip
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { verificarSessoesAluno } from "@/hooks/useVerificarSessoes";
 
 export interface SlotInfo {
   id:                         string;
@@ -908,6 +909,47 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         toast.error("O contrato deste aluno não libera esta modalidade.");
         setAdding(false);
         return;
+      }
+
+      // Verificar limite de sessões
+      const resultado = await verificarSessoesAluno(
+        user.contractorId,
+        selectedContractStudent.student_id,
+        selectedContractStudent.student_contract_id,
+        slot.modalidade_id ?? undefined,
+        slot.data
+      );
+
+      if (!resultado.permitido) {
+        // Mostrar aviso mas permitir que recepcionista force a entrada
+        const forcaInclusao = await new Promise<boolean>(resolve => {
+          toast.error(
+            <div className="flex flex-col gap-2">
+              <p>{resultado.motivo}</p>
+              <p className="text-xs text-gray-200">Sessões usadas: {resultado.sessoes_usadas}/{resultado.sessoes_limite}</p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => { resolve(true); toast.dismiss(); }}
+                  className="text-xs font-semibold px-2 py-1 rounded bg-primary text-white"
+                >
+                  Incluir mesmo assim
+                </button>
+                <button
+                  onClick={() => { resolve(false); toast.dismiss(); }}
+                  className="text-xs font-semibold px-2 py-1 rounded bg-gray-600 text-white"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>,
+            { duration: 10000 }
+          );
+        });
+
+        if (!forcaInclusao) {
+          setAdding(false);
+          return;
+        }
       }
 
       if (perms?.restricao_genero) {

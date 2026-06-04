@@ -46,6 +46,7 @@ interface ContratoData {
   valor_adesao: number | null;
   comissionar_consultor: boolean;
   categoria_receita: string | null;
+  contabilizar_sessoes_conjunto: boolean;
 }
 
 interface Props {
@@ -84,6 +85,7 @@ const EMPTY_FORM = {
   valor_adesao: "",
   comissionar_consultor: false,
   categoria_receita: "",
+  contabilizar_sessoes_conjunto: false,
 };
 
 const EMPTY_MOD: Modalidade = {
@@ -415,6 +417,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         valor_adesao: contrato.valor_adesao != null ? String(contrato.valor_adesao) : "",
         comissionar_consultor: contrato.comissionar_consultor,
         categoria_receita: contrato.categoria_receita ?? "",
+        contabilizar_sessoes_conjunto: contrato.contabilizar_sessoes_conjunto ?? false,
       };
     }
     return { ...EMPTY_FORM };
@@ -522,6 +525,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseFloat(form.valor_adesao) : null,
         comissionar_consultor: form.comissionar_consultor,
         categoria_receita: form.categoria_receita || null,
+        contabilizar_sessoes_conjunto: form.contabilizar_sessoes_conjunto,
       };
 
       let contratoId = contrato?.id;
@@ -545,6 +549,10 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
           sessoes_por_semana: m.tipo_acesso === "sessoes_semana" && m.sessoes_por_semana ? parseInt(m.sessoes_por_semana) : null,
           total_aulas: m.tipo_acesso === "pacote_aulas" && m.total_aulas ? parseInt(m.total_aulas) : null,
           contabilizar_conjunto: m.contabilizar_conjunto,
+          permite_reposicao: true,
+          max_reposicoes: 10,
+          limite_reposicoes_periodo: "semana",
+          matricula_obrigatoria_na_venda: false,
         }));
         await supabase.from("contrato_modalidades").insert(modsPayload);
       }
@@ -696,7 +704,19 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
                   >
                     <Plus className="w-4 h-4" /> Adicionar modalidade
                   </button>
-                </>
+                  <div className=\"flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl mt-4\">
+                    <div className=\"flex-1\">
+                      <span className=\"text-sm font-medium text-gray-800\">Contabilizar sessões de forma conjunta</span>
+                      <p className=\"text-xs text-gray-500 mt-0.5\">Ao ativar, todas as aulas realizadas contam no mesmo saldo, independente da modalidade.</p>
+                    </div>
+                    <button
+                      type=\"button\"
+                      onClick={() => setForm(f => ({ ...f, contabilizar_sessoes_conjunto: !f.contabilizar_sessoes_conjunto }))}
+                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ml-4 ${form.contabilizar_sessoes_conjunto ? \"bg-primary\" : \"bg-gray-200\"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.contabilizar_sessoes_conjunto ? \"translate-x-5\" : \"\"}`} />
+                    </button>
+                  </div>                </>
               )}
             </div>
           )}
