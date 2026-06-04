@@ -1809,6 +1809,78 @@ export interface Database {
         };
         Relationships: [];
       };
+      schedule_replacement_credits: {
+        Row: {
+          id:                  string;
+          contractor_id:       string;
+          student_id:          string;
+          student_nome:        string | null;
+          contrato_id:         string | null;
+          student_contract_id: string | null;
+          original_slot_id:    string;
+          original_booking_id: string;
+          used_slot_id:        string | null;
+          used_booking_id:     string | null;
+          modalidade_id:       string | null;
+          modalidade_nome:     string | null;
+          status:              string;
+          motivo:              string | null;
+          gerado_por:          string | null;
+          gerado_em:           string;
+          usado_em:            string | null;
+          validade:            string | null;
+          observacoes:         string | null;
+          created_at:          string;
+          updated_at:          string;
+        };
+        Insert: {
+          id?:                 string;
+          contractor_id:       string;
+          student_id:          string;
+          student_nome?:       string | null;
+          contrato_id?:        string | null;
+          student_contract_id?: string | null;
+          original_slot_id:    string;
+          original_booking_id: string;
+          used_slot_id?:       string | null;
+          used_booking_id?:    string | null;
+          modalidade_id?:      string | null;
+          modalidade_nome?:    string | null;
+          status?:             string;
+          motivo?:             string | null;
+          gerado_por?:         string | null;
+          gerado_em?:          string;
+          usado_em?:           string | null;
+          validade?:           string | null;
+          observacoes?:        string | null;
+          created_at?:         string;
+          updated_at?:         string;
+        };
+        Update: {
+          id?:                 string;
+          contractor_id?:      string;
+          student_id?:         string;
+          student_nome?:       string | null;
+          contrato_id?:        string | null;
+          student_contract_id?: string | null;
+          original_slot_id?:   string;
+          original_booking_id?: string;
+          used_slot_id?:       string | null;
+          used_booking_id?:    string | null;
+          modalidade_id?:      string | null;
+          modalidade_nome?:    string | null;
+          status?:             string;
+          motivo?:             string | null;
+          gerado_por?:         string | null;
+          gerado_em?:          string;
+          usado_em?:           string | null;
+          validade?:           string | null;
+          observacoes?:        string | null;
+          created_at?:         string;
+          updated_at?:         string;
+        };
+        Relationships: [];
+      };
       cash_sessions: {
         Row: {
           id:                     string;

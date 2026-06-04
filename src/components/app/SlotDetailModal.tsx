@@ -7,6 +7,7 @@ import { toast } from "sonner";
 export interface SlotInfo {
   id:                         string;
   grid_id:                    string | null;
+  modalidade_id?:             string | null;
   modalidade_nome:            string | null;
   staff_nome:                 string | null;
   unit_nome?:                 string | null;
@@ -48,8 +49,12 @@ interface Booking {
   consome_credito:      boolean | null;
   contrato_id:          string | null;
   student_contract_id:  string | null;
+  credito_reposicao_id: string | null;
   status:               string;
   checkin_em:           string | null;
+  cancelado_em:         string | null;
+  cancelado_por:        string | null;
+  cancelado_motivo:     string | null;
   anamnese_resposta_id: string | null;
 }
 
@@ -147,6 +152,10 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [creatingLead,    setCreatingLead]    = useState(false);
   const [newLead,         setNewLead]         = useState({ nome: "", telefone: "", email: "", origem: "" });
   const [cancelingSlot,   setCancelingSlot]   = useState(false);
+  const [cancelTarget,    setCancelTarget]    = useState<Booking | null>(null);
+  const [cancelMotivo,    setCancelMotivo]    = useState("");
+  const [gerarReposicao,  setGerarReposicao]  = useState(true);
+  const [cancelingBooking, setCancelingBooking] = useState(false);
   const [finalizando,     setFinalizando]     = useState(false);
   const [confirmarFinalizar, setConfirmarFinalizar] = useState(false);
   const [activeTab,       setActiveTab]       = useState<ActiveTab>("ativos");
@@ -156,7 +165,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setLoading(true);
     const { data } = await supabase
       .from("bookings")
-      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, pessoa_tipo, origem_agendamento, consome_credito, contrato_id, student_contract_id, status, checkin_em, anamnese_resposta_id")
+      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, pessoa_tipo, origem_agendamento, consome_credito, contrato_id, student_contract_id, credito_reposicao_id, status, checkin_em, cancelado_em, cancelado_por, cancelado_motivo, anamnese_resposta_id")
       .eq("slot_id", slot.id).order("created_at");
     const bks = (data ?? []) as Booking[];
     setBookings(bks);
@@ -397,6 +406,109 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
       dados: { status_anterior: booking?.status ?? null, status_novo: "reservado" },
     });
     loadBookings(); loadHistory(); onChanged();
+  }
+
+  function openCancelBooking(booking: Booking) {
+    setCancelTarget(booking);
+    setCancelMotivo("");
+    setGerarReposicao(canGenerateReplacement(booking));
+  }
+
+  function canGenerateReplacement(booking: Booking) {
+    return !!(
+      booking.student_id &&
+      booking.student_contract_id &&
+      booking.consome_credito !== false &&
+      booking.origem_agendamento === "contrato" &&
+      booking.status === "reservado" &&
+      !booking.credito_reposicao_id
+    );
+  }
+
+  async function handleCancelBooking() {
+    if (!user?.contractorId || !cancelTarget) return;
+
+    setCancelingBooking(true);
+    const now = new Date().toISOString();
+    const operator = user.email ?? user.name ?? "sistema";
+    const motivo = cancelMotivo.trim() || "Cancelamento manual pela agenda";
+    let replacementId: string | null = null;
+
+    if (gerarReposicao && canGenerateReplacement(cancelTarget)) {
+      const validade = new Date(slot.data + "T12:00:00");
+      validade.setDate(validade.getDate() + 30);
+
+      const { data: credit, error: creditError } = await supabase
+        .from("schedule_replacement_credits")
+        .insert({
+          contractor_id: user.contractorId,
+          student_id: cancelTarget.student_id!,
+          student_nome: cancelTarget.student_nome,
+          contrato_id: cancelTarget.contrato_id,
+          student_contract_id: cancelTarget.student_contract_id,
+          original_slot_id: slot.id,
+          original_booking_id: cancelTarget.id,
+          modalidade_id: slot.modalidade_id ?? null,
+          modalidade_nome: slot.modalidade_nome ?? null,
+          status: "disponivel",
+          motivo,
+          gerado_por: operator,
+          validade: validade.toISOString().split("T")[0],
+          observacoes: `Gerado pelo cancelamento da aula de ${slot.data} às ${slot.hora_inicio.slice(0, 5)}.`,
+        })
+        .select("id")
+        .single();
+
+      if (creditError || !credit) {
+        setCancelingBooking(false);
+        toast.error("Erro ao gerar crédito de reposição.");
+        return;
+      }
+
+      replacementId = credit.id;
+    }
+
+    const { error } = await supabase
+      .from("bookings")
+      .update({
+        status: "cancelado",
+        cancelado_em: now,
+        cancelado_por: operator,
+        cancelado_motivo: motivo,
+        credito_reposicao_id: replacementId,
+      })
+      .eq("id", cancelTarget.id);
+
+    setCancelingBooking(false);
+    if (error) {
+      if (replacementId) {
+        await supabase
+          .from("schedule_replacement_credits")
+          .update({ status: "cancelado", observacoes: "Cancelado automaticamente porque o booking nao foi atualizado." })
+          .eq("id", replacementId);
+      }
+      toast.error("Erro ao cancelar participação.");
+      return;
+    }
+
+    await logHistory({
+      booking: cancelTarget,
+      evento: replacementId ? "pessoa_cancelada_com_reposicao" : "pessoa_cancelada",
+      descricao: `${cancelTarget.student_nome ?? cancelTarget.lead_nome ?? "Pessoa"} cancelado/desistente na aula.`,
+      dados: {
+        motivo,
+        status_anterior: cancelTarget.status,
+        status_novo: "cancelado",
+        credito_reposicao_id: replacementId,
+      },
+    });
+
+    toast.success(replacementId ? "Cancelado e crédito de reposição gerado." : "Participação cancelada.");
+    setCancelTarget(null);
+    setCancelMotivo("");
+    loadBookings();
+    loadHistory();
+    onChanged();
   }
 
   async function handleAddBooking() {
@@ -667,8 +779,16 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
           <p className={`text-xs ${isLeadLike ? "text-orange-500" : "text-gray-400"}`}>
             {isSpecial ? "Cliente especial" : b.tipo === "experimental" ? "Aula experimental" : ORIGEM_LABEL[b.origem_agendamento ?? ""] ?? (isLeadLike ? "Lead" : "Manual")}
             {b.origem_agendamento === "contrato" && b.student_contract_id && <span> · contrato vinculado</span>}
+            {b.credito_reposicao_id && <span className="text-blue-600"> · reposição gerada</span>}
             {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
           </p>
+          {mode === "cancelados" && (
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {b.cancelado_em ? fmtDateTime(b.cancelado_em) : "Cancelado"}
+              {b.cancelado_por && <span> · {b.cancelado_por}</span>}
+              {b.cancelado_motivo && <span> · {b.cancelado_motivo}</span>}
+            </p>
+          )}
         </div>
         {b.tipo === "experimental" && (
           anam ? (
@@ -712,6 +832,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               <button onClick={() => handleUndoStatus(b.id)}
                 className="text-xs text-gray-400 hover:text-primary hover:underline px-1">
                 desfazer
+              </button>
+            )}
+            {b.status !== "presente" && b.status !== "faltou" && (
+              <button onClick={() => openCancelBooking(b)} title="Cancelar participação"
+                className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -1059,6 +1185,62 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               <button onClick={() => setCancelingSlot(false)} className="text-primary font-semibold text-sm hover:underline px-2">VOLTAR</button>
               <button onClick={handleCancelSlot} className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors">
                 CANCELAR AULA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Cancelar participação?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {cancelTarget.student_nome ?? cancelTarget.lead_nome ?? "Pessoa"} será movido para Cancelados / Desistentes.
+            </p>
+
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Motivo</label>
+            <textarea
+              value={cancelMotivo}
+              onChange={e => setCancelMotivo(e.target.value)}
+              rows={3}
+              placeholder="Ex.: aluno avisou que não poderá comparecer"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition resize-none"
+            />
+
+            {canGenerateReplacement(cancelTarget) ? (
+              <label className="flex items-start gap-2 mt-4 rounded-xl bg-blue-50 border border-blue-100 px-3 py-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={gerarReposicao}
+                  onChange={e => setGerarReposicao(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-xs text-blue-800">
+                  Gerar crédito de reposição para este contrato. Validade inicial: 30 dias.
+                </span>
+              </label>
+            ) : (
+              <div className="mt-4 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                <p className="text-xs text-gray-500">
+                  Este registro não gera reposição automática porque não é uma reserva de contrato com crédito consumível.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => { setCancelTarget(null); setCancelMotivo(""); }}
+                className="text-primary font-semibold text-sm hover:underline px-2"
+              >
+                VOLTAR
+              </button>
+              <button
+                onClick={handleCancelBooking}
+                disabled={cancelingBooking}
+                className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {cancelingBooking ? "CANCELANDO..." : "CANCELAR PARTICIPAÇÃO"}
               </button>
             </div>
           </div>
