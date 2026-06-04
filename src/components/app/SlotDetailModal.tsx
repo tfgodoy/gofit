@@ -743,6 +743,22 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     );
   }
 
+  function getPeriodoInicioReposicao(periodo: string | null): string {
+    const now = new Date();
+    if (periodo === "semana") {
+      const monday = new Date(now);
+      const day = monday.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      monday.setDate(monday.getDate() + diff);
+      monday.setHours(0, 0, 0, 0);
+      return monday.toISOString();
+    }
+    if (periodo === "mes") {
+      return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    }
+    return new Date(0).toISOString();
+  }
+
   async function handleCancelBooking() {
     if (!user?.contractorId || !cancelTarget) return;
 
@@ -751,6 +767,38 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     const operator = user.email ?? user.name ?? "sistema";
     const motivo = cancelMotivo.trim() || "Cancelamento manual pela agenda";
     let replacementId: string | null = null;
+
+    if (gerarReposicao && canGenerateReplacement(cancelTarget)) {
+      const { data: modConfig } = await supabase
+        .from("contrato_modalidades")
+        .select("permite_reposicao, max_reposicoes, limite_reposicoes_periodo")
+        .eq("contrato_id", cancelTarget.contrato_id!)
+        .eq("modalidade_id", slot.modalidade_id!)
+        .maybeSingle();
+
+      if (modConfig && modConfig.permite_reposicao === false) {
+        setGerarReposicao(false);
+        toast.warning("Este contrato/modalidade não permite gerar reposição.");
+      } else {
+        const limitePeriodo = modConfig?.limite_reposicoes_periodo ?? "semana";
+        const maxReposicoes = modConfig?.max_reposicoes ?? 10;
+        const periodoInicio = getPeriodoInicioReposicao(limitePeriodo);
+
+        const { count } = await supabase
+          .from("schedule_replacement_credits")
+          .select("id", { count: "exact", head: true })
+          .eq("contractor_id", user.contractorId)
+          .eq("student_id", cancelTarget.student_id!)
+          .eq("student_contract_id", cancelTarget.student_contract_id!)
+          .gte("created_at", periodoInicio)
+          .neq("status", "cancelado");
+
+        if ((count ?? 0) >= maxReposicoes) {
+          setGerarReposicao(false);
+          toast.warning(`Limite de reposições atingido (${maxReposicoes} por ${limitePeriodo}).`);
+        }
+      }
+    }
 
     if (gerarReposicao && canGenerateReplacement(cancelTarget)) {
       const validade = new Date(slot.data + "T12:00:00");

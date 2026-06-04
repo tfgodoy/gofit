@@ -25,6 +25,20 @@ interface Student {
   status: string;
 }
 
+interface ModalidadeObrigatoria {
+  modalidade_id: string | null;
+  modalidade_nome: string;
+}
+
+interface GridOption {
+  id: string;
+  nome: string;
+  modalidade_id: string | null;
+  modalidade_nome: string | null;
+  hora_inicio: string;
+  hora_fim: string;
+}
+
 const FORMA_LABEL: Record<string, string> = {
   dinheiro:       "Dinheiro",
   pix:            "Pix",
@@ -60,6 +74,9 @@ export default function MatriculaPage() {
   const [contratos,  setContratos]  = useState<Contrato[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
+  const [modalidadesObrigatorias, setModalidadesObrigatorias] = useState<ModalidadeObrigatoria[]>([]);
+  const [gridsDisponiveis, setGridsDisponiveis] = useState<GridOption[]>([]);
+  const [matriculaTurmas, setMatriculaTurmas] = useState<Record<string, string>>({});
 
   /* form */
   const [contratoId,    setContratoId]    = useState("");
@@ -71,6 +88,10 @@ export default function MatriculaPage() {
   /* derived */
   const contrato = contratos.find(c => c.id === contratoId);
   const valorMensalidade = contrato?.valor_por_mes ?? contrato?.valor_total ?? 0;
+  const precisaEscolherTurma = modalidadesObrigatorias.length > 0;
+  const turmasObrigatoriasCompletas = !precisaEscolherTurma && modalidadesObrigatorias.length === 0
+    ? true
+    : modalidadesObrigatorias.every(m => !!m.modalidade_id && !!matriculaTurmas[m.modalidade_id]);
   const dataFim = contrato
     ? contrato.tipo_duracao === "meses"
       ? addMonths(dataInicio, contrato.duracao)
@@ -106,9 +127,78 @@ export default function MatriculaPage() {
     }
   }, [contratoId]);
 
+  useEffect(() => {
+    if (!user?.contractorId || !contratoId) {
+      setModalidadesObrigatorias([]);
+      setGridsDisponiveis([]);
+      setMatriculaTurmas({});
+      return;
+    }
+
+    async function loadObrigatoriedadeTurma() {
+      const { data: modalidadesData } = await supabase
+        .from("contrato_modalidades")
+        .select("modalidade_id, modalidade_nome, nome")
+        .eq("contrato_id", contratoId)
+        .eq("matricula_obrigatoria_na_venda", true);
+
+      const obrigatorias = (modalidadesData ?? []).map((m: { modalidade_id: string | null; modalidade_nome: string | null; nome: string | null }) => ({
+        modalidade_id: m.modalidade_id,
+        modalidade_nome: m.modalidade_nome ?? m.nome ?? "Modalidade",
+      }));
+
+      setModalidadesObrigatorias(obrigatorias);
+
+      const modalidadeIds = obrigatorias
+        .map(m => m.modalidade_id)
+        .filter((id): id is string => !!id);
+
+      if (modalidadeIds.length === 0) {
+        setGridsDisponiveis([]);
+        setMatriculaTurmas({});
+        return;
+      }
+
+      const { data: gridsData } = await supabase
+        .from("schedule_grids")
+        .select("id, nome, modalidade_id, modalidade_nome, hora_inicio, hora_fim")
+        .eq("contractor_id", user.contractorId)
+        .eq("ativo", true)
+        .in("modalidade_id", modalidadeIds)
+        .order("modalidade_nome")
+        .order("hora_inicio");
+
+      setGridsDisponiveis((gridsData ?? []) as GridOption[]);
+      setMatriculaTurmas(prev => {
+        const next: Record<string, string> = {};
+        for (const m of obrigatorias) {
+          if (m.modalidade_id && prev[m.modalidade_id]) {
+            next[m.modalidade_id] = prev[m.modalidade_id];
+          }
+        }
+        return next;
+      });
+    }
+
+    loadObrigatoriedadeTurma();
+  }, [user, contratoId]);
+
   async function handleSave() {
     if (!user?.contractorId || !studentId || !contratoId) return;
     if (!dataInicio) { toast.error("Informe a data de início"); return; }
+    if (precisaEscolherTurma) {
+      const semModalidade = modalidadesObrigatorias.some(m => !m.modalidade_id);
+      if (semModalidade) {
+        toast.error("Há modalidade obrigatória sem vínculo de modalidade no contrato. Ajuste o contrato antes da matrícula.");
+        return;
+      }
+
+      const faltandoTurma = modalidadesObrigatorias.some(m => !m.modalidade_id || !matriculaTurmas[m.modalidade_id]);
+      if (faltandoTurma) {
+        toast.error("Selecione a turma obrigatória para todas as modalidades do contrato.");
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -156,6 +246,43 @@ export default function MatriculaPage() {
         await supabase.from("students")
           .update({ status: "ativo", updated_at: new Date().toISOString() })
           .eq("id", studentId);
+      }
+
+      /* 4. Vincular matrícula obrigatória em turma/grade quando configurado no contrato */
+      if (precisaEscolherTurma) {
+        const gridIds = Array.from(new Set(
+          modalidadesObrigatorias
+            .map(m => (m.modalidade_id ? matriculaTurmas[m.modalidade_id] : ""))
+            .filter((id): id is string => !!id)
+        ));
+
+        if (gridIds.length > 0) {
+          const { data: jaAtivos } = await supabase
+            .from("fixed_enrollments")
+            .select("grid_id")
+            .eq("contractor_id", user.contractorId)
+            .eq("student_id", studentId)
+            .eq("ativo", true)
+            .in("grid_id", gridIds);
+
+          const jaAtivosSet = new Set((jaAtivos ?? []).map((e: { grid_id: string }) => e.grid_id));
+          const inserir = gridIds
+            .filter(id => !jaAtivosSet.has(id))
+            .map(id => ({
+              contractor_id: user.contractorId,
+              student_id: studentId,
+              student_nome: student?.nome_completo ?? null,
+              grid_id: id,
+              ativo: true,
+            }));
+
+          if (inserir.length > 0) {
+            const { error: enrErr } = await supabase.from("fixed_enrollments").insert(inserir);
+            if (enrErr) {
+              toast.warning("Matrícula criada, mas não foi possível vincular turma obrigatória automaticamente.");
+            }
+          }
+        }
       }
 
       toast.success("Matrícula realizada! 1ª mensalidade gerada.");
@@ -306,6 +433,48 @@ export default function MatriculaPage() {
               </div>
             </div>
 
+            {/* Turma obrigatória na venda */}
+            {precisaEscolherTurma && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl shadow-sm p-5 space-y-4">
+                <h3 className="text-sm font-bold text-amber-800">Escolha a turma do aluno (obrigatório)</h3>
+                <p className="text-xs text-amber-700">
+                  Este contrato exige seleção de turma para concluir a matrícula.
+                </p>
+
+                {modalidadesObrigatorias.map((m, idx) => {
+                  const gridsDaModalidade = m.modalidade_id
+                    ? gridsDisponiveis.filter(g => g.modalidade_id === m.modalidade_id)
+                    : [];
+
+                  return (
+                    <div key={`${m.modalidade_id ?? "sem-modalidade"}-${idx}`}>
+                      <label className="block text-xs font-semibold text-amber-900 mb-1">
+                        {m.modalidade_nome} *
+                      </label>
+                      {m.modalidade_id ? (
+                        <select
+                          value={matriculaTurmas[m.modalidade_id] ?? ""}
+                          onChange={e => setMatriculaTurmas(prev => ({ ...prev, [m.modalidade_id as string]: e.target.value }))}
+                          className={inputClass}
+                        >
+                          <option value="">Selecione a turma</option>
+                          {gridsDaModalidade.map(g => (
+                            <option key={g.id} value={g.id}>
+                              {(g.modalidade_nome ?? g.nome)} — {g.hora_inicio.slice(0, 5)} às {g.hora_fim.slice(0, 5)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-xs text-red-600">
+                          Modalidade sem vínculo configurado no contrato. Ajuste o contrato antes de matricular.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Observações */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <label className="block text-xs font-semibold text-gray-500 mb-1">Observações</label>
@@ -328,7 +497,7 @@ export default function MatriculaPage() {
               </Link>
               <button
                 onClick={handleSave}
-                disabled={saving || !contratoId || !dataInicio}
+                disabled={saving || !contratoId || !dataInicio || !turmasObrigatoriasCompletas}
                 className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-colors"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
