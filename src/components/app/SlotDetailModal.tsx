@@ -511,6 +511,66 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     onChanged();
   }
 
+  async function handlePromoteFromWaitlist(booking: Booking) {
+    if (!user?.contractorId) return;
+
+    const currentActive = bookings.filter(b => b.status !== "cancelado" && b.status !== "lista_espera").length;
+    if (currentActive >= slot.capacidade_maxima) {
+      toast.error("A aula ainda está lotada. Libere uma vaga antes de mover da fila.");
+      return;
+    }
+
+    const isLeadBooking = booking.tipo === "lead" || booking.tipo === "experimental";
+    if (isLeadBooking && perms?.max_leads) {
+      const activeLeads = bookings.filter(b =>
+        b.id !== booking.id &&
+        b.status !== "cancelado" &&
+        b.status !== "lista_espera" &&
+        (b.tipo === "lead" || b.tipo === "experimental")
+      ).length;
+      if (activeLeads >= perms.max_leads) {
+        toast.error(`Limite atingido: máximo de ${perms.max_leads} leads nesta aula.`);
+        return;
+      }
+    }
+
+    if (booking.tipo === "especial" && perms?.max_clientes_especiais) {
+      const activeSpecials = bookings.filter(b =>
+        b.id !== booking.id &&
+        b.status !== "cancelado" &&
+        b.status !== "lista_espera" &&
+        b.tipo === "especial"
+      ).length;
+      if (activeSpecials >= perms.max_clientes_especiais) {
+        toast.error(`Limite atingido: máximo de ${perms.max_clientes_especiais} clientes especiais.`);
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from("bookings")
+      .update({ status: "reservado" })
+      .eq("id", booking.id);
+
+    if (error) {
+      toast.error("Erro ao mover da fila.");
+      return;
+    }
+
+    await logHistory({
+      booking,
+      evento: "fila_movida_para_aula",
+      descricao: `${booking.student_nome ?? booking.lead_nome ?? "Pessoa"} saiu da fila de espera e entrou na aula.`,
+      dados: { status_anterior: "lista_espera", status_novo: "reservado" },
+    });
+
+    toast.success("Movido da fila para a aula.");
+    setActiveTab("ativos");
+    loadBookings();
+    loadHistory();
+    onChanged();
+  }
+
   async function handleAddBooking() {
     if (!user?.contractorId) return;
     const activeCount = bookings.filter(b => b.status !== "lista_espera" && b.status !== "cancelado").length;
@@ -761,8 +821,8 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
       ? (b.lead_nome ?? "Lead")
       : (b.student_nome ?? "—");
     const badge = STATUS_BADGE[b.status] ?? STATUS_BADGE.reservado;
-    const canMark = mode !== "cancelados" && !isCanceled && (b.status === "reservado" || b.status === "lista_espera");
-    const hasMark = mode !== "cancelados" && !isCanceled && (b.status === "presente" || b.status === "faltou");
+    const canMark = mode === "ativos" && !isCanceled && b.status === "reservado";
+    const hasMark = mode === "ativos" && !isCanceled && (b.status === "presente" || b.status === "faltou");
     const isLeadLike = b.tipo === "lead" || b.tipo === "experimental";
     const isSpecial = b.tipo === "especial" || b.pessoa_tipo === "cliente_especial";
     const anam = b.tipo === "experimental" && b.anamnese_resposta_id ? anamneseMap[b.anamnese_resposta_id] : null;
@@ -816,6 +876,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         </span>
         {!isCanceled && mode !== "cancelados" && (
           <div className="flex items-center gap-0.5 flex-shrink-0">
+            {mode === "fila" && (
+              <button onClick={() => handlePromoteFromWaitlist(b)}
+                className="text-xs font-semibold text-primary hover:underline px-1">
+                mover
+              </button>
+            )}
             {canMark && (
               <>
                 <button onClick={() => handleMarkStatus(b.id, "presente")} title="Marcar presente"
@@ -949,7 +1015,14 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
               <p className="text-sm text-gray-400">Não há clientes na fila de espera.</p>
             </div>
           ) : activeTab === "fila" ? (
-            waitlistBookings.map(b => renderBookingRow(b, "fila"))
+            <>
+              <div className="px-6 py-2 bg-yellow-50 border-b border-yellow-100">
+                <p className="text-xs font-medium text-yellow-800">
+                  Mova uma pessoa da fila para a aula somente quando houver vaga disponível.
+                </p>
+              </div>
+              {waitlistBookings.map(b => renderBookingRow(b, "fila"))}
+            </>
           ) : history.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 gap-1">
               <p className="text-sm text-gray-400">Nenhum histórico registrado ainda.</p>
