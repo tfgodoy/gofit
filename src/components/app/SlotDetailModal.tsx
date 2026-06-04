@@ -88,6 +88,13 @@ interface SlotHistory {
   created_at:         string;
 }
 
+interface SessionUsage {
+  id:             string;
+  booking_id:     string;
+  status_booking: string;
+  quantidade:     number;
+}
+
 type ActiveTab = "ativos" | "cancelados" | "fila" | "historico";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -135,6 +142,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const { user } = useAuth();
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [history,  setHistory]        = useState<SlotHistory[]>([]);
+  const [usageMap, setUsageMap]       = useState<Record<string, SessionUsage>>({});
   const [anamneseMap, setAnamneseMap] = useState<Record<string, AnamneseInfo>>({});
   const [loading, setLoading]         = useState(true);
   const [students, setStudents]       = useState<Student[]>([]);
@@ -169,6 +177,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
       .eq("slot_id", slot.id).order("created_at");
     const bks = (data ?? []) as Booking[];
     setBookings(bks);
+    await loadSessionUsages(bks);
 
     // Carrega status das anamneses vinculadas aos bookings experimentais
     const anamIds = bks
@@ -187,6 +196,24 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     }
 
     setLoading(false);
+  }
+
+  async function loadSessionUsages(bks = bookings) {
+    const bookingIds = bks.map(b => b.id);
+    if (bookingIds.length === 0) {
+      setUsageMap({});
+      return;
+    }
+
+    const { data } = await supabase
+      .from("schedule_session_usage")
+      .select("id, booking_id, status_booking, quantidade")
+      .in("booking_id", bookingIds)
+      .eq("estornado", false);
+
+    const map: Record<string, SessionUsage> = {};
+    for (const usage of (data ?? []) as SessionUsage[]) map[usage.booking_id] = usage;
+    setUsageMap(map);
   }
 
   async function loadHistory() {
@@ -381,11 +408,25 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   async function handleMarkStatus(bookingId: string, status: "presente" | "faltou") {
     const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
     const update = status === "presente"
       ? { status, checkin_em: new Date().toISOString() }
       : { status };
     const { error } = await supabase.from("bookings").update(update).eq("id", bookingId);
     if (error) { toast.error("Erro ao atualizar."); return; }
+
+    const usageOk = await recordSessionUsage(booking, status);
+    if (!usageOk) {
+      await supabase
+        .from("bookings")
+        .update({ status: booking.status, checkin_em: booking.checkin_em })
+        .eq("id", bookingId);
+      toast.error("A presenca/falta nao foi salva porque o consumo da sessao falhou.");
+      loadBookings(); loadHistory(); onChanged();
+      return;
+    }
+
     await logHistory({
       booking,
       evento: status === "presente" ? "presenca_marcada" : "falta_marcada",
@@ -398,6 +439,14 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
 
   async function handleUndoStatus(bookingId: string) {
     const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
+    const reversed = await reverseSessionUsage(booking);
+    if (!reversed) {
+      toast.error("Nao foi possivel estornar a sessao consumida.");
+      return;
+    }
+
     await supabase.from("bookings").update({ status: "reservado", checkin_em: null }).eq("id", bookingId);
     await logHistory({
       booking,
@@ -406,6 +455,76 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
       dados: { status_anterior: booking?.status ?? null, status_novo: "reservado" },
     });
     loadBookings(); loadHistory(); onChanged();
+  }
+
+  function shouldConsumeSession(booking: Booking) {
+    return !!(
+      booking.student_id &&
+      booking.student_contract_id &&
+      booking.consome_credito !== false &&
+      booking.pessoa_tipo !== "lead" &&
+      booking.pessoa_tipo !== "cliente_especial" &&
+      booking.origem_agendamento !== "lead" &&
+      booking.origem_agendamento !== "cliente_especial"
+    );
+  }
+
+  async function recordSessionUsage(booking: Booking, status: "presente" | "faltou") {
+    if (!user?.contractorId || !shouldConsumeSession(booking)) return true;
+
+    const operator = user.email ?? user.name ?? "sistema";
+    const existing = usageMap[booking.id];
+    const tipoConsumo = booking.origem_agendamento === "reposicao" ? "reposicao" : "aula";
+    const payload = {
+      status_booking: status,
+      tipo_consumo: tipoConsumo,
+      quantidade: 1,
+      motivo: status === "presente" ? "Presenca marcada na agenda" : "Falta marcada na agenda",
+      criado_por: operator,
+    };
+
+    if (existing) {
+      const { error } = await supabase
+        .from("schedule_session_usage")
+        .update(payload)
+        .eq("id", existing.id);
+      return !error;
+    }
+
+    const { error } = await supabase.from("schedule_session_usage").insert({
+      contractor_id: user.contractorId,
+      booking_id: booking.id,
+      slot_id: slot.id,
+      student_id: booking.student_id!,
+      student_nome: booking.student_nome,
+      contrato_id: booking.contrato_id,
+      student_contract_id: booking.student_contract_id,
+      modalidade_id: slot.modalidade_id ?? null,
+      modalidade_nome: slot.modalidade_nome ?? null,
+      origem_agendamento: booking.origem_agendamento,
+      ...payload,
+    });
+
+    return !error;
+  }
+
+  async function reverseSessionUsage(booking: Booking) {
+    if (!user?.contractorId || !shouldConsumeSession(booking)) return true;
+
+    const activeUsage = usageMap[booking.id];
+    if (!activeUsage) return true;
+
+    const { error } = await supabase
+      .from("schedule_session_usage")
+      .update({
+        estornado: true,
+        estornado_em: new Date().toISOString(),
+        estornado_por: user.email ?? user.name ?? "sistema",
+        motivo_estorno: "Status da agenda desfeito",
+      })
+      .eq("id", activeUsage.id);
+
+    return !error;
   }
 
   function openCancelBooking(booking: Booking) {
@@ -825,6 +944,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     const hasMark = mode === "ativos" && !isCanceled && (b.status === "presente" || b.status === "faltou");
     const isLeadLike = b.tipo === "lead" || b.tipo === "experimental";
     const isSpecial = b.tipo === "especial" || b.pessoa_tipo === "cliente_especial";
+    const usage = usageMap[b.id];
     const anam = b.tipo === "experimental" && b.anamnese_resposta_id ? anamneseMap[b.anamnese_resposta_id] : null;
     const preenchida = !!anam?.respondido_at;
     const anamLink = anam ? `${window.location.origin}/anamnese/${anam.token}` : null;
@@ -841,6 +961,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
             {b.origem_agendamento === "contrato" && b.student_contract_id && <span> · contrato vinculado</span>}
             {b.credito_reposicao_id && <span className="text-blue-600"> · reposição gerada</span>}
             {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
+            {usage && <span className="text-indigo-600"> · sessão consumida</span>}
           </p>
           {mode === "cancelados" && (
             <p className="text-[11px] text-gray-400 mt-0.5">
