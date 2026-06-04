@@ -97,10 +97,24 @@ export default function AgendaPage() {
   async function handleCancelDay() {
     if (!cancelDay || !user?.contractorId) return;
     setCancelingDay(true);
-    const daySlotIds = slots.filter(s => s.data === cancelDay && s.status !== "cancelado").map(s => s.id);
+    const daySlots = slots.filter(s => s.data === cancelDay && s.status !== "cancelado");
+    const daySlotIds = daySlots.map(s => s.id);
     if (daySlotIds.length > 0) {
       await supabase.from("schedule_slots").update({ status: "cancelado" })
         .in("id", daySlotIds);
+      await supabase.from("schedule_slot_history").insert(daySlots.map(s => ({
+        contractor_id: user.contractorId!,
+        slot_id: s.id,
+        evento: "aula_cancelada",
+        descricao: "Aula cancelada pelo cancelamento do dia.",
+        dados: {
+          origem: "cancelamento_dia",
+          data: cancelDay,
+          status_anterior: s.status,
+          status_novo: "cancelado",
+        },
+        criado_por: user.email ?? user.name ?? "sistema",
+      })));
     }
     toast.success(`${daySlotIds.length} aula(s) cancelada(s).`);
     setCancelingDay(false);
