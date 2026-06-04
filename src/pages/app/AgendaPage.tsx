@@ -53,7 +53,7 @@ interface BookingStats {
 }
 
 const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
-const HOUR_HEIGHT = 72;
+const HOUR_HEIGHT = 144;
 const DEFAULT_START = 6 * 60;
 const DEFAULT_END = 22 * 60;
 
@@ -388,8 +388,8 @@ export default function AgendaPage() {
                           const stats = bkStats[slot.id] ?? { active: 0, present: 0, waitlist: 0 };
                           const start = timeToMinutes(slot.hora_inicio);
                           const end = Math.max(timeToMinutes(slot.hora_fim), start + 30);
-                          const top = ((start - timeRange.start) / 60) * HOUR_HEIGHT + 4;
-                          const height = Math.max(46, ((end - start) / 60) * HOUR_HEIGHT - 8);
+                          const top = ((start - timeRange.start) / 60) * HOUR_HEIGHT + 6;
+                          const height = Math.max(108, ((end - start) / 60) * HOUR_HEIGHT - 12);
                           const isCanceled = slot.status === "cancelado";
                           const isFull = !isCanceled && stats.active >= slot.capacidade_maxima;
                           const offset = (idx % 2) * 8;
@@ -403,7 +403,7 @@ export default function AgendaPage() {
                               }`}
                               style={{ top: top + offset, height, borderLeft: `5px solid ${isCanceled ? "#d1d5db" : slot.cor}` }}
                             >
-                              <div className="h-full min-h-0 p-2 overflow-hidden">
+                              <div className="h-full min-h-0 p-2.5 overflow-hidden">
                                 <div className="flex items-start gap-1">
                                   <p className="text-[11px] font-bold text-gray-900 leading-tight truncate flex-1">
                                     {slot.hora_inicio.slice(0, 5)} - {slot.hora_fim.slice(0, 5)}
