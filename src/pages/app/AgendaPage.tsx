@@ -373,7 +373,6 @@ export default function AgendaPage() {
                     const iso = isoDate(day);
                     const isToday = iso === today;
                     const daySlots = slotsByDay(iso);
-                    const positionedSlots = positionDaySlots(daySlots);
                     return (
                       <div key={iso} className={`px-3 py-2 border-r border-gray-100 last:border-r-0 relative group ${isToday ? "bg-primary/5" : ""}`}>
                         <div className="flex items-center gap-2">
@@ -414,6 +413,7 @@ export default function AgendaPage() {
                     const iso = isoDate(day);
                     const isToday = iso === today;
                     const daySlots = slotsByDay(iso);
+                    const positionedSlots = positionDaySlots(daySlots);
 
                     return (
                       <div key={iso} className={`relative border-r border-gray-100 last:border-r-0 ${isToday ? "bg-primary/[0.03]" : "bg-white"}`} style={{ height: timelineHeight }}>
