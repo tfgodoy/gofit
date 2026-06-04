@@ -144,6 +144,8 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   const [selectedContractStudent, setSelectedContractStudent] = useState<ContractStudent | null>(null);
   const [selectedLead,    setSelectedLead]    = useState<Lead    | null>(null);
   const [adding,          setAdding]          = useState(false);
+  const [creatingLead,    setCreatingLead]    = useState(false);
+  const [newLead,         setNewLead]         = useState({ nome: "", telefone: "", email: "", origem: "" });
   const [cancelingSlot,   setCancelingSlot]   = useState(false);
   const [finalizando,     setFinalizando]     = useState(false);
   const [confirmarFinalizar, setConfirmarFinalizar] = useState(false);
@@ -297,6 +299,48 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
   function resetAdd() {
     setAddMode(null); setSearch(""); setDropOpen(false);
     setSelectedStudent(null); setSelectedContractStudent(null); setSelectedLead(null);
+    setCreatingLead(false);
+    setNewLead({ nome: "", telefone: "", email: "", origem: "" });
+  }
+
+  async function handleCreateLead() {
+    if (!user?.contractorId) return;
+    if (!newLead.nome.trim()) {
+      toast.error("Informe o nome do lead.");
+      return;
+    }
+
+    setCreatingLead(true);
+    const { data, error } = await supabase
+      .from("opportunities")
+      .insert({
+        contractor_id: user.contractorId,
+        nome: newLead.nome.trim(),
+        telefone: newLead.telefone.trim() || null,
+        email: newLead.email.trim() || null,
+        origem: newLead.origem.trim() || "Agenda",
+        etapa: "Visita agendada",
+        modalidade_id: slot.modalidade_id ?? null,
+        data_entrada: new Date().toISOString().split("T")[0],
+        data_prevista: slot.data,
+        observacoes: `Lead cadastrado pela agenda para ${slot.modalidade_nome ?? "aula"} às ${slot.hora_inicio.slice(0, 5)}.`,
+      })
+      .select("id, nome, telefone")
+      .single();
+
+    setCreatingLead(false);
+    if (error || !data) {
+      toast.error("Erro ao criar lead.");
+      return;
+    }
+
+    const created = data as Lead;
+    setLeads(prev => [created, ...prev]);
+    setSelectedLead(created);
+    setSearch("");
+    setDropOpen(false);
+    setNewLead({ nome: "", telefone: "", email: "", origem: "" });
+    toast.success("Lead criado. Clique em Adicionar para colocá-lo na aula.");
   }
 
   async function logHistory(params: {
@@ -811,7 +855,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         {!isCanceled && !isConcluido && (activeTab === "ativos" || activeTab === "fila") && (
           <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0">
             {addMode ? (
-              <div ref={searchRef} className="relative">
+              <div ref={searchRef} className="relative space-y-3">
                 <div className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2">
                   <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <input autoFocus type="text"
@@ -830,6 +874,51 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                       className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
                   )}
                 </div>
+
+                {addMode === "lead" && (
+                  <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-3">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <p className="text-xs font-bold text-orange-700">Cadastrar lead na hora</p>
+                      <span className="text-[11px] text-orange-500">Etapa: Visita agendada</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        value={newLead.nome}
+                        onChange={e => setNewLead(prev => ({ ...prev, nome: e.target.value }))}
+                        placeholder="Nome do lead *"
+                        className="text-sm border border-orange-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-200"
+                      />
+                      <input
+                        value={newLead.telefone}
+                        onChange={e => setNewLead(prev => ({ ...prev, telefone: e.target.value }))}
+                        placeholder="Telefone"
+                        className="text-sm border border-orange-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-200"
+                      />
+                      <input
+                        type="email"
+                        value={newLead.email}
+                        onChange={e => setNewLead(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="E-mail"
+                        className="text-sm border border-orange-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-200"
+                      />
+                      <input
+                        value={newLead.origem}
+                        onChange={e => setNewLead(prev => ({ ...prev, origem: e.target.value }))}
+                        placeholder="Origem"
+                        className="text-sm border border-orange-100 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-orange-200"
+                      />
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={handleCreateLead}
+                        disabled={creatingLead || !newLead.nome.trim()}
+                        className="text-xs font-bold bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                      >
+                        {creatingLead ? "Criando..." : "+ Criar e selecionar lead"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {dropOpen && !selectedStudent && !selectedContractStudent && !selectedLead && (
                   <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
