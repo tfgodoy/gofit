@@ -52,6 +52,12 @@ interface BookingStats {
   waitlist: number;
 }
 
+interface PositionedSlot {
+  slot: SlotRow;
+  column: number;
+  columns: number;
+}
+
 const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 const HOUR_HEIGHT = 144;
 const DEFAULT_START = 6 * 60;
@@ -205,11 +211,51 @@ export default function AgendaPage() {
       .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
   }
 
+  function positionDaySlots(daySlots: SlotRow[]): PositionedSlot[] {
+    const sorted = [...daySlots].sort((a, b) =>
+      a.hora_inicio.localeCompare(b.hora_inicio) || a.hora_fim.localeCompare(b.hora_fim)
+    );
+    const positioned: PositionedSlot[] = [];
+    const openColumns: { column: number; end: number }[] = [];
+
+    for (const slot of sorted) {
+      const start = timeToMinutes(slot.hora_inicio);
+      const end = Math.max(timeToMinutes(slot.hora_fim), start + 30);
+
+      for (let i = openColumns.length - 1; i >= 0; i--) {
+        if (openColumns[i].end <= start) openColumns.splice(i, 1);
+      }
+
+      let column = 0;
+      while (openColumns.some(item => item.column === column)) column += 1;
+      openColumns.push({ column, end });
+
+      positioned.push({ slot, column, columns: 1 });
+    }
+
+    for (const item of positioned) {
+      const itemStart = timeToMinutes(item.slot.hora_inicio);
+      const itemEnd = Math.max(timeToMinutes(item.slot.hora_fim), itemStart + 30);
+      item.columns = Math.max(
+        1,
+        ...positioned
+          .filter(other => {
+            const otherStart = timeToMinutes(other.slot.hora_inicio);
+            const otherEnd = Math.max(timeToMinutes(other.slot.hora_fim), otherStart + 30);
+            return itemStart < otherEnd && otherStart < itemEnd;
+          })
+          .map(other => other.column + 1)
+      );
+    }
+
+    return positioned;
+  }
+
   function ocupacaoCls(count: number, max: number) {
     const pct = max > 0 ? count / max : 0;
-    if (pct >= 1) return "bg-red-100 text-red-700";
-    if (pct >= 0.8) return "bg-orange-100 text-orange-700";
-    return "bg-emerald-100 text-emerald-700";
+    if (pct >= 1) return "bg-red-600 text-white";
+    if (pct >= 0.8) return "bg-orange-500 text-black";
+    return "bg-white/70 text-black";
   }
 
   function resetFilters() {
@@ -327,6 +373,7 @@ export default function AgendaPage() {
                     const iso = isoDate(day);
                     const isToday = iso === today;
                     const daySlots = slotsByDay(iso);
+                    const positionedSlots = positionDaySlots(daySlots);
                     return (
                       <div key={iso} className={`px-3 py-2 border-r border-gray-100 last:border-r-0 relative group ${isToday ? "bg-primary/5" : ""}`}>
                         <div className="flex items-center gap-2">
@@ -384,7 +431,7 @@ export default function AgendaPage() {
                           </div>
                         )}
 
-                        {daySlots.map((slot, idx) => {
+                        {positionedSlots.map(({ slot, column, columns }) => {
                           const stats = bkStats[slot.id] ?? { active: 0, present: 0, waitlist: 0 };
                           const start = timeToMinutes(slot.hora_inicio);
                           const end = Math.max(timeToMinutes(slot.hora_fim), start + 30);
@@ -392,42 +439,50 @@ export default function AgendaPage() {
                           const height = Math.max(108, ((end - start) / 60) * HOUR_HEIGHT - 12);
                           const isCanceled = slot.status === "cancelado";
                           const isFull = !isCanceled && stats.active >= slot.capacidade_maxima;
-                          const offset = (idx % 2) * 8;
+                          const gap = 6;
+                          const width = `calc((100% - ${(columns + 1) * gap}px) / ${columns})`;
+                          const left = `calc(${column} * ((100% - ${(columns + 1) * gap}px) / ${columns}) + ${(column + 1) * gap}px)`;
 
                           return (
                             <button
                               key={slot.id}
                               onClick={() => setSelected(slot)}
-                              className={`absolute left-2 right-2 text-left rounded-md border shadow-sm transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30 ${
-                                isCanceled ? "bg-gray-50 border-gray-200 opacity-60" : "bg-white border-gray-200"
+                              className={`absolute text-left rounded-md border shadow-sm transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                                isCanceled ? "border-gray-300 opacity-60" : "border-black/10"
                               }`}
-                              style={{ top: top + offset, height, borderLeft: `5px solid ${isCanceled ? "#d1d5db" : slot.cor}` }}
+                              style={{
+                                top,
+                                left,
+                                width,
+                                height,
+                                backgroundColor: isCanceled ? "#e5e7eb" : slot.cor,
+                              }}
                             >
-                              <div className="h-full min-h-0 p-2.5 overflow-hidden">
+                              <div className="h-full min-h-0 p-2.5 overflow-hidden text-black font-bold">
                                 <div className="flex items-start gap-1">
-                                  <p className="text-[11px] font-bold text-gray-900 leading-tight truncate flex-1">
+                                  <p className="text-[11px] leading-tight truncate flex-1">
                                     {slot.hora_inicio.slice(0, 5)} - {slot.hora_fim.slice(0, 5)}
                                   </p>
-                                  {isFull && <span className="text-[10px] font-bold bg-red-100 text-red-700 rounded px-1">LOTADO</span>}
+                                  {isFull && <span className="text-[10px] bg-red-600 text-white rounded px-1">LOTADO</span>}
                                 </div>
-                                <p className="mt-0.5 text-xs font-bold text-gray-900 truncate">{slot.modalidade_nome ?? "Aula"}</p>
+                                <p className="mt-0.5 text-xs truncate">{slot.modalidade_nome ?? "Aula"}</p>
                                 {slot.staff_nome && (
-                                  <p className="mt-0.5 text-[11px] text-gray-500 truncate flex items-center gap-1">
+                                  <p className="mt-0.5 text-[11px] truncate flex items-center gap-1">
                                     <Clock className="w-3 h-3" /> {slot.staff_nome}
                                   </p>
                                 )}
                                 {slot.unit_nome && height >= 64 && (
-                                  <p className="mt-0.5 text-[11px] text-gray-400 truncate flex items-center gap-1">
+                                  <p className="mt-0.5 text-[11px] truncate flex items-center gap-1">
                                     <MapPin className="w-3 h-3" /> {slot.unit_nome}
                                   </p>
                                 )}
                                 <div className="mt-1 flex flex-wrap items-center gap-1">
-                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold ${ocupacaoCls(stats.active, slot.capacidade_maxima)}`}>
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] ${ocupacaoCls(stats.active, slot.capacidade_maxima)}`}>
                                     <Users className="w-3 h-3" /> {stats.active}/{slot.capacidade_maxima}
                                   </span>
-                                  {stats.present > 0 && <span className="text-[11px] font-semibold text-green-700">{stats.present} pres.</span>}
-                                  {stats.waitlist > 0 && <span className="text-[11px] font-semibold text-yellow-700">{stats.waitlist} fila</span>}
-                                  {isCanceled && <span className="text-[11px] font-semibold text-red-500">cancelada</span>}
+                                  {stats.present > 0 && <span className="text-[11px]">{stats.present} pres.</span>}
+                                  {stats.waitlist > 0 && <span className="text-[11px]">{stats.waitlist} fila</span>}
+                                  {isCanceled && <span className="text-[11px]">cancelada</span>}
                                 </div>
                               </div>
                             </button>
