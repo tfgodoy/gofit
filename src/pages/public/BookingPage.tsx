@@ -344,11 +344,34 @@ export default function BookingPage() {
           lead_id:       studentId,
           lead_nome:     form.nome.trim(),
           tipo:          "experimental",
+          pessoa_tipo:   "lead",
+          origem_agendamento: "lead",
+          consome_credito: false,
           status:        "reservado",
           reservado_em:  new Date().toISOString(),
+          descontou_contrato: false,
+          criado_por:    "agendamento_publico",
         })
         .select("id").single();
       if (bErr) throw new Error("Erro ao confirmar o agendamento.");
+
+      await supabase.from("schedule_slot_history").insert({
+        contractor_id: contractorId!,
+        slot_id:       selectedSlot!.id,
+        booking_id:    booking.id,
+        student_id:    studentId,
+        lead_id:       studentId,
+        evento:        "lead_agendado_publico",
+        descricao:     `${form.nome.trim()} agendou uma aula experimental pelo link público.`,
+        origem_agendamento: "lead",
+        pessoa_tipo:   "lead",
+        criado_por:    "agendamento_publico",
+        dados: {
+          modalidade: selectedMod?.descricao ?? null,
+          data: selectedDate,
+          hora_inicio: selectedSlot?.hora_inicio ?? null,
+        },
+      } as any);
 
       /* 4 — Create anamnese record */
       const token = crypto.randomUUID();

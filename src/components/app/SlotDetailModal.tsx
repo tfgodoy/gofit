@@ -43,6 +43,9 @@ interface Booking {
   lead_id:              string | null;
   lead_nome:            string | null;
   tipo:                 string;
+  pessoa_tipo:          string | null;
+  origem_agendamento:   string | null;
+  consome_credito:      boolean | null;
   status:               string;
   checkin_em:           string | null;
   anamnese_resposta_id: string | null;
@@ -65,6 +68,17 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   cancelado:    { label: "Cancelado",        cls: "bg-gray-100 text-gray-500"   },
   concluido:    { label: "Concluída",        cls: "bg-green-100 text-green-700" },
   lista_espera: { label: "Fila de espera",   cls: "bg-yellow-100 text-yellow-700" },
+};
+
+const ORIGEM_LABEL: Record<string, string> = {
+  matricula: "Matrícula",
+  app_aluno: "App aluno",
+  contrato: "Contrato",
+  reposicao: "Reposição",
+  lead: "Lead",
+  cliente_especial: "Cliente especial",
+  aula_brinde: "Aula brinde",
+  manual: "Manual",
 };
 
 function fmtDataLong(s: string) {
@@ -112,7 +126,7 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setLoading(true);
     const { data } = await supabase
       .from("bookings")
-      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, status, checkin_em, anamnese_resposta_id")
+      .select("id, student_id, student_nome, lead_id, lead_nome, tipo, pessoa_tipo, origem_agendamento, consome_credito, status, checkin_em, anamnese_resposta_id")
       .eq("slot_id", slot.id).neq("status", "cancelado").order("created_at");
     const bks = (data ?? []) as Booking[];
     setBookings(bks);
@@ -175,18 +189,59 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
     setSelectedStudent(null); setSelectedLead(null);
   }
 
+  async function logHistory(params: {
+    booking?: Booking | null;
+    bookingId?: string | null;
+    evento: string;
+    descricao: string;
+    origem_agendamento?: string | null;
+    pessoa_tipo?: string | null;
+    student_id?: string | null;
+    lead_id?: string | null;
+    dados?: Record<string, unknown>;
+  }) {
+    if (!user?.contractorId) return;
+    await supabase.from("schedule_slot_history").insert({
+      contractor_id:      user.contractorId,
+      slot_id:            slot.id,
+      booking_id:         params.bookingId ?? params.booking?.id ?? null,
+      student_id:         params.student_id ?? params.booking?.student_id ?? null,
+      lead_id:            params.lead_id ?? params.booking?.lead_id ?? null,
+      evento:             params.evento,
+      descricao:          params.descricao,
+      origem_agendamento: params.origem_agendamento ?? params.booking?.origem_agendamento ?? null,
+      pessoa_tipo:        params.pessoa_tipo ?? params.booking?.pessoa_tipo ?? null,
+      dados:              params.dados ?? {},
+      criado_por:         user.email ?? user.name ?? "sistema",
+    } as any);
+  }
+
   async function handleMarkStatus(bookingId: string, status: "presente" | "faltou") {
+    const booking = bookings.find(b => b.id === bookingId);
     const update = status === "presente"
       ? { status, checkin_em: new Date().toISOString() }
       : { status };
     const { error } = await supabase.from("bookings").update(update).eq("id", bookingId);
     if (error) { toast.error("Erro ao atualizar."); return; }
+    await logHistory({
+      booking,
+      evento: status === "presente" ? "presenca_marcada" : "falta_marcada",
+      descricao: `${booking?.student_nome ?? booking?.lead_nome ?? "Pessoa"} marcado como ${status === "presente" ? "presente" : "falta"}.`,
+      dados: { status_anterior: booking?.status ?? null, status_novo: status },
+    });
     toast.success(status === "presente" ? "Presença confirmada." : "Falta registrada.");
     loadBookings(); onChanged();
   }
 
   async function handleUndoStatus(bookingId: string) {
+    const booking = bookings.find(b => b.id === bookingId);
     await supabase.from("bookings").update({ status: "reservado", checkin_em: null }).eq("id", bookingId);
+    await logHistory({
+      booking,
+      evento: "status_desfeito",
+      descricao: `${booking?.student_nome ?? booking?.lead_nome ?? "Pessoa"} voltou para reservado.`,
+      dados: { status_anterior: booking?.status ?? null, status_novo: "reservado" },
+    });
     loadBookings(); onChanged();
   }
 
@@ -232,8 +287,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         student_id:    selectedStudent.id,
         student_nome:  selectedStudent.nome_completo,
         tipo:          "aluno",
+        pessoa_tipo:   "cliente",
+        origem_agendamento: "manual",
+        consome_credito: !(perms?.agenda_livre ?? false),
         status,
         descontou_contrato: !(perms?.agenda_livre ?? false),
+        criado_por: user.email ?? user.name ?? "sistema",
       };
     } else if (addMode === "lead" && selectedLead) {
       if (perms?.max_leads) {
@@ -251,26 +310,45 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         lead_id:       selectedLead.id,
         lead_nome:     selectedLead.nome,
         tipo:          "lead",
+        pessoa_tipo:   "lead",
+        origem_agendamento: "lead",
+        consome_credito: false,
         status,
-        descontou_contrato: !(perms?.agenda_livre ?? false),
+        descontou_contrato: false,
+        criado_por: user.email ?? user.name ?? "sistema",
       };
     } else {
       toast.error("Selecione um aluno ou lead."); setAdding(false); return;
     }
 
-    const { error } = await supabase.from("bookings").insert(insertPayload as any);
+    const { data: inserted, error } = await supabase.from("bookings").insert(insertPayload as any).select("id").single();
     setAdding(false);
     if (error) {
       if (error.code === "23505") toast.error("Já está nesta aula.");
       else toast.error("Erro ao adicionar.");
       return;
     }
+    await logHistory({
+      bookingId: inserted?.id ?? null,
+      evento: "pessoa_adicionada",
+      descricao: `${addMode === "lead" ? selectedLead?.nome : selectedStudent?.nome_completo} adicionado à aula${status === "lista_espera" ? " na fila de espera" : ""}.`,
+      origem_agendamento: (insertPayload.origem_agendamento as string) ?? null,
+      pessoa_tipo: (insertPayload.pessoa_tipo as string) ?? null,
+      student_id: (insertPayload.student_id as string) ?? null,
+      lead_id: (insertPayload.lead_id as string) ?? null,
+      dados: { status, tipo: insertPayload.tipo, consome_credito: insertPayload.consome_credito },
+    });
     toast.success(status === "lista_espera" ? "Adicionado na fila de espera." : "Adicionado com sucesso.");
     resetAdd(); loadBookings(); onChanged();
   }
 
   async function handleCancelSlot() {
     await supabase.from("schedule_slots").update({ status: "cancelado" }).eq("id", slot.id);
+    await logHistory({
+      evento: "aula_cancelada",
+      descricao: "Aula cancelada.",
+      dados: { status_anterior: slot.status, status_novo: "cancelado" },
+    });
     toast.success("Aula cancelada.");
     setCancelingSlot(false); onClose(); onChanged();
   }
@@ -287,6 +365,12 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
         toast.error("Erro ao finalizar aula.");
         return;
       }
+
+      await logHistory({
+        evento: "aula_concluida",
+        descricao: "Aula concluída.",
+        dados: { status_anterior: slot.status, status_novo: "concluido" },
+      });
 
       const { data: result, error: errComissao } = await supabase
         .rpc("calcular_comissao_aula", { p_slot_id: slot.id });
@@ -417,7 +501,10 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
-                      {b.tipo === "lead" && <p className="text-xs text-orange-500">Lead</p>}
+                      <p className="text-xs text-gray-400">
+                        {ORIGEM_LABEL[b.origem_agendamento ?? ""] ?? (b.tipo === "lead" ? "Lead" : "Manual")}
+                        {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
+                      </p>
                     </div>
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>
                       {badge.label}
@@ -464,7 +551,10 @@ export default function SlotDetailModal({ slot, onClose, onChanged }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{nome}</p>
-                  <p className="text-xs text-orange-500">Aula experimental</p>
+                  <p className="text-xs text-orange-500">
+                    Aula experimental
+                    {b.consome_credito === false && <span className="text-emerald-600"> · não consome crédito</span>}
+                  </p>
                 </div>
 
                 {/* Badge anamnese */}
