@@ -62,6 +62,9 @@ const DAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 const HOUR_HEIGHT = 144;
 const DEFAULT_START = 6 * 60;
 const DEFAULT_END = 22 * 60;
+const MIN_DAY_WIDTH = 220;
+const MIN_CARD_WIDTH = 126;
+const CARD_GAP = 6;
 
 export default function AgendaPage() {
   const { user } = useAuth();
@@ -251,6 +254,11 @@ export default function AgendaPage() {
     return positioned;
   }
 
+  function dayMinWidth(iso: string) {
+    const maxColumns = Math.max(1, ...positionDaySlots(slotsByDay(iso)).map(item => item.columns));
+    return Math.max(MIN_DAY_WIDTH, maxColumns * MIN_CARD_WIDTH + (maxColumns + 1) * CARD_GAP);
+  }
+
   function ocupacaoCls(count: number, max: number) {
     const pct = max > 0 ? count / max : 0;
     if (pct >= 1) return "bg-red-600 text-white";
@@ -270,6 +278,7 @@ export default function AgendaPage() {
   const totalReservados = filteredSlots.reduce((sum, slot) => sum + (bkStats[slot.id]?.active ?? 0), 0);
   const totalLotadas = filteredSlots.filter(slot => (bkStats[slot.id]?.active ?? 0) >= slot.capacidade_maxima && slot.status !== "cancelado").length;
   const totalFila = filteredSlots.reduce((sum, slot) => sum + (bkStats[slot.id]?.waitlist ?? 0), 0);
+  const calendarGridTemplate = `64px ${weekDays.map(day => `minmax(${dayMinWidth(isoDate(day))}px, 1fr)`).join(" ")}`;
 
   return (
     <>
@@ -366,8 +375,8 @@ export default function AgendaPage() {
                 <div className="w-7 h-7 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
-              <div className="min-w-[1180px] bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="grid grid-cols-[64px_repeat(7,minmax(150px,1fr))] border-b border-gray-200 sticky top-0 z-20 bg-white">
+              <div className="w-max min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="grid border-b border-gray-200 sticky top-0 z-20 bg-white" style={{ gridTemplateColumns: calendarGridTemplate }}>
                   <div className="px-3 py-3 text-xs font-bold text-gray-400 border-r border-gray-100">Hora</div>
                   {weekDays.map((day, i) => {
                     const iso = isoDate(day);
@@ -396,7 +405,7 @@ export default function AgendaPage() {
                   })}
                 </div>
 
-                <div className="grid grid-cols-[64px_repeat(7,minmax(150px,1fr))]">
+                <div className="grid" style={{ gridTemplateColumns: calendarGridTemplate }}>
                   <div className="relative border-r border-gray-100 bg-gray-50" style={{ height: timelineHeight }}>
                     {hours.map(hour => (
                       <div
@@ -439,9 +448,8 @@ export default function AgendaPage() {
                           const height = Math.max(108, ((end - start) / 60) * HOUR_HEIGHT - 12);
                           const isCanceled = slot.status === "cancelado";
                           const isFull = !isCanceled && stats.active >= slot.capacidade_maxima;
-                          const gap = 6;
-                          const width = `calc((100% - ${(columns + 1) * gap}px) / ${columns})`;
-                          const left = `calc(${column} * ((100% - ${(columns + 1) * gap}px) / ${columns}) + ${(column + 1) * gap}px)`;
+                          const width = `calc((100% - ${(columns + 1) * CARD_GAP}px) / ${columns})`;
+                          const left = `calc(${column} * ((100% - ${(columns + 1) * CARD_GAP}px) / ${columns}) + ${(column + 1) * CARD_GAP}px)`;
 
                           return (
                             <button
