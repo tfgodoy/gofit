@@ -146,12 +146,8 @@ export default function LeadPerfilPage() {
     load();
   }
 
-  async function handleConverterEmCliente() {
-    if (!id) return;
-    const { error } = await supabase.from("students").update({ status: "ativo" }).eq("id", id);
-    if (error) { toast.error("Erro ao converter lead"); return; }
-    toast.success("Lead convertido em cliente!");
-    navigate(`/app/clientes/${id}/dashboard`);
+  function handleRealizarVenda() {
+    navigate(`/app/clientes/${id}/venda`);
   }
 
   if (loading) {
@@ -210,7 +206,7 @@ export default function LeadPerfilPage() {
                 CADASTRO
               </button>
               <button
-                onClick={handleConverterEmCliente}
+                onClick={handleRealizarVenda}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
               >
                 <ShoppingCart className="w-4 h-4" />
