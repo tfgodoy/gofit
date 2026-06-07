@@ -342,6 +342,15 @@ export default function VendaWizardPage() {
           .eq("id", studentId!);
       }
 
+      /* 5. Mover opportunity vinculada para "Matrícula" */
+      await supabase
+        .from("opportunities")
+        .update({ etapa: "Matrícula" })
+        .eq("student_id", studentId!)
+        .eq("contractor_id", user.contractorId!)
+        .neq("etapa", "Matrícula")
+        .neq("etapa", "Perdido");
+
       setResultadoVenda({
         nomeAluno: student?.nome_completo ?? "",
         nomePlano: contratoSelecionado.descricao,
