@@ -622,7 +622,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                           label={
                             <span className="flex items-center gap-1">
                               Permite antecipações
-                              <Tooltip text="Permite que o aluno antecipe aulas dentro do limite configurado." />
+                              <Tooltip text="Habilitando essa opção, o cliente poderá antecipar as aulas do seu contrato, limitado a quantidade e periodicidade definidas nesta configuração." />
                             </span>
                           }
                           checked={form.permite_antecipacoes}
