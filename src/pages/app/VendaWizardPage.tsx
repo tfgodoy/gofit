@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Loader2, CheckCircle2, ScrollText, Search,
   Trash2, X, CreditCard, Banknote, QrCode, SlidersHorizontal,
-  RefreshCw, ShoppingBag, Pencil,
+  RefreshCw, ShoppingBag, Pencil, Tag, ChevronRight,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -396,6 +396,16 @@ export default function VendaWizardPage() {
   const [desconto, setDesconto] = useState(0);
   const [loadingContrato, setLoadingContrato] = useState(false);
 
+  // Cupom / desconto
+  type DescontoMode = "none" | "manual" | "cupom";
+  const [descontoMode, setDescontoMode] = useState<DescontoMode>("none");
+  const [cupomInput, setCupomInput] = useState("");
+  const [cupomLoading, setCupomLoading] = useState(false);
+  const [cupomAplicado, setCupomAplicado] = useState<{
+    id: string; codigo: string; tipo: string; valor: number; desconto_reais: number;
+  } | null>(null);
+  const [cupomErro, setCupomErro] = useState("");
+
   // Pagamento
   const [formaPagamento, setFormaPagamento] = useState("");
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().split("T")[0]);
@@ -414,7 +424,10 @@ export default function VendaWizardPage() {
         ? contratoSelecionado.valor_total
         : (contratoSelecionado.valor_por_mes ?? contratoSelecionado.valor_total / contratoSelecionado.duracao))
     : 0;
-  const valorComDesconto = valorBase * (1 - desconto / 100);
+  const descontoReais = cupomAplicado
+    ? cupomAplicado.desconto_reais
+    : valorBase * (desconto / 100);
+  const valorComDesconto = Math.max(0, valorBase - descontoReais);
   const numParcelas = contratoSelecionado?.tipo_duracao === "meses" ? contratoSelecionado.duracao : 1;
   const dataFim = contratoSelecionado?.tipo_duracao === "meses"
     ? addMonths(dataInicio, contratoSelecionado.duracao) : null;
@@ -484,6 +497,41 @@ export default function VendaWizardPage() {
     setLoadingContrato(false);
   }
 
+  async function handleAplicarCupom() {
+    if (!cupomInput.trim() || !user?.contractorId) return;
+    setCupomLoading(true);
+    setCupomErro("");
+    const today = new Date().toISOString().split("T")[0];
+    const { data, error } = await supabase
+      .from("cupons")
+      .select("id, codigo, tipo, valor, uso_unico, usos_realizados, usos_maximo, data_validade")
+      .eq("contractor_id", user.contractorId!)
+      .ilike("codigo", cupomInput.trim())
+      .eq("ativo", true)
+      .maybeSingle();
+
+    setCupomLoading(false);
+
+    if (error || !data) { setCupomErro("Cupom não encontrado."); return; }
+    if (data.data_validade && data.data_validade < today) { setCupomErro("Cupom expirado."); return; }
+    if (data.usos_maximo !== null && data.usos_realizados >= data.usos_maximo) {
+      setCupomErro("Cupom esgotado."); return;
+    }
+
+    const desconto_reais = data.tipo === "percentual"
+      ? valorBase * (data.valor / 100)
+      : Math.min(data.valor, valorBase);
+
+    setCupomAplicado({ id: data.id, codigo: data.codigo, tipo: data.tipo, valor: data.valor, desconto_reais });
+    setCupomErro("");
+  }
+
+  function handleRemoverCupom() {
+    setCupomAplicado(null);
+    setCupomInput("");
+    setCupomErro("");
+  }
+
   async function handleConfirmar() {
     if (!user?.contractorId || !studentId || !contratoSelecionado || !tipoVenda) return;
     setSaving(true);
@@ -535,12 +583,18 @@ export default function VendaWizardPage() {
           tipo:            "mensalidade",
           contrato_id:     contratoSelecionado.id,
           forma_pagamento: formaPagamento,
-          desconto:        desconto > 0 ? valorBase - valorComDesconto : 0,
+          desconto:        descontoReais > 0 ? descontoReais : 0,
         };
       });
 
       const { error: recErr } = await supabase.from("receivables").insert(parcelas);
       if (recErr) { toast.error("Contrato criado, erro ao gerar cobranças: " + recErr.message); return; }
+
+      if (cupomAplicado) {
+        await supabase.from("cupons")
+          .update({ usos_realizados: cupomAplicado.usos_realizados + 1 } as any)
+          .eq("id", cupomAplicado.id);
+      }
 
       if (student?.status !== "ativo") {
         await supabase.from("students").update({ status: "ativo", updated_at: new Date().toISOString() }).eq("id", studentId!);
@@ -862,26 +916,126 @@ export default function VendaWizardPage() {
 
         {/* Valor da venda */}
         {contratoSelecionado && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
             <h3 className="text-sm font-bold text-gray-700">Valor da venda</h3>
+
+            {/* Total */}
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Total</span>
-              <span className="text-lg font-bold text-gray-800">{fmtBRL(contratoSelecionado.valor_total)}</span>
+              <span className="text-xl font-extrabold text-gray-900">{fmtBRL(contratoSelecionado.valor_total)}</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-600">Desconto</span>
-              <input type="number" min={0} max={100} value={desconto}
-                onChange={e => setDesconto(Math.max(0, Math.min(100, Number(e.target.value))))}
-                className={`${inputCls} max-w-[80px] text-center`} />
-              <span className="text-sm text-gray-500">%</span>
-              {desconto > 0 && (
-                <span className="ml-auto text-sm font-bold text-green-600">
-                  = {fmtBRL(valorComDesconto * numParcelas)}
-                </span>
-              )}
-            </div>
+
+            {/* Ações de desconto */}
+            {descontoMode === "none" && !cupomAplicado && (
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setDescontoMode("manual")}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  INFORMAR DESCONTO
+                </button>
+                <span className="text-gray-300 text-sm">ou</span>
+                <button
+                  onClick={() => setDescontoMode("cupom")}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-primary border border-gray-200 rounded-lg px-3 py-1.5 hover:border-primary/40 transition-colors"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Aplicar cupom
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Modo: desconto manual */}
+            {descontoMode === "manual" && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 whitespace-nowrap">Desconto</span>
+                <input
+                  type="number" min={0} max={100} value={desconto} autoFocus
+                  onChange={e => setDesconto(Math.max(0, Math.min(100, Number(e.target.value))))}
+                  className={`${inputCls} max-w-[80px] text-center`}
+                />
+                <span className="text-sm text-gray-500">%</span>
+                <button
+                  onClick={() => { setDescontoMode("none"); setDesconto(0); }}
+                  className="ml-auto text-xs text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Modo: cupom */}
+            {descontoMode === "cupom" && !cupomAplicado && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      autoFocus
+                      value={cupomInput}
+                      onChange={e => { setCupomInput(e.target.value.toUpperCase()); setCupomErro(""); }}
+                      onKeyDown={e => e.key === "Enter" && handleAplicarCupom()}
+                      placeholder="Código do cupom"
+                      className={`${inputCls} pl-9 uppercase`}
+                    />
+                  </div>
+                  <button
+                    onClick={handleAplicarCupom}
+                    disabled={!cupomInput.trim() || cupomLoading}
+                    className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors whitespace-nowrap"
+                  >
+                    {cupomLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "APLICAR"}
+                  </button>
+                  <button
+                    onClick={() => { setDescontoMode("none"); setCupomInput(""); setCupomErro(""); }}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {cupomErro && (
+                  <p className="text-xs text-red-600 flex items-center gap-1">
+                    <X className="w-3 h-3" /> {cupomErro}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Cupom aplicado */}
+            {cupomAplicado && (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-bold text-green-700">{cupomAplicado.codigo}</span>
+                  <span className="text-xs text-green-600">
+                    {cupomAplicado.tipo === "percentual"
+                      ? `${cupomAplicado.valor}% de desconto`
+                      : `${fmtBRL(cupomAplicado.valor)} de desconto`}
+                  </span>
+                </div>
+                <button onClick={handleRemoverCupom} className="text-green-400 hover:text-red-500 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Linha de desconto aplicado */}
+            {descontoReais > 0 && (
+              <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-3">
+                <span className="text-gray-500">Desconto</span>
+                <span className="text-red-500 font-semibold">− {fmtBRL(descontoReais)}</span>
+              </div>
+            )}
+            {descontoReais > 0 && (
+              <div className="flex items-center justify-between text-sm font-bold">
+                <span className="text-gray-700">Valor com desconto</span>
+                <span className="text-lg text-primary">{fmtBRL(valorComDesconto)}</span>
+              </div>
+            )}
+
             {numParcelas > 1 && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-400 border-t border-gray-100 pt-2">
                 {numParcelas}x de {fmtBRL(valorComDesconto)} por mês
               </p>
             )}
