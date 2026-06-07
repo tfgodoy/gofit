@@ -194,13 +194,35 @@ export default function ConvitePage() {
     setCepLoading(false);
   }
 
+  function validatePrincipal(): string {
+    const nome = form.nome.trim();
+    if (!nome) return "Informe seu nome completo.";
+    if (nome.split(/\s+/).filter(Boolean).length < 2) return "Informe nome e sobrenome.";
+    if (!form.email.trim()) return "Informe seu e-mail.";
+    if (!form.data_nascimento) return "Informe sua data de nascimento.";
+    if (!form.sexo) return "Selecione seu sexo.";
+    if (form.telefone.replace(/\D/g, "").length < 10) return "Informe um telefone válido.";
+    if (form.cpf.replace(/\D/g, "").length < 11) return "Informe um CPF válido (11 dígitos).";
+    if (!form.objetivo) return "Selecione seu objetivo.";
+    if (form.cep.replace(/\D/g, "").length < 8) return "Informe um CEP válido.";
+    if (!form.logradouro.trim()) return "Informe o logradouro.";
+    if (!form.numero.trim()) return "Informe o número.";
+    if (!form.bairro.trim()) return "Informe o bairro.";
+    if (!form.cidade.trim()) return "Informe a cidade.";
+    return "";
+  }
+
   // Submit final form
   async function handleSubmit() {
     if (!invite) return;
     const isResp = tipo === "responsavel";
 
-    if (!form.nome.trim()) { setError("Informe seu nome."); return; }
+    const errPrincipal = validatePrincipal();
+    if (errPrincipal) { setError(errPrincipal); return; }
     if (isResp && !formDep.nome.trim()) { setError("Informe o nome do dependente."); return; }
+    if (isResp && formDep.nome.trim().split(/\s+/).filter(Boolean).length < 2) {
+      setError("Informe o nome completo do dependente (nome e sobrenome)."); return;
+    }
     setError("");
     setSubmitting(true);
 
@@ -396,7 +418,7 @@ export default function ConvitePage() {
 
               <div className="space-y-3">
                 <input
-                  className={INP} placeholder="Nome *"
+                  className={INP} placeholder="Nome completo * (nome e sobrenome)"
                   value={form.nome}
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                 />
@@ -491,7 +513,8 @@ export default function ConvitePage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!form.nome.trim()) { setError("Informe seu nome."); return; }
+                      const err = validatePrincipal();
+                      if (err) { setError(err); return; }
                       setError("");
                       setStep("form_dependente");
                     }}
@@ -525,7 +548,7 @@ export default function ConvitePage() {
 
               <div className="space-y-3">
                 <input
-                  className={INP} placeholder="Nome do dependente *"
+                  className={INP} placeholder="Nome completo do dependente * (nome e sobrenome)"
                   value={formDep.nome}
                   onChange={e => setFormDep(f => ({ ...f, nome: e.target.value }))}
                 />
