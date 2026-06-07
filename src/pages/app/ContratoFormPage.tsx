@@ -55,6 +55,7 @@ const EMPTY_FORM = {
   valor_adesao: "",
   comissionar_consultor: false,
   categoria_receita: "",
+  contabilizar_sessoes_conjunto: false,
 };
 
 /* ─── Style helpers ──────────────────────────────────────── */
@@ -136,6 +137,7 @@ export default function ContratoFormPage() {
         valor_adesao: c.valor_adesao != null ? String(c.valor_adesao) : "",
         comissionar_consultor: c.comissionar_consultor ?? false,
         categoria_receita: c.categoria_receita ?? "",
+        contabilizar_sessoes_conjunto: (c as any).contabilizar_sessoes_conjunto ?? false,
       });
 
       // Load modalidades
@@ -222,6 +224,7 @@ export default function ContratoFormPage() {
         valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseFloat(form.valor_adesao) : null,
         comissionar_consultor: form.comissionar_consultor,
         categoria_receita: form.categoria_receita || null,
+        contabilizar_sessoes_conjunto: form.contabilizar_sessoes_conjunto,
       };
 
       let contratoId = id;
@@ -351,6 +354,7 @@ export default function ContratoFormPage() {
               ) : (
                 <div className="space-y-2 mt-2">
                   {modalidades.map((m, i) => {
+
                     const iconDef = getIcon(m.modalidade_icone);
                     const Ic = iconDef.Icon;
                     return (
@@ -361,10 +365,16 @@ export default function ContratoFormPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium text-gray-900">{m.modalidade_nome || "(sem nome)"}</span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-xs text-gray-400">{TIPO_ACESSO_LABEL[m.tipo_acesso]}</span>
+                            {m.sessoes_por_semana && (
+                              <span className="text-xs font-semibold text-primary/70">{m.sessoes_por_semana}x por semana</span>
+                            )}
                             {m.limitar_acessos && m.max_acessos && (
                               <span className="text-xs text-gray-400">· máx. {m.max_acessos}</span>
+                            )}
+                            {m.matricula_obrigatoria_na_venda && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-600">Matrícula na venda</span>
                             )}
                           </div>
                         </div>
@@ -383,6 +393,24 @@ export default function ContratoFormPage() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Toggle contabilização conjunta — só aparece com 2+ modalidades */}
+              {modalidades.length >= 2 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <Toggle
+                    label={
+                      <span className="flex flex-col">
+                        <span>Contabilizar de forma conjunta as aulas/sessões das modalidades</span>
+                        <span className="text-xs font-normal text-gray-400 mt-0.5">
+                          Ao marcar esta opção, todas as aulas realizadas pelo cliente diminuirão da quantidade total independente da modalidade.
+                        </span>
+                      </span>
+                    }
+                    checked={form.contabilizar_sessoes_conjunto}
+                    onChange={v => setForm(f => ({ ...f, contabilizar_sessoes_conjunto: v }))}
+                  />
                 </div>
               )}
             </div>
