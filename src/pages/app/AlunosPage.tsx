@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserPlus, Search, Send, ExternalLink, MoreVertical, SlidersHorizontal } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
@@ -18,7 +18,18 @@ interface Student {
   sexo: "masculino" | "feminino" | "outro" | null;
   foto_url: string | null;
   created_at: string;
+  objetivo: string | null;
 }
+
+const OBJETIVOS = [
+  "Emagrecimento",
+  "Hipertrofia / Ganho de massa",
+  "Condicionamento físico",
+  "Saúde e bem-estar",
+  "Reabilitação",
+  "Performance esportiva",
+  "Outro",
+];
 
 const STATUS_STYLE: Record<StudentStatus, string> = {
   ativo:     "bg-green-100 text-green-700",
@@ -68,13 +79,25 @@ export default function ClientesPage() {
   const [counts, setCounts] = useState({ total: 0, ativo: 0, bloqueado: 0, inativo: 0, cancelado: 0, lead: 0 });
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sexoFilter, setSexoFilter] = useState("");
+  const [objetivoFilter, setObjetivoFilter] = useState("");
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function h(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setShowFilters(false);
+    }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   useEffect(() => {
     if (!user?.contractorId) return;
     async function load() {
       const { data } = await supabase
         .from("students")
-        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at")
+        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo")
         .eq("contractor_id", user!.contractorId!)
         .order("nome_completo", { ascending: true });
 
@@ -100,6 +123,8 @@ export default function ClientesPage() {
       ? students.filter(s => s.status === "lead")
       : students.filter(s => s.status !== "lead");
     if (statusFilter !== "todos" && statusFilter !== "lead") list = list.filter(s => s.status === statusFilter);
+    if (sexoFilter) list = list.filter(s => s.sexo === sexoFilter);
+    if (objetivoFilter) list = list.filter(s => s.objetivo === objetivoFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(s =>
@@ -109,7 +134,9 @@ export default function ClientesPage() {
       );
     }
     setFiltered(list);
-  }, [search, statusFilter, students]);
+  }, [search, statusFilter, sexoFilter, objetivoFilter, students]);
+
+  const hasActiveFilters = !!sexoFilter || !!objetivoFilter;
 
   return (
     <>
@@ -146,9 +173,83 @@ export default function ClientesPage() {
               >
                 <Send className="w-4 h-4" /> CONVIDAR CLIENTE
               </button>
-              <button className="inline-flex items-center gap-2 border border-gray-200 text-gray-600 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                <SlidersHorizontal className="w-4 h-4" /> FILTROS
-              </button>
+              <div ref={filterRef} className="relative">
+                <button
+                  onClick={() => setShowFilters(o => !o)}
+                  className={`inline-flex items-center gap-2 border text-sm font-semibold px-4 py-2 rounded-lg transition-colors ${
+                    hasActiveFilters
+                      ? "border-primary text-primary bg-primary/5"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  FILTROS
+                  {hasActiveFilters && (
+                    <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center">
+                      {(sexoFilter ? 1 : 0) + (objetivoFilter ? 1 : 0)}
+                    </span>
+                  )}
+                </button>
+
+                {showFilters && (
+                  <div className="absolute right-0 top-11 z-30 bg-white border border-gray-200 rounded-xl shadow-xl w-72 p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-800">Filtros</span>
+                      {hasActiveFilters && (
+                        <button
+                          onClick={() => { setSexoFilter(""); setObjetivoFilter(""); }}
+                          className="text-xs text-primary hover:underline font-semibold"
+                        >
+                          Limpar filtros
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Sexo</p>
+                      <div className="flex flex-wrap gap-2">
+                        {["masculino", "feminino", "outro"].map(s => (
+                          <button key={s} type="button"
+                            onClick={() => setSexoFilter(sexoFilter === s ? "" : s)}
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors capitalize ${
+                              sexoFilter === s
+                                ? "bg-primary text-white border-primary"
+                                : "border-gray-200 text-gray-600 hover:border-primary/50"
+                            }`}
+                          >
+                            {s === "masculino" ? "Masculino" : s === "feminino" ? "Feminino" : "Outro"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Objetivo</p>
+                      <div className="flex flex-col gap-1.5">
+                        {OBJETIVOS.map(o => (
+                          <button key={o} type="button"
+                            onClick={() => setObjetivoFilter(objetivoFilter === o ? "" : o)}
+                            className={`text-left text-xs px-3 py-1.5 rounded-lg transition-colors ${
+                              objetivoFilter === o
+                                ? "bg-primary/10 text-primary font-semibold"
+                                : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setShowFilters(false)}
+                      className="w-full py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
