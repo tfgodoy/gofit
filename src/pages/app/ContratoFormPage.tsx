@@ -219,6 +219,7 @@ export default function ContratoFormPage() {
         template_contrato: form.template_contrato || null,
         assinatura_eletronica: form.assinatura_eletronica,
         tipo_cobranca: form.tipo_cobranca,
+        formas_pagamento: [],
         ativo: form.ativo,
         limita_periodo_venda: form.limita_periodo_venda,
         data_inicio_venda: form.limita_periodo_venda && form.data_inicio_venda ? form.data_inicio_venda : null,
