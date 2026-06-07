@@ -1998,7 +1998,7 @@ const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
   encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
 };
 
-type ContratoAction = { type: "cancelar" | "suspender" | "congelar" | "reativar"; id: string } | null;
+type ContratoAction = { type: "cancelar" | "cancelar_venda" | "suspender" | "congelar" | "reativar"; id: string } | null;
 
 function ContratosTab({ studentId, contractorId, student }: {
   studentId: string; contractorId: string; student: StudentDetail | null;
@@ -2091,6 +2091,34 @@ function ContratosTab({ studentId, contractorId, student }: {
 
     if (action.type === "cancelar") {
       update.status = "cancelado";
+      const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
+      if (error) { toast.error("Erro ao cancelar contrato."); setSaving(false); return; }
+      // Cancelar receivables pendentes vinculadas a este contrato
+      await supabase.from("receivables")
+        .update({ status: "cancelado" })
+        .eq("contrato_id", action.id)
+        .in("status", ["pendente", "aguardando"]);
+      toast.success("Matrícula cancelada e cobranças pendentes canceladas.");
+      setAction(null);
+      setSaving(false);
+      load();
+      return;
+    } else if (action.type === "cancelar_venda") {
+      // Excluir receivables não recebidas
+      await supabase.from("receivables")
+        .delete()
+        .eq("contrato_id", action.id)
+        .in("status", ["pendente", "aguardando", "cancelado"]);
+      // Excluir fixed_enrollments do contrato
+      // (não há FK direta, mas vamos limpar via student_contract)
+      // Excluir student_contract
+      const { error } = await supabase.from("student_contracts").delete().eq("id", action.id);
+      if (error) { toast.error("Erro ao cancelar venda."); setSaving(false); return; }
+      toast.success("Venda cancelada e cobranças removidas.");
+      setAction(null);
+      setSaving(false);
+      load();
+      return;
     } else if (action.type === "suspender") {
       update.status = "suspenso";
     } else if (action.type === "reativar") {
@@ -2235,6 +2263,12 @@ function ContratosTab({ studentId, contractorId, student }: {
                         >
                           Cancelar
                         </button>
+                        <button
+                          onClick={() => setAction({ type: "cancelar_venda", id: sc.id })}
+                          className="text-xs font-semibold text-gray-400 hover:text-red-700 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                        >
+                          Cancelar venda
+                        </button>
                       </>
                     )}
                   </div>
@@ -2337,10 +2371,20 @@ function ContratosTab({ studentId, contractorId, student }: {
           <div className="absolute inset-0 bg-black/40" onClick={() => setAction(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
             <h3 className="text-base font-bold text-gray-900 mb-2">
-              {{ cancelar: "Cancelar matrícula", suspender: "Suspender contrato", reativar: "Reativar contrato" }[action.type]}
+              {{
+                cancelar: "Cancelar matrícula",
+                cancelar_venda: "Cancelar venda",
+                suspender: "Suspender contrato",
+                reativar: "Reativar contrato",
+              }[action.type]}
             </h3>
             <p className="text-sm text-gray-500 mb-5">
-              {{ cancelar: "Tem certeza? As cobranças futuras não serão geradas.", suspender: "O contrato será suspenso temporariamente. Você pode reativar a qualquer momento.", reativar: "O contrato voltará ao status ativo." }[action.type]}
+              {{
+                cancelar: "O contrato será marcado como cancelado e todas as cobranças pendentes serão canceladas.",
+                cancelar_venda: "Atenção: o contrato e todas as cobranças não recebidas serão excluídos permanentemente. Esta ação não pode ser desfeita.",
+                suspender: "O contrato será suspenso temporariamente. Você pode reativar a qualquer momento.",
+                reativar: "O contrato voltará ao status ativo.",
+              }[action.type]}
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setAction(null)} className="text-sm font-bold text-gray-500 hover:underline" disabled={saving}>
@@ -2350,7 +2394,7 @@ function ContratosTab({ studentId, contractorId, student }: {
                 onClick={handleAction}
                 disabled={saving}
                 className={`text-white text-sm font-bold px-5 py-2 rounded-lg disabled:opacity-60 transition-colors ${
-                  action.type === "cancelar" ? "bg-red-600 hover:bg-red-700" :
+                  action.type === "cancelar" || action.type === "cancelar_venda" ? "bg-red-600 hover:bg-red-700" :
                   action.type === "suspender" ? "bg-yellow-600 hover:bg-yellow-700" :
                   "bg-green-600 hover:bg-green-700"
                 }`}
