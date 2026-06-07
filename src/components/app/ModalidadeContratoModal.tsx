@@ -555,10 +555,38 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                       <div>
                         <span className="text-xs text-gray-500">↳ Considerar também:</span>
                         <div className="flex items-center gap-6 mt-2">
-                          <Checkbox label="Antecipações" checked={form.considerar_antecipacoes}
-                            onChange={v => setForm(f => ({ ...f, considerar_antecipacoes: v }))} />
-                          <Checkbox label="Reagendamentos" checked={form.considerar_reagendamentos}
-                            onChange={v => setForm(f => ({ ...f, considerar_reagendamentos: v }))} />
+                          <label className={`flex items-center gap-2 ${form.permite_antecipacoes ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}>
+                            <div
+                              onClick={() => form.permite_antecipacoes && setForm(f => ({ ...f, considerar_antecipacoes: !f.considerar_antecipacoes }))}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                                form.considerar_antecipacoes && form.permite_antecipacoes
+                                  ? "bg-primary border-primary"
+                                  : "border-gray-300"
+                              }`}>
+                              {form.considerar_antecipacoes && form.permite_antecipacoes && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-gray-700">Antecipações</span>
+                          </label>
+                          <label className={`flex items-center gap-2 ${form.permite_reagendamentos ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}>
+                            <div
+                              onClick={() => form.permite_reagendamentos && setForm(f => ({ ...f, considerar_reagendamentos: !f.considerar_reagendamentos }))}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                                form.considerar_reagendamentos && form.permite_reagendamentos
+                                  ? "bg-primary border-primary"
+                                  : "border-gray-300"
+                              }`}>
+                              {form.considerar_reagendamentos && form.permite_reagendamentos && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-gray-700">Reagendamentos</span>
+                          </label>
                         </div>
                       </div>
                     )}
@@ -626,7 +654,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                             </span>
                           }
                           checked={form.permite_antecipacoes}
-                          onChange={v => setForm(f => ({ ...f, permite_antecipacoes: v }))}
+                          onChange={v => setForm(f => ({ ...f, permite_antecipacoes: v, considerar_antecipacoes: v ? f.considerar_antecipacoes : false }))}
                         />
                         {form.permite_antecipacoes && (
                           <div className="ml-4 grid grid-cols-2 gap-4">
@@ -660,7 +688,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                             </span>
                           }
                           checked={form.permite_reagendamentos}
-                          onChange={v => setForm(f => ({ ...f, permite_reagendamentos: v }))}
+                          onChange={v => setForm(f => ({ ...f, permite_reagendamentos: v, considerar_reagendamentos: v ? f.considerar_reagendamentos : false }))}
                         />
                         {form.permite_reagendamentos && (
                           <div className="ml-4 grid grid-cols-2 gap-4">
