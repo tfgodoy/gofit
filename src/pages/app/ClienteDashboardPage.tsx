@@ -1848,6 +1848,146 @@ function EvolucoesTab({ studentId, contractorId }: { studentId: string; contract
   );
 }
 
+/* ── Vendas Tab ─────────────────────────────────────────────── */
+
+function VendasTab({ studentId, contractorId }: {
+  studentId: string; contractorId: string;
+}) {
+  const navigate = useNavigate();
+  const [vendas, setVendas]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("student_contracts")
+      .select(`
+        id, created_at, data_inicio, data_fim, status,
+        valor_mensalidade, forma_pagamento,
+        contratos!contrato_id(descricao, duracao, tipo_duracao, valor_total)
+      `)
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false });
+    setVendas((data ?? []) as any[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [studentId, contractorId]);
+
+  const STATUS_VENDA: Record<string, { label: string; bg: string; text: string }> = {
+    ativo:     { label: "Ativo",     bg: "bg-green-100",  text: "text-green-700"  },
+    cancelado: { label: "Cancelado", bg: "bg-red-100",    text: "text-red-700"    },
+    suspenso:  { label: "Suspenso",  bg: "bg-yellow-100", text: "text-yellow-700" },
+    congelado: { label: "Congelado", bg: "bg-blue-100",   text: "text-blue-700"   },
+    encerrado: { label: "Encerrado", bg: "bg-gray-100",   text: "text-gray-500"   },
+  };
+
+  const FORMA_VENDA: Record<string, string> = {
+    dinheiro: "Dinheiro", pix: "Pix", cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito", boleto: "Boleto", transferencia: "Transferência",
+  };
+
+  function fmtDur(duracao: number, tipo: string) {
+    if (tipo === "meses") return `${duracao} ${duracao === 1 ? "mês" : "meses"}`;
+    if (tipo === "dias")  return `${duracao} dia${duracao !== 1 ? "s" : ""}`;
+    if (tipo === "anos")  return `${duracao} ano${duracao !== 1 ? "s" : ""}`;
+    return `${duracao} ${tipo}`;
+  }
+
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-bold text-gray-800">Vendas</h2>
+        <button
+          onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> NOVA VENDA
+        </button>
+      </div>
+
+      {vendas.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-2xl border border-gray-100">
+          <DollarSign className="w-10 h-10 text-gray-200" />
+          <p className="text-sm text-gray-400 font-semibold">Nenhuma venda registrada</p>
+          <p className="text-xs text-gray-400">Clique em "NOVA VENDA" para vincular este aluno a um plano.</p>
+          <button
+            onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+            className="mt-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+          >
+            + NOVA VENDA
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Data</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Plano</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Duração</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Valor mensal</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Pagamento</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendas.map((v: any, i: number) => {
+                const contrato = v.contratos as any;
+                const st = STATUS_VENDA[v.status] ?? { label: v.status, bg: "bg-gray-100", text: "text-gray-500" };
+                return (
+                  <tr
+                    key={v.id}
+                    className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? "" : "bg-gray-50/30"}`}
+                  >
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
+                      {new Date(v.created_at).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-semibold text-gray-800 leading-snug">
+                        {contrato?.descricao ?? "—"}
+                      </p>
+                      {v.data_inicio && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(v.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
+                          {v.data_fim ? ` → ${new Date(v.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}` : ""}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
+                      {contrato ? fmtDur(contrato.duracao, contrato.tipo_duracao) : "—"}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm font-semibold text-gray-800 whitespace-nowrap">
+                      {v.valor_mensalidade
+                        ? v.valor_mensalidade.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
+                      {FORMA_VENDA[v.forma_pagamento] ?? v.forma_pagamento ?? "—"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${st.bg} ${st.text}`}>
+                        {st.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Contratos Tab ─────────────────────────────────────────── */
 
 const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
@@ -1991,19 +2131,13 @@ function ContratosTab({ studentId, contractorId, student }: {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Contratos e Matrículas</h2>
-        <button
-          onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> NOVA VENDA
-        </button>
       </div>
 
       {scs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-2xl border border-gray-100">
           <ScrollText className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-400 font-semibold">Nenhuma matrícula registrada</p>
-          <p className="text-xs text-gray-400">Clique em "NOVA VENDA" para vincular este aluno a um plano.</p>
+          <p className="text-xs text-gray-400">Acesse a aba "Vendas" para iniciar uma nova venda.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -2687,6 +2821,11 @@ export default function ClienteDashboardPage() {
             />
           ) : activeTab === "Evoluções" ? (
             <EvolucoesTab
+              studentId={student.id}
+              contractorId={user!.contractorId!}
+            />
+          ) : activeTab === "Vendas" ? (
+            <VendasTab
               studentId={student.id}
               contractorId={user!.contractorId!}
             />
