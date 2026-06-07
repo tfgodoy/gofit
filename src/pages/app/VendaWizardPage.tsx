@@ -151,8 +151,14 @@ export default function VendaWizardPage() {
 
   const [saving, setSaving] = useState(false);
 
-  /* Derived */
-  const valorMensalidade = contratoSelecionado?.valor_por_mes ?? contratoSelecionado?.valor_total ?? 0;
+  /* Derived
+     Para plano de 1 mês: valor mensal = valor_total (são iguais por definição).
+     Para planos multi-mês: usa valor_por_mes se preenchido, senão divide valor_total pela duração. */
+  const valorMensalidade = contratoSelecionado
+    ? contratoSelecionado.duracao === 1
+      ? contratoSelecionado.valor_total
+      : (contratoSelecionado.valor_por_mes ?? contratoSelecionado.valor_total / contratoSelecionado.duracao)
+    : 0;
   const valorComDesconto = valorMensalidade * (1 - desconto / 100);
   const dataFim = contratoSelecionado && contratoSelecionado.tipo_duracao === "meses"
     ? addMonths(dataInicio, contratoSelecionado.duracao)
