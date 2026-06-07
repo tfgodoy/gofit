@@ -130,12 +130,20 @@ export default function ClientesPage() {
   }, [user]);
 
   useEffect(() => {
-    // When situacaoFilter is set via dropdown, it overrides the pill
     const effectiveStatus = situacaoFilter || statusFilter;
-    let list = effectiveStatus === "lead"
-      ? students.filter(s => s.status === "lead")
-      : students.filter(s => s.status !== "lead");
-    if (effectiveStatus !== "todos" && effectiveStatus !== "lead") list = list.filter(s => s.status === effectiveStatus);
+    let list: Student[];
+    if (situacaoFilter) {
+      // Dropdown situação selecionado: filtra exatamente pelo status escolhido
+      list = students.filter(s => s.status === situacaoFilter);
+    } else if (effectiveStatus === "lead") {
+      list = students.filter(s => s.status === "lead");
+    } else if (effectiveStatus === "todos") {
+      // Pill "Todos" sem dropdown: exclui leads (comportamento padrão da aba)
+      // MAS se há filtro de origem ativo, inclui todos os status
+      list = origemFilter ? [...students] : students.filter(s => s.status !== "lead");
+    } else {
+      list = students.filter(s => s.status === effectiveStatus);
+    }
     if (sexoFilter) list = list.filter(s => s.sexo === sexoFilter);
     if (objetivoFilter) list = list.filter(s => s.objetivo === objetivoFilter);
     if (origemFilter) list = list.filter(s => s.origem === origemFilter);
