@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, Loader2, ChevronRight, ChevronLeft,
   Phone, Mail, User, Calendar, DollarSign, Trash2, Pencil,
   TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -248,6 +249,7 @@ function OppCard({
   onDelete,
   onMove,
   onDragStart,
+  onClickCard,
 }: {
   opp: Opportunity;
   etapas: EtapaDin[];
@@ -255,24 +257,28 @@ function OppCard({
   onDelete: (id: string) => void;
   onMove: (id: string, etapa: string) => void;
   onDragStart: (id: string) => void;
+  onClickCard: (opp: Opportunity) => void;
 }) {
   const currentIdx = etapas.findIndex(e => e.nome === opp.etapa);
   const canPrev = currentIdx > 0;
   const canNext = currentIdx < etapas.length - 1;
+  const didDrag = useRef(false);
 
   return (
     <div
       draggable
-      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(opp.id); }}
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; didDrag.current = true; onDragStart(opp.id); }}
+      onDragEnd={() => { setTimeout(() => { didDrag.current = false; }, 0); }}
+      onClick={() => { if (!didDrag.current) onClickCard(opp); }}
       className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 group cursor-grab active:cursor-grabbing active:opacity-60 active:shadow-md transition-opacity"
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <p className="text-sm font-bold text-gray-800 leading-snug">{opp.nome}</p>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-          <button onClick={() => onEdit(opp)} className="p-1 rounded hover:bg-gray-100" title="Editar">
+          <button onClick={e => { e.stopPropagation(); onEdit(opp); }} className="p-1 rounded hover:bg-gray-100" title="Editar">
             <Pencil className="w-3.5 h-3.5 text-gray-400" />
           </button>
-          <button onClick={() => onDelete(opp.id)} className="p-1 rounded hover:bg-red-50 text-red-400" title="Excluir">
+          <button onClick={e => { e.stopPropagation(); onDelete(opp.id); }} className="p-1 rounded hover:bg-red-50 text-red-400" title="Excluir">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -318,7 +324,7 @@ function OppCard({
         <div className="flex items-center gap-1">
           <button
             disabled={!canPrev}
-            onClick={() => canPrev && onMove(opp.id, etapas[currentIdx - 1].nome)}
+            onClick={e => { e.stopPropagation(); canPrev && onMove(opp.id, etapas[currentIdx - 1].nome); }}
             className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-20"
             title="Mover para etapa anterior"
           >
@@ -326,7 +332,7 @@ function OppCard({
           </button>
           <button
             disabled={!canNext}
-            onClick={() => canNext && onMove(opp.id, etapas[currentIdx + 1].nome)}
+            onClick={e => { e.stopPropagation(); canNext && onMove(opp.id, etapas[currentIdx + 1].nome); }}
             className="p-0.5 rounded hover:bg-gray-100 disabled:opacity-20"
             title="Mover para próxima etapa"
           >
@@ -342,6 +348,7 @@ function OppCard({
 
 export default function OportunidadesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [opps, setOpps]           = useState<Opportunity[]>([]);
   const [loading, setLoading]     = useState(true);
   const [modal, setModal]         = useState<false | null | Opportunity>(false);
@@ -458,6 +465,14 @@ export default function OportunidadesPage() {
     setOpps(prev => prev.map(o => o.id === id ? { ...o, etapa } : o));
   }
 
+  function handleClickCard(opp: Opportunity) {
+    if (opp.student_id) {
+      navigate(`/app/crm/leads/${opp.student_id}`);
+    } else {
+      setModal(opp);
+    }
+  }
+
   function openNew(etapa: string) {
     setModalEtapa(etapa);
     setModal(null);
@@ -569,6 +584,7 @@ export default function OportunidadesPage() {
                           onDelete={id => setDeleteId(id)}
                           onMove={handleMove}
                           onDragStart={id => setDragId(id)}
+                          onClickCard={handleClickCard}
                         />
                       ))
                     )}
