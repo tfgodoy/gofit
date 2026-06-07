@@ -220,6 +220,7 @@ export default function AlunoFormPage() {
       data_nascimento:        form.data_nascimento || null,
       sexo:                   (form.sexo || null) as "masculino" | "feminino" | "outro" | null,
       status:                 form.status as "lead" | "ativo" | "inativo" | "cancelado",
+      origem:                 "sistema",
       telefone:               form.telefone.replace(/\D/g, "") || null,
       email:                  form.email || null,
       cep:                    form.cep.replace(/\D/g, "") || null,

@@ -19,6 +19,7 @@ interface Student {
   foto_url: string | null;
   created_at: string;
   objetivo: string | null;
+  origem: string | null;
 }
 
 const OBJETIVOS = [
@@ -29,6 +30,14 @@ const OBJETIVOS = [
   "Reabilitação",
   "Performance esportiva",
   "Outro",
+];
+
+const ORIGENS: { value: string; label: string }[] = [
+  { value: "convite",      label: "Link de convite" },
+  { value: "experimental", label: "Aula experimental" },
+  { value: "sistema",      label: "Sistema (usuário criou)" },
+  { value: "app",          label: "App do aluno" },
+  { value: "site",         label: "Site de venda" },
 ];
 
 const STATUS_STYLE: Record<StudentStatus, string> = {
@@ -80,8 +89,10 @@ export default function ClientesPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [situacaoFilter, setSituacaoFilter] = useState("");
   const [sexoFilter, setSexoFilter] = useState("");
   const [objetivoFilter, setObjetivoFilter] = useState("");
+  const [origemFilter, setOrigemFilter] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -97,7 +108,7 @@ export default function ClientesPage() {
     async function load() {
       const { data } = await supabase
         .from("students")
-        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo")
+        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo, origem")
         .eq("contractor_id", user!.contractorId!)
         .order("nome_completo", { ascending: true });
 
@@ -119,12 +130,15 @@ export default function ClientesPage() {
   }, [user]);
 
   useEffect(() => {
-    let list = statusFilter === "lead"
+    // When situacaoFilter is set via dropdown, it overrides the pill
+    const effectiveStatus = situacaoFilter || statusFilter;
+    let list = effectiveStatus === "lead"
       ? students.filter(s => s.status === "lead")
       : students.filter(s => s.status !== "lead");
-    if (statusFilter !== "todos" && statusFilter !== "lead") list = list.filter(s => s.status === statusFilter);
+    if (effectiveStatus !== "todos" && effectiveStatus !== "lead") list = list.filter(s => s.status === effectiveStatus);
     if (sexoFilter) list = list.filter(s => s.sexo === sexoFilter);
     if (objetivoFilter) list = list.filter(s => s.objetivo === objetivoFilter);
+    if (origemFilter) list = list.filter(s => s.origem === origemFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(s =>
@@ -134,9 +148,10 @@ export default function ClientesPage() {
       );
     }
     setFiltered(list);
-  }, [search, statusFilter, sexoFilter, objetivoFilter, students]);
+  }, [search, statusFilter, situacaoFilter, sexoFilter, objetivoFilter, origemFilter, students]);
 
-  const hasActiveFilters = !!sexoFilter || !!objetivoFilter;
+  const activeFilterCount = [situacaoFilter, sexoFilter, objetivoFilter, origemFilter].filter(Boolean).length;
+  const hasActiveFilters = activeFilterCount > 0;
 
   return (
     <>
@@ -186,64 +201,86 @@ export default function ClientesPage() {
                   FILTROS
                   {hasActiveFilters && (
                     <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center">
-                      {(sexoFilter ? 1 : 0) + (objetivoFilter ? 1 : 0)}
+                      {activeFilterCount}
                     </span>
                   )}
                 </button>
 
                 {showFilters && (
-                  <div className="absolute right-0 top-11 z-30 bg-white border border-gray-200 rounded-xl shadow-xl w-72 p-4 space-y-4">
-                    <div className="flex items-center justify-between">
+                  <div className="absolute right-0 top-11 z-30 bg-white border border-gray-200 rounded-xl shadow-xl w-72 p-4 space-y-3">
+                    <div className="flex items-center justify-between pb-1">
                       <span className="text-sm font-bold text-gray-800">Filtros</span>
                       {hasActiveFilters && (
                         <button
-                          onClick={() => { setSexoFilter(""); setObjetivoFilter(""); }}
+                          onClick={() => { setSituacaoFilter(""); setSexoFilter(""); setObjetivoFilter(""); setOrigemFilter(""); }}
                           className="text-xs text-primary hover:underline font-semibold"
                         >
-                          Limpar filtros
+                          Limpar todos
                         </button>
                       )}
                     </div>
 
+                    {/* Situação */}
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2">Sexo</p>
-                      <div className="flex flex-wrap gap-2">
-                        {["masculino", "feminino", "outro"].map(s => (
-                          <button key={s} type="button"
-                            onClick={() => setSexoFilter(sexoFilter === s ? "" : s)}
-                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors capitalize ${
-                              sexoFilter === s
-                                ? "bg-primary text-white border-primary"
-                                : "border-gray-200 text-gray-600 hover:border-primary/50"
-                            }`}
-                          >
-                            {s === "masculino" ? "Masculino" : s === "feminino" ? "Feminino" : "Outro"}
-                          </button>
-                        ))}
-                      </div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Situação</label>
+                      <select
+                        value={situacaoFilter}
+                        onChange={e => { setSituacaoFilter(e.target.value); if (e.target.value) setStatusFilter("todos"); }}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                      >
+                        <option value="">Todas as situações</option>
+                        <option value="ativo">Ativo</option>
+                        <option value="bloqueado">Bloqueado</option>
+                        <option value="inativo">Inativo</option>
+                        <option value="cancelado">Cancelado</option>
+                        <option value="lead">Lead</option>
+                      </select>
                     </div>
 
+                    {/* Sexo */}
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2">Objetivo</p>
-                      <div className="flex flex-col gap-1.5">
-                        {OBJETIVOS.map(o => (
-                          <button key={o} type="button"
-                            onClick={() => setObjetivoFilter(objetivoFilter === o ? "" : o)}
-                            className={`text-left text-xs px-3 py-1.5 rounded-lg transition-colors ${
-                              objetivoFilter === o
-                                ? "bg-primary/10 text-primary font-semibold"
-                                : "text-gray-700 hover:bg-gray-50"
-                            }`}
-                          >
-                            {o}
-                          </button>
-                        ))}
-                      </div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Sexo</label>
+                      <select
+                        value={sexoFilter}
+                        onChange={e => setSexoFilter(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                      >
+                        <option value="">Todos os sexos</option>
+                        <option value="masculino">Masculino</option>
+                        <option value="feminino">Feminino</option>
+                        <option value="outro">Outro</option>
+                      </select>
+                    </div>
+
+                    {/* Objetivo */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Objetivo</label>
+                      <select
+                        value={objetivoFilter}
+                        onChange={e => setObjetivoFilter(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                      >
+                        <option value="">Todos os objetivos</option>
+                        {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Origem */}
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Origem</label>
+                      <select
+                        value={origemFilter}
+                        onChange={e => setOrigemFilter(e.target.value)}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                      >
+                        <option value="">Todas as origens</option>
+                        {ORIGENS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
                     </div>
 
                     <button
                       onClick={() => setShowFilters(false)}
-                      className="w-full py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+                      className="w-full py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors mt-1"
                     >
                       Aplicar
                     </button>

@@ -248,6 +248,7 @@ export default function ConvitePage() {
         responsavel_telefone:isResp ? (form.telefone.replace(/\D/g, "") || null) : null,
         responsavel_email:   isResp ? (form.email.trim() || null)             : null,
         status:              "lead" as const,
+        origem:              "convite",
         objetivo:            form.objetivo || null,
         observacoes:         null,
       }])
