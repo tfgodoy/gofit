@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Plus, Trash2, Pencil, ChevronDown, ChevronUp,
+  CreditCard, RefreshCw, Star, CheckCircle2, XCircle,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,14 +21,8 @@ const TIPO_ACESSO_LABEL: Record<string, string> = {
 };
 
 
-const FORMAS_PAGAMENTO = [
-  { value: "dinheiro",       label: "Dinheiro" },
-  { value: "cartao_credito", label: "Cartão de crédito" },
-  { value: "cartao_debito",  label: "Cartão de débito" },
-  { value: "pix",            label: "PIX" },
-  { value: "boleto",         label: "Boleto" },
-  { value: "transferencia",  label: "Transferência" },
-];
+
+type TipoCobranca = "sem_recorrencia" | "com_recorrencia" | "escolha_na_venda";
 
 const EMPTY_FORM = {
   descricao: "",
@@ -41,8 +36,7 @@ const EMPTY_FORM = {
   vende_app_aluno: false,
   template_contrato: "",
   assinatura_eletronica: false,
-  formas_pagamento: [] as string[],
-  escolha_na_venda: true,
+  tipo_cobranca: "escolha_na_venda" as TipoCobranca,
   ativo: true,
   // avancadas
   limita_periodo_venda: false,
@@ -113,7 +107,6 @@ export default function ContratoFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
 
-  const [showPagamento, setShowPagamento] = useState(false);
   const [showAvancadas, setShowAvancadas] = useState(false);
   const [showModalidadeModal, setShowModalidadeModal] = useState(false);
   const [editingModalidadeIdx, setEditingModalidadeIdx] = useState<number | null>(null);
@@ -137,8 +130,7 @@ export default function ContratoFormPage() {
         vende_app_aluno: (c as any).vende_app_aluno ?? false,
         template_contrato: c.template_contrato ?? "",
         assinatura_eletronica: c.assinatura_eletronica ?? false,
-        formas_pagamento: c.formas_pagamento ?? [],
-        escolha_na_venda: !c.formas_pagamento?.length,
+        tipo_cobranca: ((c as any).tipo_cobranca ?? "escolha_na_venda") as TipoCobranca,
         ativo: c.ativo ?? true,
         limita_periodo_venda: c.limita_periodo_venda ?? false,
         data_inicio_venda: c.data_inicio_venda ?? "",
@@ -204,15 +196,6 @@ export default function ContratoFormPage() {
     setEditingModalidadeIdx(null);
   }
 
-  function togglePagto(value: string) {
-    setForm(f => ({
-      ...f,
-      formas_pagamento: f.formas_pagamento.includes(value)
-        ? f.formas_pagamento.filter(v => v !== value)
-        : [...f.formas_pagamento, value],
-    }));
-  }
-
   async function handleSave() {
     if (!form.descricao.trim()) { toast.error("Informe a descrição do contrato."); return; }
     const valorTotal = parseCurrency(form.valor_total);
@@ -235,7 +218,7 @@ export default function ContratoFormPage() {
         vende_app_aluno: form.vende_app_aluno,
         template_contrato: form.template_contrato || null,
         assinatura_eletronica: form.assinatura_eletronica,
-        formas_pagamento: form.escolha_na_venda ? [] : form.formas_pagamento,
+        tipo_cobranca: form.tipo_cobranca,
         ativo: form.ativo,
         limita_periodo_venda: form.limita_periodo_venda,
         data_inicio_venda: form.limita_periodo_venda && form.data_inicio_venda ? form.data_inicio_venda : null,
@@ -506,52 +489,87 @@ export default function ContratoFormPage() {
             </div>
 
             {/* ─── Forma de pagamento ─── */}
-            <div className="bg-white rounded-xl border border-gray-200">
-              <button type="button" onClick={() => setShowPagamento(o => !o)}
-                className="w-full flex items-center justify-between px-5 py-4">
-                <h3 className="text-sm font-bold text-gray-800">Forma de pagamento</h3>
-                <div className="flex items-center gap-2">
-                  {form.escolha_na_venda && (
-                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                      ↩ Escolha na venda
-                    </span>
-                  )}
-                  {showPagamento
-                    ? <ChevronUp className="w-4 h-4 text-gray-400" />
-                    : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                </div>
-              </button>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-4">Forma de pagamento</h3>
+              <div className="grid grid-cols-3 gap-3">
 
-              {showPagamento && (
-                <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
-                  <Toggle
-                    label="Escolha na venda (não pré-definir forma de pagamento)"
-                    checked={form.escolha_na_venda}
-                    onChange={v => setForm(f => ({ ...f, escolha_na_venda: v, formas_pagamento: v ? [] : f.formas_pagamento }))}
-                  />
-                  {!form.escolha_na_venda && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {FORMAS_PAGAMENTO.map(fp => (
-                        <label key={fp.value} className="flex items-center gap-2.5 cursor-pointer group">
-                          <div onClick={() => togglePagto(fp.value)}
-                            className={`w-4 h-4 rounded flex items-center justify-center border transition-colors flex-shrink-0 cursor-pointer ${
-                              form.formas_pagamento.includes(fp.value)
-                                ? "bg-primary border-primary"
-                                : "border-gray-300 group-hover:border-primary/50"
-                            }`}>
-                            {form.formas_pagamento.includes(fp.value) && (
-                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
+                {/* Sem recorrência */}
+                {(["sem_recorrencia", "com_recorrencia", "escolha_na_venda"] as TipoCobranca[]).map(tipo => {
+                  const isSelected = form.tipo_cobranca === tipo;
+                  const configs = {
+                    sem_recorrencia: {
+                      label: "Sem recorrência",
+                      Icon: CreditCard,
+                      popular: false,
+                      features: [
+                        { label: "Recorrência", ok: false },
+                        { label: "Renovação automática", ok: false },
+                        { label: "Renovação manual", ok: true },
+                      ],
+                    },
+                    com_recorrencia: {
+                      label: "Com recorrência (GoFit Pay)",
+                      Icon: () => (
+                        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+                        </svg>
+                      ),
+                      popular: true,
+                      features: [
+                        { label: "Recorrência", ok: true },
+                        { label: "Renovação automática", ok: true },
+                        { label: "Renovação manual", ok: false },
+                      ],
+                    },
+                    escolha_na_venda: {
+                      label: "Escolha na venda",
+                      Icon: RefreshCw,
+                      popular: false,
+                      features: [
+                        { label: "Recorrência (opcional)", ok: true },
+                        { label: "Renovação automática", ok: true },
+                        { label: "Renovação manual", ok: true },
+                      ],
+                    },
+                  }[tipo];
+
+                  const Ic = configs.Icon;
+                  return (
+                    <button key={tipo} type="button"
+                      onClick={() => setForm(f => ({ ...f, tipo_cobranca: tipo }))}
+                      className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 text-left transition-colors ${
+                        isSelected ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
+                      }`}>
+                      {configs.popular && (
+                        <span className="absolute -top-3 right-3 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-primary text-white">
+                          <Star className="w-3 h-3 fill-white" /> Mais popular
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                          isSelected ? "border-primary bg-primary" : "border-gray-300"
+                        }`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <Ic className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-primary" : "text-gray-500"}`} />
+                        <span className={`text-xs font-semibold leading-tight ${isSelected ? "text-primary" : "text-gray-800"}`}>
+                          {configs.label}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 border-t border-gray-100 pt-3">
+                        {configs.features.map(f => (
+                          <div key={f.label} className="flex items-center gap-1.5">
+                            {f.ok
+                              ? <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                              : <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                            <span className="text-xs text-gray-600">{f.label}</span>
                           </div>
-                          <span className="text-sm text-gray-700">{fp.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* ─── Configurações avançadas ─── */}
