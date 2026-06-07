@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import InviteModal from "@/components/app/InviteModal";
 
-type StudentStatus = "ativo" | "bloqueado" | "inativo" | "cancelado";
+type StudentStatus = "ativo" | "bloqueado" | "inativo" | "cancelado" | "lead";
 
 interface Student {
   id: string;
@@ -25,9 +25,10 @@ const STATUS_STYLE: Record<StudentStatus, string> = {
   bloqueado: "bg-amber-100 text-amber-700",
   inativo:   "bg-gray-100 text-gray-500",
   cancelado: "bg-red-100 text-red-600",
+  lead:      "bg-blue-100 text-blue-700",
 };
 const STATUS_LABEL: Record<StudentStatus, string> = {
-  ativo: "Ativo", bloqueado: "Bloqueado", inativo: "Inativo", cancelado: "Cancelado",
+  ativo: "Ativo", bloqueado: "Bloqueado", inativo: "Inativo", cancelado: "Cancelado", lead: "Lead",
 };
 const SEX_LABEL: Record<string, string> = {
   masculino: "Masculino", feminino: "Feminino", outro: "Outro",
@@ -39,6 +40,7 @@ const ALL_STATUS: { value: StudentStatus | "todos"; label: string }[] = [
   { value: "bloqueado", label: "Bloqueados" },
   { value: "inativo",   label: "Inativos" },
   { value: "cancelado", label: "Cancelados" },
+  { value: "lead",      label: "Leads" },
 ];
 
 function getInitials(name: string) {
@@ -63,7 +65,7 @@ export default function ClientesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StudentStatus | "todos">("todos");
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState({ total: 0, ativo: 0, bloqueado: 0, inativo: 0, cancelado: 0 });
+  const [counts, setCounts] = useState({ total: 0, ativo: 0, bloqueado: 0, inativo: 0, cancelado: 0, lead: 0 });
   const [showInvite, setShowInvite] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
@@ -74,18 +76,19 @@ export default function ClientesPage() {
         .from("students")
         .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at")
         .eq("contractor_id", user!.contractorId!)
-        .neq("status", "lead")
         .order("nome_completo", { ascending: true });
 
       const list = (data ?? []) as Student[];
+      const nonLeads = list.filter(s => s.status !== "lead");
       setStudents(list);
-      setFiltered(list);
+      setFiltered(nonLeads);
       setCounts({
-        total:     list.length,
+        total:     nonLeads.length,
         ativo:     list.filter(s => s.status === "ativo").length,
         bloqueado: list.filter(s => s.status === "bloqueado").length,
         inativo:   list.filter(s => s.status === "inativo").length,
         cancelado: list.filter(s => s.status === "cancelado").length,
+        lead:      list.filter(s => s.status === "lead").length,
       });
       setLoading(false);
     }
@@ -93,8 +96,10 @@ export default function ClientesPage() {
   }, [user]);
 
   useEffect(() => {
-    let list = students;
-    if (statusFilter !== "todos") list = list.filter(s => s.status === statusFilter);
+    let list = statusFilter === "lead"
+      ? students.filter(s => s.status === "lead")
+      : students.filter(s => s.status !== "lead");
+    if (statusFilter !== "todos" && statusFilter !== "lead") list = list.filter(s => s.status === statusFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(s =>
@@ -204,13 +209,13 @@ export default function ClientesPage() {
                   <tr
                     key={s.id}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/app/clientes/${s.id}/dashboard`)}
+                    onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
                   >
                     {/* Avatar + Nome */}
                     <td className="px-6 py-3" onClick={e => e.stopPropagation()}>
                       <div
                         className="flex items-center gap-3 cursor-pointer"
-                        onClick={() => navigate(`/app/clientes/${s.id}/dashboard`)}
+                        onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
                       >
                         {s.foto_url ? (
                           <img
@@ -250,9 +255,9 @@ export default function ClientesPage() {
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => navigate(`/app/clientes/${s.id}/dashboard`)}
+                          onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
-                          title="Abrir dashboard"
+                          title="Visualizar perfil"
                         >
                           <ExternalLink className="w-4 h-4" />
                         </button>
@@ -266,10 +271,10 @@ export default function ClientesPage() {
                           {menuOpen === s.id && (
                             <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
                               <button
-                                onClick={() => { navigate(`/app/clientes/${s.id}/dashboard`); setMenuOpen(null); }}
+                                onClick={() => { navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`); setMenuOpen(null); }}
                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
-                                Ver dashboard
+                                Visualizar perfil
                               </button>
                               <button
                                 onClick={() => { navigate(`/app/clientes/${s.id}/cadastro`); setMenuOpen(null); }}

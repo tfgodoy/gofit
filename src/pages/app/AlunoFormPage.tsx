@@ -238,13 +238,24 @@ export default function AlunoFormPage() {
       objetivo:               form.objetivo || null,
     };
 
-    const { error: dbError } = isEdit
-      ? await supabase.from("students").update(payload).eq("id", id!)
-      : await supabase.from("students").insert([payload]);
-    if (dbError) {
-      setError("Erro ao salvar. Tente novamente.");
-      setSubmitting(false);
-      return;
+    if (isEdit) {
+      const { error: dbError } = await supabase.from("students").update(payload).eq("id", id!);
+      if (dbError) { setError("Erro ao salvar. Tente novamente."); setSubmitting(false); return; }
+    } else {
+      const { data: newStudent, error: dbError } = await supabase
+        .from("students").insert([payload]).select("id").single();
+      if (dbError || !newStudent) { setError("Erro ao salvar. Tente novamente."); setSubmitting(false); return; }
+
+      if (form.status === "lead") {
+        await supabase.from("opportunities").insert({
+          contractor_id: user.contractorId,
+          nome:          form.nome_completo,
+          email:         form.email || null,
+          telefone:      form.telefone.replace(/\D/g, "") || null,
+          etapa:         "Novo lead",
+          student_id:    newStudent.id,
+        });
+      }
     }
     navigate(isEdit ? `/app/clientes/${id}/dashboard` : "/app/clientes");
   }

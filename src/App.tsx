@@ -37,6 +37,7 @@ import GradesPage             from "@/pages/app/GradesPage";
 import AvaliacaoFisicaFormPage from "@/pages/app/AvaliacaoFisicaFormPage";
 import GraduacoesPage         from "@/pages/app/GraduacoesPage";
 import LeadsPage              from "@/pages/app/LeadsPage";
+import LeadPerfilPage         from "@/pages/app/LeadPerfilPage";
 import OportunidadesPage      from "@/pages/app/OportunidadesPage";
 import AtividadesPage         from "@/pages/app/AtividadesPage";
 import CampanhasPage          from "@/pages/app/CampanhasPage";
@@ -115,6 +116,7 @@ export default function App() {
             <Route path="/app/dashboards/agenda"     element={<AppGuard><DashboardAgendaPage /></AppGuard>} />
             <Route path="/app/dashboards/*"          element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
             <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
+            <Route path="/app/crm/leads/:id"     element={<AppGuard><LeadPerfilPage /></AppGuard>} />
             <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
             <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
             <Route path="/app/crm/automacoes"    element={<AppGuard><CampanhasPage /></AppGuard>} />

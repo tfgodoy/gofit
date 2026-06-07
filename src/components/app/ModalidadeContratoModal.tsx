@@ -36,6 +36,7 @@ export interface ModalidadeContrato {
   max_reposicoes: string;
   limite_reposicoes_periodo: string;
   matricula_obrigatoria_na_venda: boolean;
+  sessoes_por_semana: string;
 }
 
 interface DBModalidade {
@@ -324,6 +325,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
     max_reposicoes: initial?.max_reposicoes ?? "10",
     limite_reposicoes_periodo: initial?.limite_reposicoes_periodo ?? "semana",
     matricula_obrigatoria_na_venda: initial?.matricula_obrigatoria_na_venda ?? false,
+    sessoes_por_semana: initial?.sessoes_por_semana ?? "",
   });
 
   useEffect(() => {
@@ -548,6 +550,20 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                         checked={form.matricula_obrigatoria_na_venda}
                         onChange={v => setForm(f => ({ ...f, matricula_obrigatoria_na_venda: v }))}
                       />
+                      {form.matricula_obrigatoria_na_venda && (
+                        <div className="ml-4">
+                          <label className={LBL}>Sessões por semana que o aluno deve escolher {REQ}</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={7}
+                            value={form.sessoes_por_semana}
+                            onChange={e => setForm(f => ({ ...f, sessoes_por_semana: e.target.value }))}
+                            className={INP}
+                            placeholder="Ex: 3"
+                          />
+                        </div>
+                      )}
 
                       <Toggle
                         label={

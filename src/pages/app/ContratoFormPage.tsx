@@ -157,6 +157,11 @@ export default function ContratoFormPage() {
         tipo_duracao_acessos: m.tipo_duracao_acessos ?? "semana",
         limitar_horarios: m.limitar_horarios ?? false,
         periodos_horario: Array.isArray(m.periodos_horario) ? m.periodos_horario : [],
+        matricula_obrigatoria_na_venda: m.matricula_obrigatoria_na_venda ?? false,
+        sessoes_por_semana: m.sessoes_por_semana != null ? String(m.sessoes_por_semana) : "",
+        permite_reposicao: m.permite_reposicao ?? true,
+        max_reposicoes: m.max_reposicoes != null ? String(m.max_reposicoes) : "10",
+        limite_reposicoes_periodo: m.limite_reposicoes_periodo ?? "semana",
       })));
 
       setLoading(false);
@@ -242,7 +247,8 @@ export default function ContratoFormPage() {
           tipo_duracao_acessos: m.tipo_duracao_acessos,
           limitar_horarios: m.limitar_horarios,
           periodos_horario: m.periodos_horario,
-          sessoes_por_semana: null,
+          matricula_obrigatoria_na_venda: m.matricula_obrigatoria_na_venda,
+          sessoes_por_semana: m.matricula_obrigatoria_na_venda && m.sessoes_por_semana ? parseInt(m.sessoes_por_semana) : null,
           total_aulas: null,
           contabilizar_conjunto: false,
         }));
