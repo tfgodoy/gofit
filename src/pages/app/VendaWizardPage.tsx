@@ -136,7 +136,8 @@ export default function VendaWizardPage() {
 
   // Step 3
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().split("T")[0]);
-  const [diaVencimento, setDiaVencimento] = useState(10);
+  const [diaVencimento, setDiaVencimento] = useState(new Date().getDate());
+  const [diaVencimentoEditado, setDiaVencimentoEditado] = useState(false); // true quando gestor alterou manualmente
   const [desconto, setDesconto] = useState(0);
   const [formaPagamento, setFormaPagamento] = useState("pix");
 
@@ -165,6 +166,14 @@ export default function VendaWizardPage() {
     if (!filtro.duracao) return true;
     return c.duracao === filtro.duracao && c.tipo_duracao === filtro.tipo_duracao;
   });
+
+  /* Sincronizar dia de vencimento com a data de início (se o gestor não alterou manualmente) */
+  useEffect(() => {
+    if (!diaVencimentoEditado && dataInicio) {
+      const dia = new Date(dataInicio + "T00:00:00").getDate();
+      setDiaVencimento(Math.min(dia, 28));
+    }
+  }, [dataInicio, diaVencimentoEditado]);
 
   /* Load student + contracts */
   useEffect(() => {
@@ -624,15 +633,18 @@ export default function VendaWizardPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Dia de vencimento</label>
-                  <select
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
                     value={diaVencimento}
-                    onChange={e => setDiaVencimento(Number(e.target.value))}
+                    onChange={e => {
+                      setDiaVencimento(Math.max(1, Math.min(28, Number(e.target.value))));
+                      setDiaVencimentoEditado(true);
+                    }}
                     className={inputClass}
-                  >
-                    {[1, 5, 10, 15, 20, 25, 28].map(d => (
-                      <option key={d} value={d}>Todo dia {d}</option>
-                    ))}
-                  </select>
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Padrão: dia da matrícula. Altere para definir outro dia fixo de débito. Máx. 28 para funcionar em todos os meses.</p>
                 </div>
               </div>
             </div>
