@@ -58,6 +58,19 @@ const EMPTY_FORM = {
   contabilizar_sessoes_conjunto: false,
 };
 
+/* ─── Currency mask ─────────────────────────────────────── */
+
+function formatCurrency(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const cents = parseInt(digits, 10);
+  return (cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function parseCurrency(formatted: string): number {
+  return parseFloat(formatted.replace(/\./g, "").replace(",", ".")) || 0;
+}
+
 /* ─── Style helpers ──────────────────────────────────────── */
 
 const INP = "w-full bg-transparent border-0 border-b border-gray-300 py-2 px-0 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-b-2 focus:border-primary transition-colors";
@@ -117,7 +130,7 @@ export default function ContratoFormPage() {
         tipo: c.tipo ?? "padrao",
         duracao: String(c.duracao ?? 1),
         tipo_duracao: c.tipo_duracao ?? "meses",
-        valor_total: String(c.valor_total ?? ""),
+        valor_total: c.valor_total != null ? (c.valor_total as number).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
         permite_renovar: c.permite_renovar ?? false,
         renova_automaticamente: c.renova_automaticamente ?? false,
         permite_parcelado: c.permite_parcelado ?? false,
@@ -202,8 +215,8 @@ export default function ContratoFormPage() {
 
   async function handleSave() {
     if (!form.descricao.trim()) { toast.error("Informe a descrição do contrato."); return; }
-    const valorTotal = parseFloat(form.valor_total);
-    if (isNaN(valorTotal) || form.valor_total === "") { toast.error("Informe o valor total do contrato."); return; }
+    const valorTotal = parseCurrency(form.valor_total);
+    if (!valorTotal || form.valor_total === "") { toast.error("Informe o valor total do contrato."); return; }
     if (!user?.contractorId) return;
 
     setSaving(true);
@@ -354,18 +367,23 @@ export default function ContratoFormPage() {
                     <label className={LBL}>Valor total do contrato {REQ}</label>
                     <div className="relative">
                       <span className="absolute left-0 top-2.5 text-xs text-gray-400">R$</span>
-                      <input type="number" min={0} step={0.01} value={form.valor_total}
-                        onChange={e => setForm(f => ({ ...f, valor_total: e.target.value }))}
-                        className={INP + " pl-7"} placeholder="0,00" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={form.valor_total}
+                        onChange={e => setForm(f => ({ ...f, valor_total: formatCurrency(e.target.value) }))}
+                        className={INP + " pl-7"}
+                        placeholder="0,00"
+                      />
                     </div>
                   </div>
-                  {form.tipo_duracao === "meses" && parseFloat(form.duracao) > 1 && parseFloat(form.valor_total) > 0 && (
+                  {form.tipo_duracao === "meses" && parseFloat(form.duracao) > 1 && parseCurrency(form.valor_total) > 0 && (
                     <div>
                       <label className={LBL}>Valor por mês</label>
                       <div className="flex items-center gap-1.5 pb-2">
                         <span className="text-xs text-gray-400">ou</span>
                         <span className="text-sm font-semibold text-gray-700">
-                          R$ {(parseFloat(form.valor_total) / parseFloat(form.duracao)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          R$ {(parseCurrency(form.valor_total) / parseFloat(form.duracao)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
