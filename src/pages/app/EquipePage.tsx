@@ -151,7 +151,7 @@ export default function EquipePage() {
                   onClick={openCreate}
                   className="inline-flex items-center gap-1.5 bg-primary text-white font-semibold px-4 py-2 rounded-md text-sm hover:bg-primary/90 transition-colors"
                 >
-                  <UserPlus className="w-4 h-4" /> + MEMBRO
+                  <UserPlus className="w-4 h-4" /> MEMBRO
                 </button>
                 <button
                   onClick={() => setInviteModalOpen(true)}

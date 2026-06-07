@@ -108,7 +108,7 @@ export default function ModalidadesPage() {
                   onClick={openNew}
                   className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> + MODALIDADE
+                  <Plus className="w-4 h-4" /> MODALIDADE
                 </button>
                 <button className="inline-flex items-center gap-2 border border-gray-200 text-gray-600 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <SlidersHorizontal className="w-4 h-4" /> FILTROS

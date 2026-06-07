@@ -384,7 +384,7 @@ export default function ContasPagarPage() {
                   onClick={() => setShowLancar(true)}
                   className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> + CONTA
+                  <Plus className="w-4 h-4" /> CONTA
                 </button>
               </div>
             </div>

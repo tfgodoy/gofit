@@ -383,7 +383,7 @@ export default function ContratoFormPage() {
                 <button type="button"
                   onClick={() => { setEditingModalidadeIdx(null); setShowModalidadeModal(true); }}
                   className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
-                  <Plus className="w-4 h-4" /> + MODALIDADE
+                  <Plus className="w-4 h-4" /> MODALIDADE
                 </button>
               </div>
 

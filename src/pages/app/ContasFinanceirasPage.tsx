@@ -459,7 +459,7 @@ export default function ContasFinanceirasPage() {
                   onClick={() => setShowModal(true)}
                   className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> + CONTA FINANCEIRA
+                  <Plus className="w-4 h-4" /> CONTA FINANCEIRA
                 </button>
               </div>
             </div>

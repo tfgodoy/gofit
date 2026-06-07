@@ -188,7 +188,7 @@ export default function ClientesPage() {
                 to="/app/clientes/novo"
                 className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
               >
-                <UserPlus className="w-4 h-4" /> + CLIENTE
+                <UserPlus className="w-4 h-4" /> CLIENTE
               </Link>
               <button
                 onClick={() => setShowInvite(true)}
