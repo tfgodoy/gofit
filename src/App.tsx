@@ -53,6 +53,7 @@ import ConfigCrmFunisPage       from "@/pages/app/ConfigCrmFunisPage";
 import NfsePage                 from "@/pages/app/NfsePage";
 import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
+import VendaWizardPage          from "@/pages/app/VendaWizardPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
 import ContasFinanceirasPage   from "@/pages/app/ContasFinanceirasPage";
 import CentroFinanceiroPage        from "@/pages/app/CentroFinanceiroPage";
@@ -105,6 +106,7 @@ export default function App() {
             <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
             <Route path="/app/clientes/:id/matricula"             element={<AppGuard><MatriculaPage /></AppGuard>} />
+            <Route path="/app/clientes/:id/venda"                element={<AppGuard><VendaWizardPage /></AppGuard>} />
             <Route path="/app/dashboards/gerencial"   element={<AppGuard><DashboardGerencialPage /></AppGuard>} />
             <Route path="/app/dashboards/crm"        element={<AppGuard><DashboardCRMPage /></AppGuard>} />
             <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />

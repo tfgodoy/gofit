@@ -1992,10 +1992,10 @@ function ContratosTab({ studentId, contractorId, student }: {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Contratos e Matrículas</h2>
         <button
-          onClick={() => navigate(`/app/clientes/${studentId}/matricula`)}
+          onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
         >
-          <Plus className="w-4 h-4" /> NOVA MATRÍCULA
+          <Plus className="w-4 h-4" /> NOVA VENDA
         </button>
       </div>
 
@@ -2003,7 +2003,7 @@ function ContratosTab({ studentId, contractorId, student }: {
         <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-2xl border border-gray-100">
           <ScrollText className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-400 font-semibold">Nenhuma matrícula registrada</p>
-          <p className="text-xs text-gray-400">Clique em "NOVA MATRÍCULA" para vincular este aluno a um plano.</p>
+          <p className="text-xs text-gray-400">Clique em "NOVA VENDA" para vincular este aluno a um plano.</p>
         </div>
       ) : (
         <div className="space-y-3">
