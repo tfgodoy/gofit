@@ -2008,6 +2008,7 @@ function ContratosTab({ studentId, contractorId, student }: {
   const [autDocs, setAutDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [action, setAction]   = useState<ContratoAction>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   /* congelar form state */
   const [congelarInicio, setCongelarInicio] = useState("");
@@ -2200,24 +2201,34 @@ function ContratosTab({ studentId, contractorId, student }: {
                   </div>
                 )}
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <p className="text-sm font-bold text-gray-800">{contrato?.descricao ?? "Plano"}</p>
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${sStyle.bg} ${sStyle.text}`}>
                         {sStyle.label}
                       </span>
+                      {sc.tipo_venda === "com_recorrencia" && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                          GoFit Pay
+                        </span>
+                      )}
+                      {sc.renovacao_automatica && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          Renova automaticamente
+                        </span>
+                      )}
                     </div>
+                    {sc.data_fim && (
+                      <p className="text-xs text-gray-400 mb-2">
+                        {contrato?.duracao ? `${contrato.duracao} ${contrato.tipo_duracao === "meses" ? "Meses" : contrato.tipo_duracao}` : ""} · Válido até{" "}
+                        <strong className="text-gray-600">{new Date(sc.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}</strong>
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-500">
                       <div>
                         <p className="text-gray-400">Início</p>
                         <p className="font-semibold text-gray-700">
                           {new Date(sc.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400">Fim</p>
-                        <p className="font-semibold text-gray-700">
-                          {sc.data_fim ? new Date(sc.data_fim + "T00:00:00").toLocaleDateString("pt-BR") : "Sem prazo"}
                         </p>
                       </div>
                       <div>
@@ -2228,48 +2239,53 @@ function ContratosTab({ studentId, contractorId, student }: {
                       </div>
                       <div>
                         <p className="text-gray-400">Vencimento</p>
-                        <p className="font-semibold text-gray-700">
-                          Todo dia {sc.dia_vencimento} · {FORMA_LABEL[sc.forma_pagamento] ?? sc.forma_pagamento}
-                        </p>
+                        <p className="font-semibold text-gray-700">Dia {sc.dia_vencimento}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Pagamento</p>
+                        <p className="font-semibold text-gray-700">{FORMA_LABEL[sc.forma_pagamento] ?? sc.forma_pagamento ?? "—"}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 mt-1">
-                    {canReactivate && (
-                      <button
-                        onClick={() => setAction({ type: "reativar", id: sc.id })}
-                        className="text-xs font-semibold text-green-600 hover:text-green-800 transition-colors px-2 py-1 rounded-lg hover:bg-green-50"
-                      >
-                        Reativar
-                      </button>
-                    )}
-                    {isActive && (
-                      <>
-                        <button
-                          onClick={() => setAction({ type: "congelar", id: sc.id })}
-                          className="text-xs font-semibold text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded-lg hover:bg-blue-50"
-                        >
-                          Congelar
+                  {/* 3-dot menu */}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setMenuOpenId(menuOpenId === sc.id ? null : sc.id)}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="5"  r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                      </svg>
+                    </button>
+                    {menuOpenId === sc.id && (
+                      <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-48">
+                        {canReactivate && (
+                          <button onClick={() => { setAction({ type: "reativar", id: sc.id }); setMenuOpenId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50">
+                            Reativar
+                          </button>
+                        )}
+                        {isActive && (
+                          <button onClick={() => { setAction({ type: "congelar", id: sc.id }); setMenuOpenId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            Congelar
+                          </button>
+                        )}
+                        {isActive && (
+                          <button onClick={() => { setAction({ type: "suspender", id: sc.id }); setMenuOpenId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            Suspensão
+                          </button>
+                        )}
+                        <button onClick={() => { setAction({ type: "cancelar", id: sc.id }); setMenuOpenId(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                          Encerrar
                         </button>
-                        <button
-                          onClick={() => setAction({ type: "suspender", id: sc.id })}
-                          className="text-xs font-semibold text-yellow-600 hover:text-yellow-800 transition-colors px-2 py-1 rounded-lg hover:bg-yellow-50"
-                        >
-                          Suspender
-                        </button>
-                        <button
-                          onClick={() => setAction({ type: "cancelar", id: sc.id })}
-                          className="text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={() => setAction({ type: "cancelar_venda", id: sc.id })}
-                          className="text-xs font-semibold text-gray-400 hover:text-red-700 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                        >
+                        <button onClick={() => { setAction({ type: "cancelar_venda", id: sc.id }); setMenuOpenId(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 border-t border-gray-100">
                           Cancelar venda
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2329,6 +2345,11 @@ function ContratosTab({ studentId, contractorId, student }: {
             );
           })}
         </div>
+      )}
+
+      {/* Backdrop para fechar menu 3-pontos */}
+      {menuOpenId && (
+        <div className="fixed inset-0 z-20" onClick={() => setMenuOpenId(null)} />
       )}
 
       {/* Modal assinatura */}
