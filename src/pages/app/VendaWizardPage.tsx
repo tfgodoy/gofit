@@ -310,24 +310,30 @@ export default function VendaWizardPage() {
         }
       }
 
-      /* 3. Gerar 1ª receivable com desconto */
-      const vencStr = calcVencimento(dataInicio, diaVencimento);
+      /* 3. Gerar 1ª receivable */
+      const vencStr  = calcVencimento(dataInicio, diaVencimento);
       const vencDate = new Date(vencStr + "T00:00:00");
-      const valorDescontoAplicado = desconto > 0 ? valorMensalidade - valorComDesconto : null;
+      // desconto NOT NULL no schema — usar 0 quando não há desconto
+      const valorDescontoReais = desconto > 0 ? Number(valorMensalidade) - Number(valorComDesconto) : 0;
 
-      await supabase.from("receivables").insert({
+      const { error: recErr } = await supabase.from("receivables").insert({
         contractor_id:   user.contractorId!,
         student_id:      studentId!,
         student_nome:    student?.nome_completo ?? null,
         descricao:       `Mensalidade ${contratoSelecionado.descricao} — ${vencDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`,
-        valor:           valorMensalidade,
+        valor:           Number(valorComDesconto),   // valor já com desconto aplicado
         vencimento:      vencStr,
         status:          "pendente",
         tipo:            "mensalidade",
         contrato_id:     contratoSelecionado.id,
         forma_pagamento: formaPagamento,
-        desconto:        valorDescontoAplicado,
+        desconto:        valorDescontoReais,         // 0 quando sem desconto (NOT NULL)
       });
+
+      if (recErr) {
+        toast.error("Contrato criado, mas erro ao gerar cobrança: " + recErr.message);
+        return;
+      }
 
       /* 4. Atualizar status do aluno para "ativo" */
       if (student?.status !== "ativo") {
