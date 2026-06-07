@@ -154,16 +154,26 @@ export default function ContratoFormPage() {
         modalidade_nome: m.modalidades?.descricao ?? m.nome ?? "",
         modalidade_cor: m.modalidades?.cor ?? "#f97316",
         modalidade_icone: m.modalidades?.icone ?? "default",
+        sessoes_por_semana: m.sessoes_por_semana != null ? String(m.sessoes_por_semana) : "",
+        tipo_periodo_acesso: m.tipo_periodo_acesso ?? "semana",
+        sessoes_no_periodo: m.sessoes_no_periodo != null ? String(m.sessoes_no_periodo) : "",
+        considerar_antecipacoes: m.considerar_antecipacoes ?? false,
+        considerar_reagendamentos: m.considerar_reagendamentos ?? false,
         limitar_acessos: m.limitar_acessos ?? false,
         max_acessos: m.max_acessos != null ? String(m.max_acessos) : "",
         tipo_duracao_acessos: m.tipo_duracao_acessos ?? "semana",
+        permite_antecipacoes: m.permite_antecipacoes ?? false,
+        qtd_antecipacoes: m.qtd_antecipacoes != null ? String(m.qtd_antecipacoes) : "",
+        limite_antecipacoes: m.limite_antecipacoes ?? "semana",
+        permite_reagendamentos: m.permite_reagendamentos ?? false,
+        qtd_reagendamentos: m.qtd_reagendamentos != null ? String(m.qtd_reagendamentos) : "",
+        limite_reagendamentos: m.limite_reagendamentos ?? "semana",
         limitar_horarios: m.limitar_horarios ?? false,
         periodos_horario: Array.isArray(m.periodos_horario) ? m.periodos_horario : [],
-        matricula_obrigatoria_na_venda: m.matricula_obrigatoria_na_venda ?? false,
-        sessoes_por_semana: m.sessoes_por_semana != null ? String(m.sessoes_por_semana) : "",
         permite_reposicao: m.permite_reposicao ?? true,
         max_reposicoes: m.max_reposicoes != null ? String(m.max_reposicoes) : "10",
         limite_reposicoes_periodo: m.limite_reposicoes_periodo ?? "semana",
+        matricula_obrigatoria_na_venda: m.matricula_obrigatoria_na_venda ?? false,
       })));
 
       setLoading(false);
@@ -245,13 +255,26 @@ export default function ContratoFormPage() {
           nome: m.modalidade_nome,
           tipo_acesso: m.tipo_acesso,
           modalidade_id: m.modalidade_id,
+          sessoes_por_semana: m.sessoes_por_semana ? parseInt(m.sessoes_por_semana) : null,
+          tipo_periodo_acesso: m.tipo_periodo_acesso ?? "semana",
+          sessoes_no_periodo: m.sessoes_no_periodo ? parseInt(m.sessoes_no_periodo) : null,
+          considerar_antecipacoes: m.considerar_antecipacoes,
+          considerar_reagendamentos: m.considerar_reagendamentos,
           limitar_acessos: m.limitar_acessos,
-          max_acessos: m.limitar_acessos && m.max_acessos ? parseInt(m.max_acessos) : null,
+          max_acessos: m.limitar_acessos && m.max_acessos ? parseInt(m.max_acessos) : (m.tipo_acesso === "pacote_aulas" && m.max_acessos ? parseInt(m.max_acessos) : null),
           tipo_duracao_acessos: m.tipo_duracao_acessos,
+          permite_antecipacoes: m.permite_antecipacoes,
+          qtd_antecipacoes: m.permite_antecipacoes && m.qtd_antecipacoes ? parseInt(m.qtd_antecipacoes) : null,
+          limite_antecipacoes: m.permite_antecipacoes ? m.limite_antecipacoes : null,
+          permite_reagendamentos: m.permite_reagendamentos,
+          qtd_reagendamentos: m.permite_reagendamentos && m.qtd_reagendamentos ? parseInt(m.qtd_reagendamentos) : null,
+          limite_reagendamentos: m.permite_reagendamentos ? m.limite_reagendamentos : null,
           limitar_horarios: m.limitar_horarios,
           periodos_horario: m.periodos_horario,
+          permite_reposicao: m.permite_reposicao,
+          max_reposicoes: m.permite_reposicao && m.max_reposicoes ? parseInt(m.max_reposicoes) : null,
+          limite_reposicoes_periodo: m.limite_reposicoes_periodo,
           matricula_obrigatoria_na_venda: m.matricula_obrigatoria_na_venda,
-          sessoes_por_semana: m.matricula_obrigatoria_na_venda && m.sessoes_por_semana ? parseInt(m.sessoes_por_semana) : null,
           total_aulas: null,
           contabilizar_conjunto: false,
         }));
@@ -305,7 +328,7 @@ export default function ContratoFormPage() {
                     onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
                     className={INP} placeholder="Nome do contrato" autoFocus />
                 </div>
-                <div className="grid grid-cols-3 gap-5">
+                <div className="grid grid-cols-2 gap-5">
                   <div>
                     <label className={LBL}>Duração {REQ}</label>
                     <input type="number" min={1} value={form.duracao}
@@ -325,6 +348,8 @@ export default function ContratoFormPage() {
                       <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                     </div>
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-5 items-end">
                   <div>
                     <label className={LBL}>Valor total do contrato {REQ}</label>
                     <div className="relative">
@@ -334,6 +359,17 @@ export default function ContratoFormPage() {
                         className={INP + " pl-7"} placeholder="0,00" />
                     </div>
                   </div>
+                  {form.tipo_duracao === "meses" && parseFloat(form.duracao) > 1 && parseFloat(form.valor_total) > 0 && (
+                    <div>
+                      <label className={LBL}>Valor por mês</label>
+                      <div className="flex items-center gap-1.5 pb-2">
+                        <span className="text-xs text-gray-400">ou</span>
+                        <span className="text-sm font-semibold text-gray-700">
+                          R$ {(parseFloat(form.valor_total) / parseFloat(form.duracao)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

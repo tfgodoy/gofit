@@ -27,16 +27,29 @@ export interface ModalidadeContrato {
   modalidade_nome: string;
   modalidade_cor: string;
   modalidade_icone: string;
+  // Sessões por semana (sessoes_semana type)
+  sessoes_por_semana: string;
+  tipo_periodo_acesso: string;
+  sessoes_no_periodo: string;
+  considerar_antecipacoes: boolean;
+  considerar_reagendamentos: boolean;
+  // Configurações
   limitar_acessos: boolean;
   max_acessos: string;
   tipo_duracao_acessos: string;
+  permite_antecipacoes: boolean;
+  qtd_antecipacoes: string;
+  limite_antecipacoes: string;
+  permite_reagendamentos: boolean;
+  qtd_reagendamentos: string;
+  limite_reagendamentos: string;
+  // Avançadas
   limitar_horarios: boolean;
   periodos_horario: PeriodoHorario[];
   permite_reposicao: boolean;
   max_reposicoes: string;
   limite_reposicoes_periodo: string;
   matricula_obrigatoria_na_venda: boolean;
-  sessoes_por_semana: string;
 }
 
 interface DBModalidade {
@@ -110,6 +123,18 @@ const TIPO_DURACAO_OPTIONS = [
   { value: "vigencia", label: "Por vigência contrato" },
 ];
 
+const PERIODO_OPTIONS = [
+  { value: "semana", label: "Semana" },
+  { value: "mes",    label: "Mês" },
+  { value: "dia",    label: "Dia" },
+];
+
+const LIMITE_OPTIONS = [
+  { value: "semana",   label: "Por semana" },
+  { value: "mes",      label: "Por mês" },
+  { value: "contrato", label: "Por contrato" },
+];
+
 const DIAS_SEMANA = [
   { value: "segunda", label: "Segunda" },
   { value: "terca",   label: "Terça" },
@@ -125,6 +150,34 @@ const DEFAULT_PERIODO: PeriodoHorario = {
   hora_inicial: "",
   hora_final: "",
   horario_livre: false,
+};
+
+const EMPTY_FORM: Omit<ModalidadeContrato, "id"> = {
+  tipo_acesso: "padrao",
+  modalidade_id: null,
+  modalidade_nome: "",
+  modalidade_cor: "#f97316",
+  modalidade_icone: "default",
+  sessoes_por_semana: "",
+  tipo_periodo_acesso: "semana",
+  sessoes_no_periodo: "",
+  considerar_antecipacoes: false,
+  considerar_reagendamentos: false,
+  limitar_acessos: false,
+  max_acessos: "",
+  tipo_duracao_acessos: "semana",
+  permite_antecipacoes: false,
+  qtd_antecipacoes: "",
+  limite_antecipacoes: "semana",
+  permite_reagendamentos: false,
+  qtd_reagendamentos: "",
+  limite_reagendamentos: "semana",
+  limitar_horarios: false,
+  periodos_horario: [],
+  permite_reposicao: true,
+  max_reposicoes: "10",
+  limite_reposicoes_periodo: "semana",
+  matricula_obrigatoria_na_venda: false,
 };
 
 /* ─── Small components ───────────────────────────────────── */
@@ -147,6 +200,24 @@ function Tooltip({ text }: { text: string }) {
       className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-xs inline-flex items-center justify-center cursor-help font-bold ml-1 flex-shrink-0">
       ?
     </span>
+  );
+}
+
+function Checkbox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <div onClick={() => onChange(!checked)}
+        className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+          checked ? "bg-primary border-primary" : "border-gray-300 hover:border-primary/50"
+        }`}>
+        {checked && (
+          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </div>
+      <span className="text-sm text-gray-700">{label}</span>
+    </label>
   );
 }
 
@@ -311,21 +382,9 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
 
   const [form, setForm] = useState<ModalidadeContrato>({
     id: initial?.id,
+    ...EMPTY_FORM,
+    ...initial,
     tipo_acesso: initial?.tipo_acesso ?? "padrao",
-    modalidade_id: initial?.modalidade_id ?? null,
-    modalidade_nome: initial?.modalidade_nome ?? "",
-    modalidade_cor: initial?.modalidade_cor ?? "#f97316",
-    modalidade_icone: initial?.modalidade_icone ?? "default",
-    limitar_acessos: initial?.limitar_acessos ?? false,
-    max_acessos: initial?.max_acessos ?? "",
-    tipo_duracao_acessos: initial?.tipo_duracao_acessos ?? "semana",
-    limitar_horarios: initial?.limitar_horarios ?? false,
-    periodos_horario: initial?.periodos_horario ?? [],
-    permite_reposicao: initial?.permite_reposicao ?? true,
-    max_reposicoes: initial?.max_reposicoes ?? "10",
-    limite_reposicoes_periodo: initial?.limite_reposicoes_periodo ?? "semana",
-    matricula_obrigatoria_na_venda: initial?.matricula_obrigatoria_na_venda ?? false,
-    sessoes_por_semana: initial?.sessoes_por_semana ?? "",
   });
 
   useEffect(() => {
@@ -342,8 +401,14 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
     if (!form.modalidade_id && tipoAcesso !== "gonutri") {
       toast.error("Selecione uma modalidade."); return;
     }
+    if (tipoAcesso === "sessoes_semana" && !form.sessoes_por_semana) {
+      toast.error("Informe a quantidade de sessões por semana."); return;
+    }
     onSave({ ...form, tipo_acesso: tipoAcesso });
   }
+
+  const isSessoes = tipoAcesso === "sessoes_semana";
+  const isPacote = tipoAcesso === "pacote_aulas";
 
   return (
     <>
@@ -429,7 +494,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
 
               <div className="overflow-y-auto" style={{ maxHeight: "72vh" }}>
 
-                {/* Dados da modalidade */}
+                {/* ── Dados da modalidade ── */}
                 <div className="mx-5 mt-5 mb-4 bg-white rounded-xl border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-bold text-gray-800">Dados da modalidade</h3>
@@ -439,42 +504,35 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                       ALTERAR TIPO DE ACESSO
                     </button>
                   </div>
-                  <div>
-                    <label className={LBL}>Modalidade {REQ}</label>
-                    <ModalidadeSelect
-                      value={form.modalidade_id ?? ""}
-                      onChange={(id, nome, cor, icone) => setForm(f => ({ ...f, modalidade_id: id, modalidade_nome: nome, modalidade_cor: cor, modalidade_icone: icone }))}
-                      modalidades={modalidades}
-                      onAddNew={() => setShowNewModalidade(true)}
-                    />
-                  </div>
-                </div>
 
-                {/* Configurações */}
-                {tipoAcesso !== "gonutri" && (
-                  <div className="mx-5 mb-4 bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-                    <h3 className="text-sm font-bold text-gray-800">Configurações</h3>
-                    <Toggle
-                      label="Limitar quantidade de acessos"
-                      checked={form.limitar_acessos}
-                      onChange={v => setForm(f => ({ ...f, limitar_acessos: v }))}
-                    />
-                    {form.limitar_acessos && (
-                      <div className="ml-4 flex items-end gap-3">
-                        <span className="text-xs text-gray-400 pb-2.5 flex-shrink-0">↳ Máximo de</span>
-                        <div className="w-24">
-                          <label className={LBL}>Quantidade {REQ}</label>
-                          <input type="number" min={1} value={form.max_acessos}
-                            onChange={e => setForm(f => ({ ...f, max_acessos: e.target.value }))}
-                            className={INP} placeholder="1" />
+                  <div className="space-y-4">
+                    {/* Modalidade selector */}
+                    <div>
+                      <label className={LBL}>Modalidade {REQ}</label>
+                      <ModalidadeSelect
+                        value={form.modalidade_id ?? ""}
+                        onChange={(id, nome, cor, icone) => setForm(f => ({ ...f, modalidade_id: id, modalidade_nome: nome, modalidade_cor: cor, modalidade_icone: icone }))}
+                        modalidades={modalidades}
+                        onAddNew={() => setShowNewModalidade(true)}
+                      />
+                    </div>
+
+                    {/* Sessões por semana — aparece inline nos dados para o tipo sessoes_semana */}
+                    {isSessoes && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={LBL}>Quantidade de sessões por semana {REQ}</label>
+                          <input type="number" min={1} max={14} value={form.sessoes_por_semana}
+                            onChange={e => setForm(f => ({ ...f, sessoes_por_semana: e.target.value }))}
+                            className={INP} placeholder="Ex: 3" />
                         </div>
-                        <div className="flex-1">
-                          <label className={LBL}>Tipo de duração {REQ}</label>
+                        <div>
+                          <label className={LBL}>Tipo de acesso por período {REQ}</label>
                           <div className="relative">
-                            <select value={form.tipo_duracao_acessos}
-                              onChange={e => setForm(f => ({ ...f, tipo_duracao_acessos: e.target.value }))}
+                            <select value={form.tipo_periodo_acesso}
+                              onChange={e => setForm(f => ({ ...f, tipo_periodo_acesso: e.target.value }))}
                               className={SEL}>
-                              {TIPO_DURACAO_OPTIONS.map(o => (
+                              {PERIODO_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
                               ))}
                             </select>
@@ -483,10 +541,156 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                         </div>
                       </div>
                     )}
+
+                    {isSessoes && (
+                      <div>
+                        <label className={LBL}>Quantidade de sessões no período</label>
+                        <input type="number" min={1} value={form.sessoes_no_periodo}
+                          onChange={e => setForm(f => ({ ...f, sessoes_no_periodo: e.target.value }))}
+                          className={INP} placeholder="Deixe em branco para ilimitado" />
+                      </div>
+                    )}
+
+                    {isSessoes && (
+                      <div>
+                        <span className="text-xs text-gray-500">↳ Considerar também:</span>
+                        <div className="flex items-center gap-6 mt-2">
+                          <Checkbox label="Antecipações" checked={form.considerar_antecipacoes}
+                            onChange={v => setForm(f => ({ ...f, considerar_antecipacoes: v }))} />
+                          <Checkbox label="Reagendamentos" checked={form.considerar_reagendamentos}
+                            onChange={v => setForm(f => ({ ...f, considerar_reagendamentos: v }))} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Total de aulas para pacote */}
+                    {isPacote && (
+                      <div>
+                        <label className={LBL}>Total de aulas no pacote {REQ}</label>
+                        <input type="number" min={1} value={form.max_acessos}
+                          onChange={e => setForm(f => ({ ...f, max_acessos: e.target.value }))}
+                          className={INP} placeholder="Ex: 20" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Configurações ── */}
+                {tipoAcesso !== "gonutri" && (
+                  <div className="mx-5 mb-4 bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                    <h3 className="text-sm font-bold text-gray-800">Configurações</h3>
+
+                    {/* Padrão: limitar acessos */}
+                    {tipoAcesso === "padrao" && (
+                      <>
+                        <Toggle
+                          label="Limitar quantidade de acessos"
+                          checked={form.limitar_acessos}
+                          onChange={v => setForm(f => ({ ...f, limitar_acessos: v }))}
+                        />
+                        {form.limitar_acessos && (
+                          <div className="ml-4 flex items-end gap-3">
+                            <span className="text-xs text-gray-400 pb-2.5 flex-shrink-0">↳ Máximo de</span>
+                            <div className="w-24">
+                              <label className={LBL}>Quantidade {REQ}</label>
+                              <input type="number" min={1} value={form.max_acessos}
+                                onChange={e => setForm(f => ({ ...f, max_acessos: e.target.value }))}
+                                className={INP} placeholder="1" />
+                            </div>
+                            <div className="flex-1">
+                              <label className={LBL}>Tipo de duração {REQ}</label>
+                              <div className="relative">
+                                <select value={form.tipo_duracao_acessos}
+                                  onChange={e => setForm(f => ({ ...f, tipo_duracao_acessos: e.target.value }))}
+                                  className={SEL}>
+                                  {TIPO_DURACAO_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Sessões semana: antecipações e reagendamentos */}
+                    {isSessoes && (
+                      <>
+                        <Toggle
+                          label={
+                            <span className="flex items-center gap-1">
+                              Permite antecipações
+                              <Tooltip text="Permite que o aluno antecipe aulas dentro do limite configurado." />
+                            </span>
+                          }
+                          checked={form.permite_antecipacoes}
+                          onChange={v => setForm(f => ({ ...f, permite_antecipacoes: v }))}
+                        />
+                        {form.permite_antecipacoes && (
+                          <div className="ml-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={LBL}>Quantidade {REQ}</label>
+                              <input type="number" min={1} value={form.qtd_antecipacoes}
+                                onChange={e => setForm(f => ({ ...f, qtd_antecipacoes: e.target.value }))}
+                                className={INP} placeholder="Ex: 2" />
+                            </div>
+                            <div>
+                              <label className={LBL}>Limite {REQ}</label>
+                              <div className="relative">
+                                <select value={form.limite_antecipacoes}
+                                  onChange={e => setForm(f => ({ ...f, limite_antecipacoes: e.target.value }))}
+                                  className={SEL}>
+                                  {LIMITE_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <Toggle
+                          label={
+                            <span className="flex items-center gap-1">
+                              Permite reagendamentos
+                              <Tooltip text="Permite que o aluno reagende aulas dentro do limite configurado." />
+                            </span>
+                          }
+                          checked={form.permite_reagendamentos}
+                          onChange={v => setForm(f => ({ ...f, permite_reagendamentos: v }))}
+                        />
+                        {form.permite_reagendamentos && (
+                          <div className="ml-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={LBL}>Quantidade {REQ}</label>
+                              <input type="number" min={1} value={form.qtd_reagendamentos}
+                                onChange={e => setForm(f => ({ ...f, qtd_reagendamentos: e.target.value }))}
+                                className={INP} placeholder="Ex: 2" />
+                            </div>
+                            <div>
+                              <label className={LBL}>Limite {REQ}</label>
+                              <div className="relative">
+                                <select value={form.limite_reagendamentos}
+                                  onChange={e => setForm(f => ({ ...f, limite_reagendamentos: e.target.value }))}
+                                  className={SEL}>
+                                  {LIMITE_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 
-                {/* Configurações avançadas */}
+                {/* ── Configurações avançadas ── */}
                 <div className="mx-5 mb-5 bg-white rounded-xl border border-gray-200">
                   <button type="button" onClick={() => setShowAvancadas(o => !o)}
                     className="w-full flex items-center justify-between p-5">
@@ -499,45 +703,43 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
 
                   {showAvancadas && (
                     <div className="px-5 pb-5 border-t border-gray-100 space-y-4 pt-4">
-                      <Toggle
-                        label={
-                          <span className="flex items-center gap-1">
-                            Permite reposições
-                            <Tooltip text="Quando o aluno cancelar uma aula, o sistema gera um crédito de reposição para uso posterior." />
-                          </span>
-                        }
-                        checked={form.permite_reposicao}
-                        onChange={v => setForm(f => ({ ...f, permite_reposicao: v }))}
-                      />
-                      {form.permite_reposicao && (
-                        <div className="ml-4 grid grid-cols-2 gap-4">
-                          <div>
-                            <label className={LBL}>Quantidade máxima</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={form.max_reposicoes}
-                              onChange={e => setForm(f => ({ ...f, max_reposicoes: e.target.value }))}
-                              className={INP}
-                              placeholder="Ex: 10"
-                            />
-                          </div>
-                          <div>
-                            <label className={LBL}>Limite por</label>
-                            <div className="relative">
-                              <select
-                                value={form.limite_reposicoes_periodo}
-                                onChange={e => setForm(f => ({ ...f, limite_reposicoes_periodo: e.target.value }))}
-                                className={SEL}
-                              >
-                                <option value="semana">Semana</option>
-                                <option value="mes">Mês</option>
-                                <option value="contrato">Contrato (total)</option>
-                              </select>
-                              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                      {/* Reposições — só para sessoes/pacote */}
+                      {(isSessoes || isPacote) && (
+                        <>
+                          <Toggle
+                            label={
+                              <span className="flex items-center gap-1">
+                                Permite reposições
+                                <Tooltip text="Quando o aluno cancelar uma aula, o sistema gera um crédito de reposição para uso posterior." />
+                              </span>
+                            }
+                            checked={form.permite_reposicao}
+                            onChange={v => setForm(f => ({ ...f, permite_reposicao: v }))}
+                          />
+                          {form.permite_reposicao && (
+                            <div className="ml-4 grid grid-cols-2 gap-4">
+                              <div>
+                                <label className={LBL}>Quantidade máxima</label>
+                                <input type="number" min={1} value={form.max_reposicoes}
+                                  onChange={e => setForm(f => ({ ...f, max_reposicoes: e.target.value }))}
+                                  className={INP} placeholder="Ex: 10" />
+                              </div>
+                              <div>
+                                <label className={LBL}>Limite por</label>
+                                <div className="relative">
+                                  <select value={form.limite_reposicoes_periodo}
+                                    onChange={e => setForm(f => ({ ...f, limite_reposicoes_periodo: e.target.value }))}
+                                    className={SEL}>
+                                    <option value="semana">Semana</option>
+                                    <option value="mes">Mês</option>
+                                    <option value="contrato">Contrato (total)</option>
+                                  </select>
+                                  <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          )}
+                        </>
                       )}
 
                       <Toggle
@@ -550,20 +752,6 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                         checked={form.matricula_obrigatoria_na_venda}
                         onChange={v => setForm(f => ({ ...f, matricula_obrigatoria_na_venda: v }))}
                       />
-                      {form.matricula_obrigatoria_na_venda && (
-                        <div className="ml-4">
-                          <label className={LBL}>Sessões por semana que o aluno deve escolher {REQ}</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={7}
-                            value={form.sessoes_por_semana}
-                            onChange={e => setForm(f => ({ ...f, sessoes_por_semana: e.target.value }))}
-                            className={INP}
-                            placeholder="Ex: 3"
-                          />
-                        </div>
-                      )}
 
                       <Toggle
                         label={
