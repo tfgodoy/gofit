@@ -2102,7 +2102,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
       .select(`
         id, created_at, data_inicio, data_fim, status,
         valor_mensalidade, forma_pagamento, desconto,
-        contratos!contrato_id(descricao, duracao, tipo_duracao, valor_total)
+        contratos:contrato_id!left(descricao, duracao, tipo_duracao, valor_total)
       `)
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
@@ -2964,7 +2964,7 @@ function ContratosTab({ studentId, contractorId, student }: {
           id, data_inicio, data_fim, status, valor_mensalidade,
           dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at,
           data_congelamento_inicio, data_congelamento_fim, motivo_congelamento,
-          contratos!contrato_id(descricao, tipo, duracao, tipo_duracao)
+          contratos:contrato_id!left(descricao, tipo, duracao, tipo_duracao)
         `)
         .eq("contractor_id", contractorId)
         .eq("student_id", studentId)
