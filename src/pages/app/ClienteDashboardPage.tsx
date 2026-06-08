@@ -3542,19 +3542,270 @@ const STATUS_REC: Record<string, { label: string; bg: string; text: string }> = 
   cancelado: { label: "Cancelado", bg: "bg-gray-100",   text: "text-gray-500"   },
 };
 
-function FinanceiroTab({ studentId, contractorId }: { studentId: string; contractorId: string }) {
-  const [recs, setRecs]         = useState<any[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [payModal, setPayModal] = useState<any | null>(null);
-  const [payVal,   setPayVal]   = useState("");
-  const [payForm,  setPayForm]  = useState("pix");
-  const [paying,   setPaying]   = useState(false);
+/* ── Modal Detalhes do Financeiro ────────────────────────────── */
+function FinanceiroDetalheModal({ r, studentNome, contractorId, onClose }: {
+  r: any; studentNome: string; contractorId: string; onClose: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState("dados");
+  const [scData, setScData]       = useState<any | null>(null);
+  const [events, setEvents]       = useState<any[]>([]);
+  const [loadingSc, setLoadingSc] = useState(false);
+
+  const TABS_FIN = [
+    { key: "dados",      label: "DADOS PRINCIPAIS" },
+    { key: "recebimento",label: "RECEBIMENTO"       },
+    { key: "gateway",    label: "GATEWAY PAY"       },
+    { key: "venda",      label: "VENDA"             },
+    { key: "categ",      label: "CATEGORIZAÇÃO"     },
+    { key: "historico",  label: "HISTÓRICO GERAL"   },
+  ];
+
+  useEffect(() => {
+    if (!r.student_contract_id) return;
+    setLoadingSc(true);
+    async function fetchSc() {
+      // busca student_contract
+      const { data: sc } = await supabase
+        .from("student_contracts")
+        .select("id, status, created_at, desconto, valor_mensalidade, contrato_id")
+        .eq("id", r.student_contract_id)
+        .maybeSingle();
+      if (sc) {
+        // busca plano
+        const { data: ct } = await supabase
+          .from("contratos")
+          .select("descricao, duracao, tipo_duracao")
+          .eq("id", sc.contrato_id)
+          .maybeSingle();
+        setScData({ ...sc, contrato: ct ?? null });
+      }
+      // busca eventos
+      const { data: evs } = await supabase
+        .from("contract_events")
+        .select("id, descricao, usuario_nome, created_at")
+        .eq("student_contract_id", r.student_contract_id)
+        .order("created_at", { ascending: false });
+      setEvents((evs ?? []) as any[]);
+      setLoadingSc(false);
+    }
+    fetchSc();
+  }, [r.student_contract_id]);
+
+  const fmt = (v: number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const fmtDate = (d: string) => d ? new Date(d.includes("T") ? d : d + "T00:00:00").toLocaleDateString("pt-BR") : "—";
+  const fmtDateTime = (d: string) => d ? `${new Date(d).toLocaleDateString("pt-BR")} ${new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "—";
+
+  const STATUS_FIN: Record<string, { label: string; bg: string; text: string }> = {
+    pendente:  { label: "Pendente",  bg: "bg-yellow-100", text: "text-yellow-700" },
+    pago:      { label: "Recebido",  bg: "bg-green-100",  text: "text-green-700"  },
+    atrasado:  { label: "Em atraso", bg: "bg-red-100",    text: "text-red-700"    },
+    aguardando:{ label: "Em andamento", bg: "bg-purple-100", text: "text-purple-700" },
+    cancelado: { label: "Cancelado", bg: "bg-gray-100",   text: "text-gray-500"   },
+  };
+  const st = STATUS_FIN[r.status] ?? { label: r.status, bg: "bg-gray-100", text: "text-gray-500" };
+  const stSc = r.status === "pago" ? { label: "Concluída", bg: "bg-green-100", text: "text-green-700" } : st;
+
+  const field = (label: string, value: React.ReactNode, green = false) => (
+    <div>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+      <p className={`text-sm font-semibold ${green ? "text-green-600" : "text-gray-800"}`}>{value}</p>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <DollarSign className="w-5 h-5 text-primary" />
+          <h3 className="text-base font-bold text-gray-900">Detalhes do financeiro</h3>
+          <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 overflow-x-auto">
+          {TABS_FIN.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-3 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === t.key ? "border-primary text-primary" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto flex-1 p-6">
+
+          {/* ── DADOS PRINCIPAIS ── */}
+          {activeTab === "dados" && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 mb-0.5">Descrição</p>
+                  <p className="text-base font-bold text-gray-900">{r.descricao}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Situação</p>
+                  <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${st.bg} ${st.text}`}>{st.label}</span>
+                </div>
+                {field("Data de vencimento", fmtDate(r.vencimento))}
+                {field("Valor", fmt(r.valor), true)}
+                {field("Cliente", studentNome)}
+              </div>
+            </div>
+          )}
+
+          {/* ── RECEBIMENTO ── */}
+          {activeTab === "recebimento" && (
+            <div className="space-y-5">
+              {r.status === "pago" ? (
+                <div className="grid grid-cols-3 gap-5">
+                  {field("Recebido em", fmtDate(r.pago_em))}
+                  {field("Método", FORMA_LABEL_MAP[r.forma_pagamento] ?? r.forma_pagamento ?? "—")}
+                  {field("Maquininha", "—")}
+                  {field("Número de parcelas", r.total_parcelas ? `${r.parcela_numero ?? 1}x` : "1x")}
+                  <div className="col-span-3 border-t border-gray-100 pt-4">
+                    <div className="grid grid-cols-4 gap-4">
+                      {field("Valor original", fmt(r.valor))}
+                      {field("Valor desconto", fmt(r.desconto ?? 0))}
+                      {field("Valor multa", fmt(r.multa ?? 0))}
+                      {field("Valor recebido", fmt(r.valor_pago ?? r.valor), true)}
+                    </div>
+                  </div>
+                  {field("Usuário recebimento", "—")}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400">
+                  <DollarSign className="w-8 h-8 text-gray-200" />
+                  <p className="text-sm">Ainda não houve recebimento para esta cobrança.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── GATEWAY PAY ── */}
+          {activeTab === "gateway" && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Coins className="w-6 h-6 text-primary" />
+              </div>
+              <p className="text-sm font-semibold text-gray-600">Integração com gateway de pagamento</p>
+              <p className="text-xs text-center max-w-xs">A integração com o gateway Asaas será configurada em breve. Esta aba exibirá o status do processamento, parcelas, tipo de cobrança e opções de PROCESSAR / CANCELAR / ESTORNAR.</p>
+              <span className="mt-2 px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">Em breve</span>
+            </div>
+          )}
+
+          {/* ── VENDA ── */}
+          {activeTab === "venda" && (
+            <div className="space-y-5">
+              {loadingSc ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+              ) : scData ? (
+                <div className="grid grid-cols-3 gap-5">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Situação</p>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${stSc.bg} ${stSc.text}`}>{stSc.label}</span>
+                  </div>
+                  {field("Data", fmtDate(scData.created_at))}
+                  {field("Valor desconto", fmt(scData.desconto ?? 0))}
+                  {field("Valor", fmt(scData.valor_mensalidade ?? r.valor), true)}
+                  <div className="col-span-3">
+                    {field("Contratos", scData.contrato ? `${scData.contrato.descricao}, ${fmtDur2(scData.contrato.duracao, scData.contrato.tipo_duracao)}` : "—")}
+                  </div>
+                  {field("Consultor", "—")}
+                  {field("Origem", "Manual")}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400">
+                  <p className="text-sm">Venda não vinculada a um contrato.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── CATEGORIZAÇÃO ── */}
+          {activeTab === "categ" && (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-xs font-semibold text-gray-400 py-2">Descrição</th>
+                  <th className="text-left text-xs font-semibold text-gray-400 py-2">Categoria de receita</th>
+                  <th className="text-right text-xs font-semibold text-gray-400 py-2">Valor categorizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-50">
+                  <td className="py-3 text-sm text-gray-700">{r.descricao}</td>
+                  <td className="py-3 text-sm text-gray-600 capitalize">{r.tipo === "mensalidade" ? "Vendas" : r.tipo ?? "Vendas"}</td>
+                  <td className="py-3 text-sm font-semibold text-gray-800 text-right">{fmt(r.valor)}</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+
+          {/* ── HISTÓRICO GERAL ── */}
+          {activeTab === "historico" && (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-xs font-semibold text-gray-400 py-2 w-40">Data</th>
+                  <th className="text-left text-xs font-semibold text-gray-400 py-2">Histórico</th>
+                  <th className="text-left text-xs font-semibold text-gray-400 py-2 w-36">Usuário</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Evento fixo: criação */}
+                <tr className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-3 text-sm text-gray-500 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
+                  <td className="py-3 text-sm text-gray-700">Título financeiro foi criado.</td>
+                  <td className="py-3 text-sm text-gray-500">—</td>
+                </tr>
+                {r.status === "pago" && (
+                  <tr className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-3 text-sm text-gray-500 whitespace-nowrap">{fmtDateTime(r.pago_em ?? r.updated_at)}</td>
+                    <td className="py-3 text-sm text-gray-700">Título financeiro alterado para recebido.</td>
+                    <td className="py-3 text-sm text-gray-500">—</td>
+                  </tr>
+                )}
+                {events.map(ev => (
+                  <tr key={ev.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-3 text-sm text-gray-500 whitespace-nowrap">{fmtDateTime(ev.created_at)}</td>
+                    <td className="py-3 text-sm text-gray-700">{ev.descricao}</td>
+                    <td className="py-3 text-sm text-gray-500">{ev.usuario_nome ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="flex justify-end px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm font-semibold text-primary hover:underline">FECHAR</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── FinanceiroTab ────────────────────────────────────────────── */
+function FinanceiroTab({ studentId, contractorId, studentNome }: {
+  studentId: string; contractorId: string; studentNome: string;
+}) {
+  const [recs,      setRecs]      = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [payModal,  setPayModal]  = useState<any | null>(null);
+  const [payVal,    setPayVal]    = useState("");
+  const [payForm,   setPayForm]   = useState("pix");
+  const [paying,    setPaying]    = useState(false);
+  const [menuRecId, setMenuRecId] = useState<string | null>(null);
+  const [detalheRec,setDetalheRec]= useState<any | null>(null);
+  const [cancelarRec,setCancelarRec] = useState<any | null>(null);
+  const [cancelando, setCancelando]  = useState(false);
 
   async function load() {
     setLoading(true);
     const { data } = await supabase
       .from("receivables")
-      .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em")
+      .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em, desconto, multa, juros, parcela_numero, total_parcelas, student_contract_id, created_at, updated_at, student_nome")
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
       .order("vencimento", { ascending: false });
@@ -3569,10 +3820,10 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
 
   useEffect(() => { load(); }, [studentId, contractorId]);
 
-  const pendente  = recs.filter(r => r.status === "pendente").reduce((s, r) => s + r.valor, 0);
-  const atrasado  = recs.filter(r => r.status === "atrasado").reduce((s, r) => s + r.valor, 0);
-  const pago      = recs.filter(r => r.status === "pago").reduce((s, r) => s + (r.valor_pago ?? r.valor), 0);
-  const proxVenc  = recs.filter(r => ["pendente","atrasado"].includes(r.status)).sort((a,b)=>a.vencimento.localeCompare(b.vencimento))[0];
+  const pendente = recs.filter(r => r.status === "pendente").reduce((s, r) => s + Number(r.valor), 0);
+  const atrasado = recs.filter(r => r.status === "atrasado").reduce((s, r) => s + Number(r.valor), 0);
+  const pago     = recs.filter(r => r.status === "pago").reduce((s, r) => s + Number(r.valor_pago ?? r.valor), 0);
+  const proxVenc = recs.filter(r => ["pendente","atrasado"].includes(r.status)).sort((a,b)=>a.vencimento.localeCompare(b.vencimento))[0];
 
   async function handlePay() {
     if (!payModal) return;
@@ -3580,7 +3831,7 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
     const valor_pago = parseFloat(payVal.replace(",", ".")) || payModal.valor;
     await supabase.from("receivables").update({
       status: "pago", forma_pagamento: payForm,
-      valor_pago, pago_em: new Date().toISOString().split("T")[0],
+      valor_pago, pago_em: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", payModal.id);
     await supabase.from("transactions").insert({
@@ -3600,7 +3851,17 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
     load();
   }
 
-  const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  async function handleCancelarRec() {
+    if (!cancelarRec) return;
+    setCancelando(true);
+    await supabase.from("receivables").delete().eq("id", cancelarRec.id);
+    toast.success("Cobrança cancelada.");
+    setCancelando(false);
+    setCancelarRec(null);
+    load();
+  }
+
+  const fmt = (v: number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
 
@@ -3611,9 +3872,9 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Em atraso",      value: fmt(atrasado), color: atrasado > 0 ? "text-red-600" : "text-gray-800" },
-          { label: "Pendente",       value: fmt(pendente), color: "text-yellow-700"  },
-          { label: "Total pago",     value: fmt(pago),     color: "text-green-700"   },
+          { label: "Em atraso",        value: fmt(atrasado), color: atrasado > 0 ? "text-red-600" : "text-gray-800" },
+          { label: "Pendente",         value: fmt(pendente), color: "text-yellow-700" },
+          { label: "Total pago",       value: fmt(pago),     color: "text-green-700"  },
           { label: "Próx. vencimento", value: proxVenc ? new Date(proxVenc.vencimento + "T00:00:00").toLocaleDateString("pt-BR") : "—", color: "text-gray-700" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4">
@@ -3630,7 +3891,7 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
           <p className="text-sm text-gray-400">Nenhuma cobrança encontrada</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
@@ -3638,7 +3899,8 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
                 <th className="text-right text-xs font-semibold text-gray-400 px-5 py-3">VALOR</th>
                 <th className="text-left text-xs font-semibold text-gray-400 px-5 py-3">VENCIMENTO</th>
                 <th className="text-center text-xs font-semibold text-gray-400 px-5 py-3">STATUS</th>
-                <th className="px-5 py-3" />
+                <th className="px-3 py-3 w-24 text-right text-xs font-semibold text-gray-400">RECEBER</th>
+                <th className="px-3 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -3648,7 +3910,7 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
                   <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
                     <td className="px-5 py-3 text-sm text-gray-700">{r.descricao}</td>
                     <td className="px-5 py-3 text-sm font-semibold text-right text-gray-800">{fmt(r.valor)}</td>
-                    <td className="px-5 py-3 text-sm text-gray-500">
+                    <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
                       {new Date(r.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
                     </td>
                     <td className="px-5 py-3 text-center">
@@ -3656,14 +3918,34 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
                         {s.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="px-3 py-3 text-right">
                       {["pendente","atrasado"].includes(r.status) && (
-                        <button
-                          onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
-                          className="text-xs font-bold text-primary hover:underline"
-                        >
-                          Receber
+                        <button onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
+                          className="text-xs font-bold text-primary hover:underline whitespace-nowrap">
+                          RECEBER
                         </button>
+                      )}
+                    </td>
+                    {/* 3-pontos */}
+                    <td className="px-3 py-3 relative">
+                      <button onClick={() => setMenuRecId(menuRecId === r.id ? null : r.id)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                        </svg>
+                      </button>
+                      {menuRecId === r.id && (
+                        <div className="absolute right-0 top-10 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-40">
+                          <button onClick={() => { setDetalheRec(r); setMenuRecId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <Eye className="w-3.5 h-3.5 text-gray-400" /> Detalhes
+                          </button>
+                          <div className="border-t border-gray-100 my-1" />
+                          <button onClick={() => { setCancelarRec(r); setMenuRecId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            <X className="w-3.5 h-3.5" /> Cancelar
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -3671,6 +3953,38 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Backdrop menus */}
+      {menuRecId && <div className="fixed inset-0 z-20" onClick={() => setMenuRecId(null)} />}
+
+      {/* Modal Detalhes */}
+      {detalheRec && (
+        <FinanceiroDetalheModal
+          r={detalheRec}
+          studentNome={studentNome}
+          contractorId={contractorId}
+          onClose={() => setDetalheRec(null)}
+        />
+      )}
+
+      {/* Modal Cancelar cobrança */}
+      {cancelarRec && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setCancelarRec(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-3">Confirmação</h3>
+            <p className="text-sm text-gray-600 mb-6">Deseja realmente cancelar este recebimento?</p>
+            <div className="flex justify-end gap-4">
+              <button onClick={() => setCancelarRec(null)} disabled={cancelando}
+                className="text-sm font-bold text-gray-500 hover:underline">NÃO</button>
+              <button onClick={handleCancelarRec} disabled={cancelando}
+                className="text-sm font-bold text-primary hover:underline disabled:opacity-60">
+                {cancelando ? "Cancelando..." : "SIM"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -3683,21 +3997,13 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
             <p className="text-sm text-gray-500">{payModal.descricao}</p>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor recebido</label>
-              <input
-                type="number"
-                step="0.01"
-                value={payVal}
-                onChange={e => setPayVal(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
+              <input type="number" step="0.01" value={payVal} onChange={e => setPayVal(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Forma de pagamento</label>
-              <select
-                value={payForm}
-                onChange={e => setPayForm(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
+              <select value={payForm} onChange={e => setPayForm(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20">
                 {["pix","dinheiro","cartao_credito","cartao_debito","boleto"].map(f => (
                   <option key={f} value={f}>{{ pix:"Pix", dinheiro:"Dinheiro", cartao_credito:"Cartão crédito", cartao_debito:"Cartão débito", boleto:"Boleto" }[f] ?? f}</option>
                 ))}
@@ -3705,11 +4011,8 @@ function FinanceiroTab({ studentId, contractorId }: { studentId: string; contrac
             </div>
             <div className="flex justify-end gap-3 pt-1">
               <button onClick={() => setPayModal(null)} className="text-sm font-bold text-gray-500 hover:underline">Cancelar</button>
-              <button
-                onClick={handlePay}
-                disabled={paying}
-                className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40"
-              >
+              <button onClick={handlePay} disabled={paying}
+                className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40">
                 {paying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 CONFIRMAR
               </button>
@@ -3954,6 +4257,7 @@ export default function ClienteDashboardPage() {
             <FinanceiroTab
               studentId={student.id}
               contractorId={user!.contractorId!}
+              studentNome={student.nome_completo}
             />
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />
