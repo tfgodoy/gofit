@@ -2096,12 +2096,9 @@ function VendasTab({ studentId, contractorId, studentNome }: {
   const [cancelar,  setCancelar]  = useState<any | null>(null);
   const [saving,    setSaving]    = useState(false);
 
-  // Filtros
-  const hoje = new Date();
-  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1).toISOString().slice(0, 10);
-  const ultimoDia   = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
-  const [filtroInicio,  setFiltroInicio]  = useState(primeiroDia);
-  const [filtroFim,     setFiltroFim]     = useState(ultimoDia);
+  // Filtros — vazios por padrão = mostra tudo
+  const [filtroInicio,  setFiltroInicio]  = useState("");
+  const [filtroFim,     setFiltroFim]     = useState("");
   const [situacaoOpen,  setSituacaoOpen]  = useState(false);
   const SITUACOES_OPTS = [
     { value: "ativo",     label: "Concluída"  },
@@ -2109,7 +2106,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
     { value: "suspenso",  label: "Suspensa"   },
     { value: "encerrado", label: "Encerrada"  },
   ];
-  const [situacoesSel, setSituacoesSel] = useState<string[]>(["ativo", "suspenso", "encerrado"]);
+  const [situacoesSel, setSituacoesSel] = useState<string[]>([]);
 
   async function load() {
     setLoading(true);
@@ -2148,6 +2145,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
   function applyFilter(all: any[], inicio: string, fim: string, sels: string[]) {
     const ini = inicio ? new Date(inicio + "T00:00:00") : null;
     const end = fim    ? new Date(fim    + "T23:59:59") : null;
+    // sels vazio = todas as situações
     setFiltered(all.filter(v => {
       const dt = new Date(v.created_at);
       if (ini && dt < ini) return false;
@@ -2167,9 +2165,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
     setSituacoesSel(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
   }
 
-  const situacaoLabel = situacoesSel.length === 0
-    ? "Nenhuma"
-    : situacoesSel.length === SITUACOES_OPTS.length
+  const situacaoLabel = situacoesSel.length === 0 || situacoesSel.length === SITUACOES_OPTS.length
     ? "Todas"
     : SITUACOES_OPTS.filter(o => situacoesSel.includes(o.value)).map(o => o.label).join(", ");
 
