@@ -581,7 +581,8 @@ export default function VendaWizardPage() {
           vencimento:      vencFinal,
           status:          "pendente",
           tipo:            "mensalidade",
-          contrato_id:     sc.id,   // ID do student_contract, não do plano
+          contrato_id:         contratoSelecionado.id,  // FK → contratos (plano)
+          student_contract_id: sc.id,                  // vínculo com a matrícula
           forma_pagamento: formaPagamento,
           desconto:        descontoReais > 0 ? descontoReais : 0,
         };

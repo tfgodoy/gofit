@@ -2090,29 +2090,34 @@ function ContratosTab({ studentId, contractorId, student }: {
     const now = new Date().toISOString();
     let update: Record<string, unknown> = { updated_at: now };
 
-    // IDs possíveis para receivables: sc.id (novo) ou plano_id (dados antigos com bug)
-    const recContratoIds = [action.id, action.plano_id].filter(Boolean) as string[];
+    // Deleta receivables pelo student_contract_id (dados novos) e também pelo
+    // contrato_id legado (dados gerados antes da migration student_contract_id)
+    async function deleteReceivables(scId: string, planoId?: string) {
+      await supabase.from("receivables")
+        .delete()
+        .eq("student_contract_id", scId)
+        .in("status", ["pendente", "aguardando", "cancelado"]);
+      if (planoId) {
+        await supabase.from("receivables")
+          .delete()
+          .eq("contrato_id", planoId)
+          .is("student_contract_id", null)
+          .in("status", ["pendente", "aguardando", "cancelado"]);
+      }
+    }
 
     if (action.type === "cancelar") {
       update.status = "cancelado";
       const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
       if (error) { toast.error("Erro ao cancelar contrato."); setSaving(false); return; }
-      // Excluir receivables não pagas vinculadas a este contrato (por qualquer ID)
-      await supabase.from("receivables")
-        .delete()
-        .in("contrato_id", recContratoIds)
-        .in("status", ["pendente", "aguardando", "cancelado"]);
+      await deleteReceivables(action.id, action.plano_id);
       toast.success("Matrícula cancelada e cobranças não pagas removidas.");
       setAction(null);
       setSaving(false);
       load();
       return;
     } else if (action.type === "cancelar_venda") {
-      // Excluir receivables não recebidas (por qualquer ID — sc.id ou plano_id legado)
-      await supabase.from("receivables")
-        .delete()
-        .in("contrato_id", recContratoIds)
-        .in("status", ["pendente", "aguardando", "cancelado"]);
+      await deleteReceivables(action.id, action.plano_id);
       // Excluir student_contract
       const { error } = await supabase.from("student_contracts").delete().eq("id", action.id);
       if (error) { toast.error("Erro ao cancelar venda."); setSaving(false); return; }
