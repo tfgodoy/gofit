@@ -1998,7 +1998,7 @@ const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
   encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
 };
 
-type ContratoAction = { type: "cancelar" | "cancelar_venda" | "suspender" | "congelar" | "reativar"; id: string } | null;
+type ContratoAction = { type: "cancelar" | "cancelar_venda" | "suspender" | "congelar" | "reativar"; id: string; plano_id?: string } | null;
 
 function ContratosTab({ studentId, contractorId, student }: {
   studentId: string; contractorId: string; student: StudentDetail | null;
@@ -2090,15 +2090,17 @@ function ContratosTab({ studentId, contractorId, student }: {
     const now = new Date().toISOString();
     let update: Record<string, unknown> = { updated_at: now };
 
+    // IDs possíveis para receivables: sc.id (novo) ou plano_id (dados antigos com bug)
+    const recContratoIds = [action.id, action.plano_id].filter(Boolean) as string[];
+
     if (action.type === "cancelar") {
       update.status = "cancelado";
       const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
       if (error) { toast.error("Erro ao cancelar contrato."); setSaving(false); return; }
-      // Excluir receivables não pagas (pendente/aguardando) vinculadas a este contrato
-      // Mantém apenas as já recebidas (status "recebido" ou "pago")
+      // Excluir receivables não pagas vinculadas a este contrato (por qualquer ID)
       await supabase.from("receivables")
         .delete()
-        .eq("contrato_id", action.id)
+        .in("contrato_id", recContratoIds)
         .in("status", ["pendente", "aguardando", "cancelado"]);
       toast.success("Matrícula cancelada e cobranças não pagas removidas.");
       setAction(null);
@@ -2106,13 +2108,11 @@ function ContratosTab({ studentId, contractorId, student }: {
       load();
       return;
     } else if (action.type === "cancelar_venda") {
-      // Excluir receivables não recebidas
+      // Excluir receivables não recebidas (por qualquer ID — sc.id ou plano_id legado)
       await supabase.from("receivables")
         .delete()
-        .eq("contrato_id", action.id)
+        .in("contrato_id", recContratoIds)
         .in("status", ["pendente", "aguardando", "cancelado"]);
-      // Excluir fixed_enrollments do contrato
-      // (não há FK direta, mas vamos limpar via student_contract)
       // Excluir student_contract
       const { error } = await supabase.from("student_contracts").delete().eq("id", action.id);
       if (error) { toast.error("Erro ao cancelar venda."); setSaving(false); return; }
@@ -2278,11 +2278,11 @@ function ContratosTab({ studentId, contractorId, student }: {
                             Suspensão
                           </button>
                         )}
-                        <button onClick={() => { setAction({ type: "cancelar", id: sc.id }); setMenuOpenId(null); }}
+                        <button onClick={() => { setAction({ type: "cancelar", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                           Encerrar
                         </button>
-                        <button onClick={() => { setAction({ type: "cancelar_venda", id: sc.id }); setMenuOpenId(null); }}
+                        <button onClick={() => { setAction({ type: "cancelar_venda", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 border-t border-gray-100">
                           Cancelar venda
                         </button>
