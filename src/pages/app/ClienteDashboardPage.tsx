@@ -1988,6 +1988,417 @@ function VendasTab({ studentId, contractorId }: {
   );
 }
 
+/* ── Modal Detalhes do Contrato ─────────────────────────────── */
+
+const STATUS_SC_SHARED: Record<string, { label: string; bg: string; text: string }> = {
+  ativo:      { label: "Ativo",      bg: "bg-green-100",  text: "text-green-700"  },
+  cancelado:  { label: "Cancelado",  bg: "bg-red-100",    text: "text-red-700"    },
+  suspenso:   { label: "Suspenso",   bg: "bg-yellow-100", text: "text-yellow-700" },
+  congelado:  { label: "Congelado",  bg: "bg-blue-100",   text: "text-blue-700"   },
+  encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
+};
+
+const DIAS_SEMANA: Record<string, string> = {
+  "0": "Domingo", "1": "Segunda-feira", "2": "Terça-feira", "3": "Quarta-feira",
+  "4": "Quinta-feira", "5": "Sexta-feira", "6": "Sábado",
+  segunda: "Segunda-feira", terca: "Terça-feira", quarta: "Quarta-feira",
+  quinta: "Quinta-feira", sexta: "Sexta-feira", sabado: "Sábado", domingo: "Domingo",
+};
+
+function ContratoDetalheModal({ sc, contractorId, studentId, studentNome, onClose, onEncerrar }: {
+  sc: any; contractorId: string; studentId: string; studentNome: string;
+  onClose: () => void; onEncerrar: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState("dados");
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [events, setEvents]           = useState<any[]>([]);
+  const [loading, setLoading]         = useState(true);
+
+  async function load() {
+    setLoading(true);
+    const [{ data: enrData }, { data: evtData }] = await Promise.all([
+      supabase.from("fixed_enrollments")
+        .select("id, dia_semana, grid_id, schedule_grids!grid_id(modalidade_nome, hora_inicio, hora_fim, nome)")
+        .eq("student_id", studentId)
+        .eq("contractor_id", contractorId)
+        .eq("ativo", true),
+      supabase.from("contract_events")
+        .select("id, descricao, usuario_nome, created_at")
+        .eq("student_contract_id", sc.id)
+        .order("created_at", { ascending: false }),
+    ]);
+    setEnrollments((enrData ?? []) as any[]);
+    setEvents((evtData ?? []) as any[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [sc.id]);
+
+  const contrato = sc.contratos as any;
+  const status   = STATUS_SC_SHARED[sc.status] ?? STATUS_SC_SHARED.encerrado;
+
+  // Agrupar matrículas por modalidade
+  const byModalidade: Record<string, any[]> = {};
+  enrollments.forEach(e => {
+    const grid = e.schedule_grids as any;
+    const key  = grid?.modalidade_nome ?? "Geral";
+    if (!byModalidade[key]) byModalidade[key] = [];
+    byModalidade[key].push(e);
+  });
+
+  const tabs = [
+    { key: "dados",     label: "DADOS PRINCIPAIS" },
+    ...Object.keys(byModalidade).map(m => ({ key: `mod_${m}`, label: m.toUpperCase() })),
+    { key: "historico", label: "HISTÓRICO GERAL" },
+  ];
+
+  async function handleRemoverEnrollment(id: string) {
+    await supabase.from("fixed_enrollments").update({ ativo: false }).eq("id", id);
+    load();
+    toast.success("Matrícula removida.");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-0">
+          <h3 className="text-base font-bold text-gray-900">Detalhes do contrato</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-0 px-6 mt-4 border-b border-gray-200 overflow-x-auto">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === t.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : activeTab === "dados" ? (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Descrição</p>
+                  <p className="text-lg font-bold text-gray-800 leading-tight">{contrato?.descricao ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Situação</p>
+                  <span className={`inline-flex px-3 py-1 rounded-full text-sm font-bold ${status.bg} ${status.text}`}>
+                    {status.label}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Data de início</p>
+                  <p className="text-base font-semibold text-gray-800">
+                    {new Date(sc.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Data de validade</p>
+                  <p className="text-base font-semibold text-gray-800">
+                    {sc.data_fim ? new Date(sc.data_fim + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Duração</p>
+                  <p className="text-base font-semibold text-gray-800">
+                    {contrato?.duracao
+                      ? `${contrato.duracao} ${contrato.tipo_duracao === "meses" ? (contrato.duracao === 1 ? "Mês" : "Meses") : contrato.tipo_duracao}`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Valor</p>
+                <p className="text-2xl font-extrabold text-green-600">
+                  {Number(sc.valor_mensalidade).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {sc.renovacao_automatica && (
+                  <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                    Renova automaticamente
+                  </span>
+                )}
+                {sc.tipo_venda === "com_recorrencia" && (
+                  <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                    GoFit Pay
+                  </span>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1">Assinatura eletrônica</p>
+                <p className="text-sm font-semibold text-gray-700">Não assinado</p>
+              </div>
+            </div>
+          ) : activeTab === "historico" ? (
+            <div>
+              {events.length === 0 && (
+                <p className="text-center text-sm text-gray-400 py-4 mb-3">Nenhum evento adicional registrado.</p>
+              )}
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs font-semibold text-gray-500 py-2">Descrição</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 py-2">Usuário</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 py-2">Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-50">
+                    <td className="py-3 text-sm text-gray-700">Contrato criado.</td>
+                    <td className="py-3 text-sm text-gray-500">{studentNome}</td>
+                    <td className="py-3 text-sm text-gray-500 whitespace-nowrap">
+                      {new Date(sc.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })} {new Date(sc.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                  </tr>
+                  {events.map(ev => (
+                    <tr key={ev.id} className="border-b border-gray-50">
+                      <td className="py-3 text-sm text-gray-700">{ev.descricao}</td>
+                      <td className="py-3 text-sm text-gray-500">{ev.usuario_nome ?? "—"}</td>
+                      <td className="py-3 text-sm text-gray-500 whitespace-nowrap">
+                        {new Date(ev.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })} {new Date(ev.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* Aba de modalidade */
+            (() => {
+              const modKey = activeTab.replace("mod_", "");
+              const items  = byModalidade[modKey] ?? [];
+              return (
+                <div>
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-400">Modalidade</p>
+                    <p className="text-base font-bold text-gray-800">{modKey}</p>
+                  </div>
+                  {items.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-8">Nenhuma matrícula nesta modalidade.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {items.map((e: any) => {
+                        const grid     = e.schedule_grids as any;
+                        const diaLabel = DIAS_SEMANA[e.dia_semana] ?? e.dia_semana;
+                        const horario  = grid ? `${String(grid.hora_inicio).slice(0,5)} às ${String(grid.hora_fim).slice(0,5)}` : "";
+                        return (
+                          <div key={e.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+                            <p className="text-sm text-gray-700">
+                              {grid?.modalidade_nome ?? modKey} — {diaLabel} — {horario}
+                            </p>
+                            <button onClick={() => handleRemoverEnrollment(e.id)}
+                              className="text-gray-400 hover:text-red-500 transition-colors" title="Remover matrícula">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+          <button onClick={onEncerrar}
+            className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-colors">
+            ENCERRAR
+          </button>
+          <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:underline">
+            FECHAR
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal Suspensão ─────────────────────────────────────────── */
+
+function SuspensaoModal({ sc, contractorId, onClose, onSaved }: {
+  sc: any; contractorId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [suspensoes, setSuspensoes] = useState<any[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
+  const [saving, setSaving]         = useState(false);
+
+  const [tipo, setTipo]           = useState<"determinado" | "indeterminado">("determinado");
+  const [motivo, setMotivo]       = useState("");
+  const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10));
+  const [dataFim, setDataFim]     = useState("");
+
+  const qtdDias = tipo === "determinado" && dataInicio && dataFim
+    ? Math.max(0, Math.round((new Date(dataFim + "T00:00:00").getTime() - new Date(dataInicio + "T00:00:00").getTime()) / 86400000))
+    : null;
+
+  async function load() {
+    const { data } = await supabase.from("contract_suspensions")
+      .select("*").eq("student_contract_id", sc.id)
+      .order("data_inicio", { ascending: false });
+    setSuspensoes((data ?? []) as any[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [sc.id]);
+
+  async function handleSalvar() {
+    if (!motivo.trim()) { toast.error("Informe o motivo."); return; }
+    if (tipo === "determinado" && (!dataInicio || !dataFim)) { toast.error("Informe as datas."); return; }
+    setSaving(true);
+    const { error } = await supabase.from("contract_suspensions").insert({
+      contractor_id: contractorId,
+      student_contract_id: sc.id,
+      tipo, motivo: motivo.trim(),
+      data_inicio: dataInicio,
+      data_fim: tipo === "determinado" ? dataFim : null,
+      quantidade_dias: qtdDias,
+      status: "ativa",
+    });
+    if (error) { toast.error("Erro ao criar suspensão."); setSaving(false); return; }
+    await supabase.from("student_contracts")
+      .update({ status: "suspenso", updated_at: new Date().toISOString() }).eq("id", sc.id);
+    toast.success("Suspensão criada.");
+    setSaving(false); setShowForm(false);
+    setMotivo(""); setDataFim(""); setTipo("determinado");
+    load(); onSaved();
+  }
+
+  async function handleEncerrarSuspensao(suspId: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase.from("contract_suspensions")
+      .update({ status: "encerrada", data_fim: today, updated_at: new Date().toISOString() }).eq("id", suspId);
+    const { data: ativas } = await supabase.from("contract_suspensions")
+      .select("id").eq("student_contract_id", sc.id).eq("status", "ativa").neq("id", suspId);
+    if (!ativas?.length) {
+      await supabase.from("student_contracts")
+        .update({ status: "ativo", updated_at: new Date().toISOString() }).eq("id", sc.id);
+    }
+    toast.success("Suspensão encerrada.");
+    load(); onSaved();
+  }
+
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <h3 className="text-base font-bold text-gray-900">Suspensões — {(sc.contratos as any)?.descricao}</h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-6">
+          {loading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : suspensoes.length > 0 ? (
+            <div className="space-y-2 mb-4">
+              {suspensoes.map(s => (
+                <div key={s.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{s.motivo}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {new Date(s.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
+                      {s.data_fim ? ` → ${new Date(s.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}` : " (indeterminado)"}
+                      {s.quantidade_dias ? ` · ${s.quantidade_dias} dias` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.status === "ativa" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500"}`}>
+                      {s.status === "ativa" ? "Ativa" : "Encerrada"}
+                    </span>
+                    {s.status === "ativa" && (
+                      <button onClick={() => handleEncerrarSuspensao(s.id)}
+                        className="text-xs text-red-500 hover:underline font-semibold">
+                        Encerrar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !showForm ? (
+            <p className="text-sm text-gray-400 text-center py-3 mb-4">Nenhuma suspensão registrada.</p>
+          ) : null}
+
+          {showForm ? (
+            <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-bold text-gray-800">Nova suspensão</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Tempo *</label>
+                <select value={tipo} onChange={e => setTipo(e.target.value as any)} className={inputCls}>
+                  <option value="determinado">Determinado</option>
+                  <option value="indeterminado">Indeterminado</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Motivo *</label>
+                <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
+                  placeholder="Motivo da suspensão" className={inputCls} />
+              </div>
+              <div className={`grid gap-3 ${tipo === "determinado" ? "grid-cols-3" : "grid-cols-1"}`}>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Data inicial *</label>
+                  <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className={inputCls} />
+                </div>
+                {tipo === "determinado" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Data final *</label>
+                      <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Quantidade de dias</label>
+                      <input type="text" value={qtdDias ?? ""} readOnly
+                        className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500" />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex justify-end gap-3 pt-1">
+                <button onClick={() => setShowForm(false)} className="text-sm font-semibold text-gray-500 hover:underline">
+                  Cancelar
+                </button>
+                <button onClick={handleSalvar} disabled={saving}
+                  className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-60 transition-colors">
+                  {saving ? "Salvando..." : "SALVAR"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowForm(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm font-semibold text-gray-500 hover:border-primary hover:text-primary transition-colors">
+              <Plus className="w-4 h-4" /> SUSPENSÃO
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Contratos Tab ─────────────────────────────────────────── */
 
 const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
@@ -2010,7 +2421,11 @@ function ContratosTab({ studentId, contractorId, student }: {
   const [action, setAction]   = useState<ContratoAction>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  /* congelar form state */
+  /* novos modais */
+  const [detalheOpen,   setDetalheOpen]   = useState<any | null>(null); // sc object
+  const [suspensaoOpen, setSuspensaoOpen] = useState<any | null>(null); // sc object
+
+  /* congelar form state (mantido para compatibilidade) */
   const [congelarInicio, setCongelarInicio] = useState("");
   const [congelarFim,    setCongelarFim]    = useState("");
   const [congelarMotivo, setCongelarMotivo] = useState("");
@@ -2264,31 +2679,46 @@ function ContratosTab({ studentId, contractorId, student }: {
                       </svg>
                     </button>
                     {menuOpenId === sc.id && (
-                      <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-48">
-                        {canReactivate && (
-                          <button onClick={() => { setAction({ type: "reativar", id: sc.id }); setMenuOpenId(null); }}
-                            className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50">
-                            Reativar
+                      <div className="absolute right-0 top-9 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52">
+                        {/* Detalhes */}
+                        <button onClick={() => { setDetalheOpen(sc); setMenuOpenId(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 font-medium">
+                          Detalhes
+                        </button>
+                        {/* Suspensão */}
+                        {(isActive || isSuspended) && (
+                          <button onClick={() => { setSuspensaoOpen(sc); setMenuOpenId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            Suspensão
                           </button>
                         )}
+                        {/* Congelar / Reativar */}
                         {isActive && (
                           <button onClick={() => { setAction({ type: "congelar", id: sc.id }); setMenuOpenId(null); }}
                             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             Congelar
                           </button>
                         )}
-                        {isActive && (
-                          <button onClick={() => { setAction({ type: "suspender", id: sc.id }); setMenuOpenId(null); }}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            Suspensão
+                        {canReactivate && (
+                          <button onClick={() => { setAction({ type: "reativar", id: sc.id }); setMenuOpenId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50">
+                            Reativar
                           </button>
                         )}
+                        {/* Imprimir contrato */}
+                        <button onClick={() => { toast.info("Impressão de contrato em breve."); setMenuOpenId(null); }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                          <Printer className="w-3.5 h-3.5 text-gray-400" /> Imprimir contrato
+                        </button>
+                        <div className="border-t border-gray-100 my-1" />
+                        {/* Encerrar */}
                         <button onClick={() => { setAction({ type: "cancelar", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                           Encerrar
                         </button>
+                        {/* Cancelar venda */}
                         <button onClick={() => { setAction({ type: "cancelar_venda", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50 border-t border-gray-100">
+                          className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50">
                           Cancelar venda
                         </button>
                       </div>
@@ -2356,6 +2786,31 @@ function ContratosTab({ studentId, contractorId, student }: {
       {/* Backdrop para fechar menu 3-pontos */}
       {menuOpenId && (
         <div className="fixed inset-0 z-20" onClick={() => setMenuOpenId(null)} />
+      )}
+
+      {/* Modal Detalhes */}
+      {detalheOpen && (
+        <ContratoDetalheModal
+          sc={detalheOpen}
+          contractorId={contractorId}
+          studentId={studentId}
+          studentNome={student?.nome_completo ?? ""}
+          onClose={() => setDetalheOpen(null)}
+          onEncerrar={() => {
+            setAction({ type: "cancelar", id: detalheOpen.id, plano_id: detalheOpen.contrato_id });
+            setDetalheOpen(null);
+          }}
+        />
+      )}
+
+      {/* Modal Suspensão */}
+      {suspensaoOpen && (
+        <SuspensaoModal
+          sc={suspensaoOpen}
+          contractorId={contractorId}
+          onClose={() => setSuspensaoOpen(null)}
+          onSaved={() => { setSuspensaoOpen(null); load(); }}
+        />
       )}
 
       {/* Modal assinatura */}
