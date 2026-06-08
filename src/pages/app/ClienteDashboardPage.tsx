@@ -2094,12 +2094,13 @@ function ContratosTab({ studentId, contractorId, student }: {
       update.status = "cancelado";
       const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
       if (error) { toast.error("Erro ao cancelar contrato."); setSaving(false); return; }
-      // Cancelar receivables pendentes vinculadas a este contrato
+      // Excluir receivables não pagas (pendente/aguardando) vinculadas a este contrato
+      // Mantém apenas as já recebidas (status "recebido" ou "pago")
       await supabase.from("receivables")
-        .update({ status: "cancelado" })
+        .delete()
         .eq("contrato_id", action.id)
-        .in("status", ["pendente", "aguardando"]);
-      toast.success("Matrícula cancelada e cobranças pendentes canceladas.");
+        .in("status", ["pendente", "aguardando", "cancelado"]);
+      toast.success("Matrícula cancelada e cobranças não pagas removidas.");
       setAction(null);
       setSaving(false);
       load();
