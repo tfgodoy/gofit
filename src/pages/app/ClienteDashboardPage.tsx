@@ -2113,17 +2113,33 @@ function VendasTab({ studentId, contractorId, studentNome }: {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
+    // 1) busca student_contracts sem join (evita problemas de RLS/sintaxe PostgREST)
+    const { data: scData } = await supabase
       .from("student_contracts")
-      .select(`
-        id, created_at, data_inicio, data_fim, status,
-        valor_mensalidade, forma_pagamento, desconto,
-        contratos:contrato_id!left(descricao, duracao, tipo_duracao, valor_total)
-      `)
+      .select("id, created_at, data_inicio, data_fim, status, valor_mensalidade, forma_pagamento, desconto, contrato_id")
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
-    const all = (data ?? []) as any[];
+
+    const scs = (scData ?? []) as any[];
+
+    // 2) busca planos referenciados (usando service role via RPC não é necessário — contratos são públicos via select anon)
+    const contratoIds = [...new Set(scs.map((s: any) => s.contrato_id).filter(Boolean))];
+    let contratoMap: Record<string, any> = {};
+    if (contratoIds.length > 0) {
+      const { data: cData } = await supabase
+        .from("contratos")
+        .select("id, descricao, duracao, tipo_duracao, valor_total")
+        .in("id", contratoIds);
+      (cData ?? []).forEach((c: any) => { contratoMap[c.id] = c; });
+    }
+
+    // 3) mescla
+    const all = scs.map((sc: any) => ({
+      ...sc,
+      contratos: contratoMap[sc.contrato_id] ?? null,
+    }));
+
     setVendas(all);
     applyFilter(all, filtroInicio, filtroFim, situacoesSel);
     setLoading(false);
@@ -3059,14 +3075,9 @@ function ContratosTab({ studentId, contractorId, student }: {
 
   async function load() {
     setLoading(true);
-    const [{ data }, { data: autData }] = await Promise.all([
+    const [{ data: scData }, { data: autData }] = await Promise.all([
       supabase.from("student_contracts")
-        .select(`
-          id, data_inicio, data_fim, status, valor_mensalidade,
-          dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at,
-          data_congelamento_inicio, data_congelamento_fim, motivo_congelamento,
-          contratos:contrato_id!left(descricao, tipo, duracao, tipo_duracao)
-        `)
+        .select("id, contrato_id, data_inicio, data_fim, status, valor_mensalidade, dia_vencimento, forma_pagamento, bloqueado, observacoes, created_at, data_congelamento_inicio, data_congelamento_fim, motivo_congelamento")
         .eq("contractor_id", contractorId)
         .eq("student_id", studentId)
         .order("created_at", { ascending: false }),
@@ -3076,7 +3087,21 @@ function ContratosTab({ studentId, contractorId, student }: {
         .eq("student_id", studentId)
         .order("created_at", { ascending: false }),
     ]);
-    setScs((data ?? []) as any[]);
+
+    // busca planos separadamente para evitar problemas de RLS no join inline
+    const scs = (scData ?? []) as any[];
+    const contratoIds = [...new Set(scs.map((s: any) => s.contrato_id).filter(Boolean))];
+    let contratoMap: Record<string, any> = {};
+    if (contratoIds.length > 0) {
+      const { data: cData } = await supabase
+        .from("contratos")
+        .select("id, descricao, tipo, duracao, tipo_duracao")
+        .in("id", contratoIds);
+      (cData ?? []).forEach((c: any) => { contratoMap[c.id] = c; });
+    }
+    const merged = scs.map((sc: any) => ({ ...sc, contratos: contratoMap[sc.contrato_id] ?? null }));
+
+    setScs(merged);
     setAutDocs((autData ?? []) as any[]);
     setLoading(false);
   }
