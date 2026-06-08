@@ -2087,13 +2087,29 @@ function VendasTab({ studentId, contractorId, studentNome }: {
   studentId: string; contractorId: string; studentNome: string;
 }) {
   const navigate = useNavigate();
-  const [vendas, setVendas]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [menuId,  setMenuId]  = useState<string | null>(null);
+  const [vendas,    setVendas]    = useState<any[]>([]);
+  const [filtered,  setFiltered]  = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [menuId,    setMenuId]    = useState<string | null>(null);
   const [detalhe,   setDetalhe]   = useState<any | null>(null);
   const [historico, setHistorico] = useState<any | null>(null);
   const [cancelar,  setCancelar]  = useState<any | null>(null);
-  const [saving, setSaving]       = useState(false);
+  const [saving,    setSaving]    = useState(false);
+
+  // Filtros
+  const hoje = new Date();
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1).toISOString().slice(0, 10);
+  const ultimoDia   = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const [filtroInicio,  setFiltroInicio]  = useState(primeiroDia);
+  const [filtroFim,     setFiltroFim]     = useState(ultimoDia);
+  const [situacaoOpen,  setSituacaoOpen]  = useState(false);
+  const SITUACOES_OPTS = [
+    { value: "ativo",     label: "Concluída"  },
+    { value: "cancelado", label: "Cancelada"  },
+    { value: "suspenso",  label: "Suspensa"   },
+    { value: "encerrado", label: "Encerrada"  },
+  ];
+  const [situacoesSel, setSituacoesSel] = useState<string[]>(["ativo", "suspenso", "encerrado"]);
 
   async function load() {
     setLoading(true);
@@ -2107,21 +2123,47 @@ function VendasTab({ studentId, contractorId, studentNome }: {
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
-    setVendas((data ?? []) as any[]);
+    const all = (data ?? []) as any[];
+    setVendas(all);
+    applyFilter(all, filtroInicio, filtroFim, situacoesSel);
     setLoading(false);
+  }
+
+  function applyFilter(all: any[], inicio: string, fim: string, sels: string[]) {
+    const ini = inicio ? new Date(inicio + "T00:00:00") : null;
+    const end = fim    ? new Date(fim    + "T23:59:59") : null;
+    setFiltered(all.filter(v => {
+      const dt = new Date(v.created_at);
+      if (ini && dt < ini) return false;
+      if (end && dt > end) return false;
+      if (sels.length > 0 && !sels.includes(v.status)) return false;
+      return true;
+    }));
+  }
+
+  function handleAplicar() {
+    applyFilter(vendas, filtroInicio, filtroFim, situacoesSel);
   }
 
   useEffect(() => { load(); }, [studentId, contractorId]);
 
+  function toggleSituacao(v: string) {
+    setSituacoesSel(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
+  }
+
+  const situacaoLabel = situacoesSel.length === 0
+    ? "Nenhuma"
+    : situacoesSel.length === SITUACOES_OPTS.length
+    ? "Todas"
+    : SITUACOES_OPTS.filter(o => situacoesSel.includes(o.value)).map(o => o.label).join(", ");
+
   async function handleCancelarVenda() {
     if (!cancelar) return;
     setSaving(true);
-    // Deletar receivables não pagas
     await supabase.from("receivables")
       .delete()
       .eq("student_contract_id", cancelar.id)
       .in("status", ["pendente", "aguardando", "cancelado"]);
-    // Deletar o contrato
     await supabase.from("student_contracts").delete().eq("id", cancelar.id);
     toast.success("Venda cancelada.");
     setSaving(false);
@@ -2133,6 +2175,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Vendas</h2>
         <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
@@ -2140,6 +2183,52 @@ function VendasTab({ studentId, contractorId, studentNome }: {
           <Plus className="w-4 h-4" /> NOVA VENDA
         </button>
       </div>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          {/* Data inicial */}
+          <div className="flex flex-col gap-1 min-w-[140px]">
+            <label className="text-xs text-gray-500 font-medium">Data inicial</label>
+            <input type="date" value={filtroInicio} onChange={e => setFiltroInicio(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+          {/* Data final */}
+          <div className="flex flex-col gap-1 min-w-[140px]">
+            <label className="text-xs text-gray-500 font-medium">Data final</label>
+            <input type="date" value={filtroFim} onChange={e => setFiltroFim(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+          {/* Situação multi-select */}
+          <div className="flex flex-col gap-1 min-w-[200px] relative">
+            <label className="text-xs text-gray-500 font-medium">Situação</label>
+            <button onClick={() => setSituacaoOpen(o => !o)}
+              className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/30 w-full">
+              <span className="truncate max-w-[160px]">{situacaoLabel}</span>
+              <svg className={`w-4 h-4 text-gray-400 ml-2 flex-shrink-0 transition-transform ${situacaoOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {situacaoOpen && (
+              <div className="absolute top-full left-0 mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52">
+                {SITUACOES_OPTS.map(opt => (
+                  <label key={opt.value} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={situacoesSel.includes(opt.value)} onChange={() => toggleSituacao(opt.value)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary accent-primary" />
+                    <span className="text-sm text-gray-700">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Botão Aplicar */}
+          <button onClick={() => { setSituacaoOpen(false); handleAplicar(); }}
+            className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors self-end">
+            APLICAR
+          </button>
+        </div>
+      </div>
+
+      {/* Backdrop situação dropdown */}
+      {situacaoOpen && <div className="fixed inset-0 z-20" onClick={() => setSituacaoOpen(false)} />}
 
       {vendas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 bg-white rounded-2xl border border-gray-100">
@@ -2151,6 +2240,11 @@ function VendasTab({ studentId, contractorId, studentNome }: {
             + NOVA VENDA
           </button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-2 bg-white rounded-2xl border border-gray-100">
+          <DollarSign className="w-8 h-8 text-gray-200" />
+          <p className="text-sm text-gray-400 font-semibold">Nenhuma venda encontrada com os filtros aplicados</p>
+        </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <table className="w-full">
@@ -2159,14 +2253,15 @@ function VendasTab({ studentId, contractorId, studentNome }: {
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Data</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Plano</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Duração</th>
-                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Valor mensal</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Desconto</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Valor</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Pagamento</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Situação</th>
                 <th className="px-3 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {vendas.map((v: any, i: number) => {
+              {filtered.map((v: any, i: number) => {
                 const contrato = v.contratos as any;
                 const st = STATUS_VENDA_MAP[v.status] ?? { label: v.status, bg: "bg-gray-100", text: "text-gray-500" };
                 return (
@@ -2185,6 +2280,9 @@ function VendasTab({ studentId, contractorId, studentNome }: {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
                       {contrato ? fmtDur2(contrato.duracao, contrato.tipo_duracao) : "—"}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
+                      {v.desconto ? fmtBRL2(Number(v.desconto)) : "R$ 0,00"}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-semibold text-gray-800 whitespace-nowrap">
                       {v.valor_mensalidade ? fmtBRL2(Number(v.valor_mensalidade)) : "—"}
@@ -2232,6 +2330,9 @@ function VendasTab({ studentId, contractorId, studentNome }: {
               })}
             </tbody>
           </table>
+          <div className="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
+            {filtered.length} venda{filtered.length !== 1 ? "s" : ""} encontrada{filtered.length !== 1 ? "s" : ""}
+          </div>
         </div>
       )}
 
@@ -2259,12 +2360,12 @@ function VendasTab({ studentId, contractorId, studentNome }: {
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setCancelar(null)} disabled={saving}
-                className="px-5 py-2 text-sm font-bold text-red-600 hover:underline">
+                className="px-5 py-2 text-sm font-bold text-gray-500 hover:underline">
                 CANCELAR
               </button>
               <button onClick={handleCancelarVenda} disabled={saving}
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg disabled:opacity-60 transition-colors">
-                {saving ? "Cancelando..." : "SALVAR"}
+                {saving ? "Cancelando..." : "CONFIRMAR"}
               </button>
             </div>
           </div>
