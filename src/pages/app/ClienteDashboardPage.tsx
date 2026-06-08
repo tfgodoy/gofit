@@ -2258,7 +2258,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
           <p className="text-sm text-gray-400 font-semibold">Nenhuma venda encontrada com os filtros aplicados</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
@@ -3350,11 +3350,6 @@ function ContratosTab({ studentId, contractorId, student }: {
                         <button onClick={() => { setEncerrarOpen(sc); setMenuOpenId(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                           Encerrar
-                        </button>
-                        {/* Cancelar venda */}
-                        <button onClick={() => { setAction({ type: "cancelar_venda", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-                          Cancelar venda
                         </button>
                       </div>
                     )}
