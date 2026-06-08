@@ -1850,12 +1850,250 @@ function EvolucoesTab({ studentId, contractorId }: { studentId: string; contract
 
 /* ── Vendas Tab ─────────────────────────────────────────────── */
 
-function VendasTab({ studentId, contractorId }: {
-  studentId: string; contractorId: string;
+/* helpers compartilhados no VendasTab */
+const STATUS_VENDA_MAP: Record<string, { label: string; bg: string; text: string }> = {
+  ativo:     { label: "Ativo",      bg: "bg-green-100",  text: "text-green-700"  },
+  concluido: { label: "Concluída",  bg: "bg-green-100",  text: "text-green-700"  },
+  cancelado: { label: "Cancelado",  bg: "bg-red-100",    text: "text-red-700"    },
+  suspenso:  { label: "Suspenso",   bg: "bg-yellow-100", text: "text-yellow-700" },
+  encerrado: { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
+};
+const FORMA_LABEL_MAP: Record<string, string> = {
+  dinheiro: "Dinheiro", pix: "Pix", cartao_credito: "Cartão de crédito",
+  cartao_debito: "Cartão de débito", boleto: "Boleto", transferencia: "Transferência",
+};
+function fmtBRL2(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function fmtDur2(duracao: number, tipo: string) {
+  if (tipo === "meses") return `${duracao} ${duracao === 1 ? "mês" : "meses"}`;
+  if (tipo === "dias")  return `${duracao} dia${duracao !== 1 ? "s" : ""}`;
+  if (tipo === "anos")  return `${duracao} ano${duracao !== 1 ? "s" : ""}`;
+  return `${duracao} ${tipo}`;
+}
+
+/* ── Modal Detalhes da Venda ─────────────────────────────────── */
+function VendaDetalheModal({ v, studentNome, onClose }: { v: any; studentNome: string; onClose: () => void }) {
+  const [parcelas, setParcelas]       = useState<any[]>([]);
+  const [showParcelas, setShowParcelas] = useState(false);
+  const [loadingP, setLoadingP]       = useState(false);
+
+  const contrato = v.contratos as any;
+  const st = STATUS_VENDA_MAP[v.status] ?? { label: v.status, bg: "bg-gray-100", text: "text-gray-500" };
+
+  async function loadParcelas() {
+    setLoadingP(true);
+    const { data } = await supabase.from("receivables")
+      .select("id, descricao, valor, vencimento, forma_pagamento, status, parcela_numero")
+      .eq("student_contract_id", v.id)
+      .order("vencimento");
+    setParcelas((data ?? []) as any[]);
+    setLoadingP(false);
+    setShowParcelas(true);
+  }
+
+  const totalParcelas = parcelas.reduce((s, p) => s + Number(p.valor), 0);
+
+  const field = (label: string, value: React.ReactNode) => (
+    <div>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+      <p className="text-sm font-semibold text-gray-800">{value}</p>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <Eye className="w-5 h-5 text-primary" />
+          <h3 className="text-base font-bold text-gray-900">Detalhes da venda</h3>
+          <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="overflow-y-auto p-6 space-y-4">
+          {/* Dados principais */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Dados principais</p>
+            <div className="grid grid-cols-2 gap-4">
+              {field("Cliente", studentNome)}
+              {field("Data da venda", new Date(v.created_at).toLocaleDateString("pt-BR"))}
+              {field("Desconto", v.desconto ? fmtBRL2(Number(v.desconto)) : "R$ 0,00")}
+              {field("Valor", fmtBRL2(Number(v.valor_mensalidade)))}
+              {field("Origem", "Manual")}
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Situação</p>
+                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${st.bg} ${st.text}`}>{st.label}</span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">Parcelas</p>
+                <button onClick={loadParcelas}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline">
+                  <Eye className="w-3.5 h-3.5" /> VISUALIZAR
+                </button>
+              </div>
+            </div>
+          </div>
+          {/* Contratos */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Contratos</p>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left text-xs font-semibold text-gray-500 pb-2">Descrição</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 pb-2">Duração</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 pb-2">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="py-2 text-sm text-gray-700">{contrato?.descricao ?? "—"}</td>
+                  <td className="py-2 text-sm text-gray-600">{contrato ? fmtDur2(contrato.duracao, contrato.tipo_duracao) : "—"}</td>
+                  <td className="py-2 text-sm font-semibold text-gray-800 text-right">
+                    {contrato?.valor_total ? fmtBRL2(Number(contrato.valor_total)) : "—"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm font-semibold text-primary hover:underline">FECHAR</button>
+        </div>
+      </div>
+
+      {/* Sub-modal Parcelas */}
+      {(showParcelas || loadingP) && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowParcelas(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+              <FileText className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-bold text-gray-900">Parcelas</h3>
+              <button onClick={() => setShowParcelas(false)} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            {loadingP ? (
+              <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+            ) : (
+              <>
+                <div className="overflow-y-auto flex-1">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Parcela</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Método de pagamento</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Data de vencimento</th>
+                        <th className="text-right text-xs font-semibold text-gray-500 px-5 py-3">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parcelas.map((p, i) => (
+                        <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="px-5 py-3 text-sm text-gray-700">{p.parcela_numero ?? i + 1}ª</td>
+                          <td className="px-5 py-3 text-sm text-gray-600">{FORMA_LABEL_MAP[p.forma_pagamento] ?? p.forma_pagamento ?? "—"}</td>
+                          <td className="px-5 py-3 text-sm text-gray-600">{new Date(p.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}</td>
+                          <td className="px-5 py-3 text-sm font-semibold text-gray-800 text-right">{fmtBRL2(Number(p.valor))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+                  <span className="text-sm text-gray-500">Valor total das parcelas</span>
+                  <span className="text-sm font-bold text-primary">{fmtBRL2(totalParcelas)}</span>
+                </div>
+                <div className="flex justify-end px-6 py-3 border-t border-gray-100">
+                  <button onClick={() => setShowParcelas(false)} className="text-sm font-semibold text-primary hover:underline">FECHAR</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Modal Histórico da Venda ────────────────────────────────── */
+function VendaHistoricoModal({ v, onClose }: { v: any; onClose: () => void }) {
+  const [events, setEvents]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from("contract_events")
+      .select("id, descricao, usuario_nome, created_at")
+      .eq("student_contract_id", v.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => { setEvents((data ?? []) as any[]); setLoading(false); });
+  }, [v.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <CalendarDays className="w-5 h-5 text-primary" />
+          <h3 className="text-base font-bold text-gray-900">Histórico</h3>
+          <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Descrição</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Usuário</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Data e hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Evento fixo: venda criada */}
+                <tr className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-5 py-3 text-sm text-gray-700">Venda foi efetivada</td>
+                  <td className="px-5 py-3 text-sm text-gray-600">—</td>
+                  <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">
+                    {new Date(v.created_at).toLocaleDateString("pt-BR")} {new Date(v.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="px-5 py-3 text-sm text-gray-700">Venda iniciada</td>
+                  <td className="px-5 py-3 text-sm text-gray-600">—</td>
+                  <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">
+                    {new Date(v.created_at).toLocaleDateString("pt-BR")} {new Date(v.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                </tr>
+                {events.map(ev => (
+                  <tr key={ev.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm text-gray-700">{ev.descricao}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600">{ev.usuario_nome ?? "—"}</td>
+                    <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {new Date(ev.created_at).toLocaleDateString("pt-BR")} {new Date(ev.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm font-semibold text-primary hover:underline">FECHAR</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── VendasTab ───────────────────────────────────────────────── */
+function VendasTab({ studentId, contractorId, studentNome }: {
+  studentId: string; contractorId: string; studentNome: string;
 }) {
   const navigate = useNavigate();
   const [vendas, setVendas]   = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [menuId,  setMenuId]  = useState<string | null>(null);
+  const [detalhe,   setDetalhe]   = useState<any | null>(null);
+  const [historico, setHistorico] = useState<any | null>(null);
+  const [cancelar,  setCancelar]  = useState<any | null>(null);
+  const [saving, setSaving]       = useState(false);
 
   async function load() {
     setLoading(true);
@@ -1863,7 +2101,7 @@ function VendasTab({ studentId, contractorId }: {
       .from("student_contracts")
       .select(`
         id, created_at, data_inicio, data_fim, status,
-        valor_mensalidade, forma_pagamento,
+        valor_mensalidade, forma_pagamento, desconto,
         contratos!contrato_id(descricao, duracao, tipo_duracao, valor_total)
       `)
       .eq("contractor_id", contractorId)
@@ -1875,40 +2113,30 @@ function VendasTab({ studentId, contractorId }: {
 
   useEffect(() => { load(); }, [studentId, contractorId]);
 
-  const STATUS_VENDA: Record<string, { label: string; bg: string; text: string }> = {
-    ativo:     { label: "Ativo",     bg: "bg-green-100",  text: "text-green-700"  },
-    cancelado: { label: "Cancelado", bg: "bg-red-100",    text: "text-red-700"    },
-    suspenso:  { label: "Suspenso",  bg: "bg-yellow-100", text: "text-yellow-700" },
-    congelado: { label: "Congelado", bg: "bg-blue-100",   text: "text-blue-700"   },
-    encerrado: { label: "Encerrado", bg: "bg-gray-100",   text: "text-gray-500"   },
-  };
-
-  const FORMA_VENDA: Record<string, string> = {
-    dinheiro: "Dinheiro", pix: "Pix", cartao_credito: "Cartão de crédito",
-    cartao_debito: "Cartão de débito", boleto: "Boleto", transferencia: "Transferência",
-  };
-
-  function fmtDur(duracao: number, tipo: string) {
-    if (tipo === "meses") return `${duracao} ${duracao === 1 ? "mês" : "meses"}`;
-    if (tipo === "dias")  return `${duracao} dia${duracao !== 1 ? "s" : ""}`;
-    if (tipo === "anos")  return `${duracao} ano${duracao !== 1 ? "s" : ""}`;
-    return `${duracao} ${tipo}`;
+  async function handleCancelarVenda() {
+    if (!cancelar) return;
+    setSaving(true);
+    // Deletar receivables não pagas
+    await supabase.from("receivables")
+      .delete()
+      .eq("student_contract_id", cancelar.id)
+      .in("status", ["pendente", "aguardando", "cancelado"]);
+    // Deletar o contrato
+    await supabase.from("student_contracts").delete().eq("id", cancelar.id);
+    toast.success("Venda cancelada.");
+    setSaving(false);
+    setCancelar(null);
+    load();
   }
 
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-    </div>
-  );
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Vendas</h2>
-        <button
-          onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
-        >
+        <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
           <Plus className="w-4 h-4" /> NOVA VENDA
         </button>
       </div>
@@ -1918,10 +2146,8 @@ function VendasTab({ studentId, contractorId }: {
           <DollarSign className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-400 font-semibold">Nenhuma venda registrada</p>
           <p className="text-xs text-gray-400">Clique em "NOVA VENDA" para vincular este aluno a um plano.</p>
-          <button
-            onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
-            className="mt-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
-          >
+          <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+            className="mt-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
             + NOVA VENDA
           </button>
         </div>
@@ -1936,24 +2162,20 @@ function VendasTab({ studentId, contractorId }: {
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Valor mensal</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Pagamento</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-5 py-3">Situação</th>
+                <th className="px-3 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {vendas.map((v: any, i: number) => {
                 const contrato = v.contratos as any;
-                const st = STATUS_VENDA[v.status] ?? { label: v.status, bg: "bg-gray-100", text: "text-gray-500" };
+                const st = STATUS_VENDA_MAP[v.status] ?? { label: v.status, bg: "bg-gray-100", text: "text-gray-500" };
                 return (
-                  <tr
-                    key={v.id}
-                    className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? "" : "bg-gray-50/30"}`}
-                  >
+                  <tr key={v.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i % 2 === 0 ? "" : "bg-gray-50/30"}`}>
                     <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
                       {new Date(v.created_at).toLocaleDateString("pt-BR")}
                     </td>
                     <td className="px-5 py-3.5">
-                      <p className="text-sm font-semibold text-gray-800 leading-snug">
-                        {contrato?.descricao ?? "—"}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-800 leading-snug">{contrato?.descricao ?? "—"}</p>
                       {v.data_inicio && (
                         <p className="text-xs text-gray-400 mt-0.5">
                           {new Date(v.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
@@ -1962,26 +2184,90 @@ function VendasTab({ studentId, contractorId }: {
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
-                      {contrato ? fmtDur(contrato.duracao, contrato.tipo_duracao) : "—"}
+                      {contrato ? fmtDur2(contrato.duracao, contrato.tipo_duracao) : "—"}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-semibold text-gray-800 whitespace-nowrap">
-                      {v.valor_mensalidade
-                        ? v.valor_mensalidade.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                        : "—"}
+                      {v.valor_mensalidade ? fmtBRL2(Number(v.valor_mensalidade)) : "—"}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-gray-600 whitespace-nowrap">
-                      {FORMA_VENDA[v.forma_pagamento] ?? v.forma_pagamento ?? "—"}
+                      {FORMA_LABEL_MAP[v.forma_pagamento] ?? v.forma_pagamento ?? "—"}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${st.bg} ${st.text}`}>
                         {st.label}
                       </span>
                     </td>
+                    {/* 3-pontos */}
+                    <td className="px-3 py-3.5 relative">
+                      <button onClick={() => setMenuId(menuId === v.id ? null : v.id)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                        </svg>
+                      </button>
+                      {menuId === v.id && (
+                        <div className="absolute right-0 top-10 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-48">
+                          <button onClick={() => { setDetalhe(v); setMenuId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <Eye className="w-3.5 h-3.5 text-gray-400" /> Detalhes
+                          </button>
+                          <button onClick={() => { toast.info("Emissão de NFS-e em breve."); setMenuId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-gray-400" /> Emitir NFS-e
+                          </button>
+                          <button onClick={() => { setHistorico(v); setMenuId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <CalendarDays className="w-3.5 h-3.5 text-gray-400" /> Histórico
+                          </button>
+                          <div className="border-t border-gray-100 my-1" />
+                          <button onClick={() => { setCancelar(v); setMenuId(null); }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            <X className="w-3.5 h-3.5" /> Cancelar
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Backdrop menu */}
+      {menuId && <div className="fixed inset-0 z-20" onClick={() => setMenuId(null)} />}
+
+      {/* Modais */}
+      {detalhe && <VendaDetalheModal v={detalhe} studentNome={studentNome} onClose={() => setDetalhe(null)} />}
+      {historico && <VendaHistoricoModal v={historico} onClose={() => setHistorico(null)} />}
+
+      {/* Modal Cancelar venda */}
+      {cancelar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setCancelar(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <X className="w-5 h-5 text-red-600" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Cancelar venda</h3>
+              <button onClick={() => setCancelar(null)} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              Você tem certeza que deseja cancelar? <strong>Contratos e títulos financeiros irão ser cancelados.</strong> Esta ação é irreversível.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setCancelar(null)} disabled={saving}
+                className="px-5 py-2 text-sm font-bold text-red-600 hover:underline">
+                CANCELAR
+              </button>
+              <button onClick={handleCancelarVenda} disabled={saving}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg disabled:opacity-60 transition-colors">
+                {saving ? "Cancelando..." : "SALVAR"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -3539,6 +3825,7 @@ export default function ClienteDashboardPage() {
             <VendasTab
               studentId={student.id}
               contractorId={user!.contractorId!}
+              studentNome={student.nome_completo}
             />
           ) : activeTab === "Contratos" ? (
             <ContratosTab
