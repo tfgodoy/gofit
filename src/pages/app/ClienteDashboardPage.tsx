@@ -3790,16 +3790,20 @@ function FinanceiroDetalheModal({ r, studentNome, contractorId, onClose }: {
 function FinanceiroTab({ studentId, contractorId, studentNome }: {
   studentId: string; contractorId: string; studentNome: string;
 }) {
-  const [recs,      setRecs]      = useState<any[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [payModal,  setPayModal]  = useState<any | null>(null);
-  const [payVal,    setPayVal]    = useState("");
-  const [payForm,   setPayForm]   = useState("pix");
-  const [paying,    setPaying]    = useState(false);
-  const [menuRecId, setMenuRecId] = useState<string | null>(null);
-  const [detalheRec,setDetalheRec]= useState<any | null>(null);
-  const [cancelarRec,setCancelarRec] = useState<any | null>(null);
-  const [cancelando, setCancelando]  = useState(false);
+  const [recs,        setRecs]        = useState<any[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [menuRecId,   setMenuRecId]   = useState<string | null>(null);
+  const [detalheRec,  setDetalheRec]  = useState<any | null>(null);
+  const [cancelarRec, setCancelarRec] = useState<any | null>(null);
+  const [cancelando,  setCancelando]  = useState(false);
+
+  // Fluxo de pagamento em 2 etapas
+  const [payModal,    setPayModal]    = useState<any | null>(null);   // step 1
+  const [payVal,      setPayVal]      = useState("");
+  const [payForm,     setPayForm]     = useState("pix");
+  const [paying,      setPaying]      = useState(false);
+  const [parcialModal,setParcialModal]= useState<{ rec: any; valorPago: number; saldo: number } | null>(null); // step 2
+  const [parcialDate, setParcialDate] = useState("");
 
   async function load() {
     setLoading(true);
@@ -3825,28 +3829,92 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
   const pago     = recs.filter(r => r.status === "pago").reduce((s, r) => s + Number(r.valor_pago ?? r.valor), 0);
   const proxVenc = recs.filter(r => ["pendente","atrasado"].includes(r.status)).sort((a,b)=>a.vencimento.localeCompare(b.vencimento))[0];
 
-  async function handlePay() {
+  // Step 1: usuário clica CONFIRMAR
+  async function handleConfirmarPay() {
     if (!payModal) return;
+    const valorPago = Math.round(parseFloat(payVal.replace(",", ".")) * 100) / 100;
+    const valorOriginal = Math.round(Number(payModal.valor) * 100) / 100;
+    if (isNaN(valorPago) || valorPago <= 0) { toast.error("Informe um valor válido."); return; }
+
+    // Pagamento parcial → step 2
+    if (valorPago < valorOriginal) {
+      const saldo = Math.round((valorOriginal - valorPago) * 100) / 100;
+      setParcialModal({ rec: payModal, valorPago, saldo });
+      setParcialDate(payModal.vencimento); // sugere mesma data como default
+      setPayModal(null);
+      return;
+    }
+
+    // Pagamento total ou acima → registra direto
+    await registrarPagamento(payModal, valorPago, null, false);
+  }
+
+  // Registra pagamento + cria novo título se saldo
+  async function registrarPagamento(rec: any, valorPago: number, saldo: number | null, receberAgora: boolean) {
     setPaying(true);
-    const valor_pago = parseFloat(payVal.replace(",", ".")) || payModal.valor;
+    const hoje = new Date().toISOString().split("T")[0];
+
+    // 1) Marca a cobrança atual como paga
     await supabase.from("receivables").update({
-      status: "pago", forma_pagamento: payForm,
-      valor_pago, pago_em: new Date().toISOString(),
+      status: "pago",
+      forma_pagamento: payForm,
+      valor_pago: valorPago,
+      pago_em: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq("id", payModal.id);
+    }).eq("id", rec.id);
+
+    // 2) Lança transação
     await supabase.from("transactions").insert({
       contractor_id: contractorId,
       tipo: "entrada",
       categoria: "Mensalidade",
-      descricao: payModal.descricao,
-      valor: valor_pago,
-      data: new Date().toISOString().split("T")[0],
+      descricao: rec.descricao,
+      valor: valorPago,
+      data: hoje,
       forma_pagamento: payForm,
-      receivable_id: payModal.id,
+      receivable_id: rec.id,
       student_id: studentId,
     });
-    toast.success("Pagamento registrado!");
+
+    // 3) Se houver saldo → cria novo título para o restante
+    if (saldo && saldo > 0) {
+      const novoStatus = receberAgora ? "pago" : "pendente";
+      const { data: novoRec } = await supabase.from("receivables").insert({
+        contractor_id: contractorId,
+        student_id: studentId,
+        student_nome: rec.student_nome ?? studentNome,
+        descricao: `${rec.descricao} (saldo restante)`,
+        valor: saldo,
+        vencimento: parcialDate || rec.vencimento,
+        status: novoStatus,
+        tipo: rec.tipo,
+        forma_pagamento: payForm,
+        valor_pago: receberAgora ? saldo : null,
+        pago_em: receberAgora ? new Date().toISOString() : null,
+        student_contract_id: rec.student_contract_id ?? null,
+      }).select("id").single();
+
+      if (receberAgora && novoRec) {
+        await supabase.from("transactions").insert({
+          contractor_id: contractorId,
+          tipo: "entrada",
+          categoria: "Mensalidade",
+          descricao: `${rec.descricao} (saldo restante)`,
+          valor: saldo,
+          data: hoje,
+          forma_pagamento: payForm,
+          receivable_id: novoRec.id,
+          student_id: studentId,
+        });
+      }
+    }
+
+    toast.success(saldo && saldo > 0
+      ? receberAgora ? "Pagamento total registrado!" : "Pagamento parcial registrado. Novo título criado para o saldo."
+      : "Pagamento registrado!"
+    );
     setPaying(false);
+    setParcialModal(null);
     setPayModal(null);
     load();
   }
@@ -3884,7 +3952,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
         ))}
       </div>
 
-      {/* Cobranças */}
+      {/* Tabela */}
       {recs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-2 bg-white rounded-2xl border border-gray-100">
           <DollarSign className="w-8 h-8 text-gray-200" />
@@ -3896,11 +3964,13 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left text-xs font-semibold text-gray-400 px-5 py-3">DESCRIÇÃO</th>
-                <th className="text-right text-xs font-semibold text-gray-400 px-5 py-3">VALOR</th>
                 <th className="text-left text-xs font-semibold text-gray-400 px-5 py-3">VENCIMENTO</th>
-                <th className="text-center text-xs font-semibold text-gray-400 px-5 py-3">STATUS</th>
-                <th className="px-3 py-3 w-24 text-right text-xs font-semibold text-gray-400">RECEBER</th>
-                <th className="px-3 py-3 w-10"></th>
+                <th className="text-left text-xs font-semibold text-gray-400 px-4 py-3">RECEBIMENTO</th>
+                <th className="text-right text-xs font-semibold text-gray-400 px-4 py-3">VALOR</th>
+                <th className="text-right text-xs font-semibold text-gray-400 px-4 py-3">RECEBIDO</th>
+                <th className="text-center text-xs font-semibold text-gray-400 px-4 py-3">SITUAÇÃO</th>
+                <th className="px-3 py-3 w-24 text-right text-xs font-semibold text-gray-400"></th>
+                <th className="px-2 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -3908,26 +3978,36 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
                 const s = STATUS_REC[r.status] ?? STATUS_REC.pendente;
                 return (
                   <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                    <td className="px-5 py-3 text-sm text-gray-700">{r.descricao}</td>
-                    <td className="px-5 py-3 text-sm font-semibold text-right text-gray-800">{fmt(r.valor)}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700 max-w-xs truncate">{r.descricao}</td>
                     <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
                       {new Date(r.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-5 py-3 text-center">
+                    <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                      {r.pago_em ? new Date(r.pago_em).toLocaleDateString("pt-BR") : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold text-right text-gray-800 whitespace-nowrap">{fmt(r.valor)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap">
+                      {r.status === "pago"
+                        ? <span className="text-green-600">{fmt(r.valor_pago ?? r.valor)}</span>
+                        : <span className="text-gray-400">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
                         {s.label}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right">
                       {["pendente","atrasado"].includes(r.status) && (
-                        <button onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
-                          className="text-xs font-bold text-primary hover:underline whitespace-nowrap">
+                        <button
+                          onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
+                          className="text-xs font-bold text-primary hover:underline whitespace-nowrap px-2 py-1 rounded hover:bg-primary/5">
                           RECEBER
                         </button>
                       )}
                     </td>
                     {/* 3-pontos */}
-                    <td className="px-3 py-3 relative">
+                    <td className="px-2 py-3 relative">
                       <button onClick={() => setMenuRecId(menuRecId === r.id ? null : r.id)}
                         className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -3956,17 +4036,12 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
         </div>
       )}
 
-      {/* Backdrop menus */}
+      {/* Backdrop menu */}
       {menuRecId && <div className="fixed inset-0 z-20" onClick={() => setMenuRecId(null)} />}
 
       {/* Modal Detalhes */}
       {detalheRec && (
-        <FinanceiroDetalheModal
-          r={detalheRec}
-          studentNome={studentNome}
-          contractorId={contractorId}
-          onClose={() => setDetalheRec(null)}
-        />
+        <FinanceiroDetalheModal r={detalheRec} studentNome={studentNome} contractorId={contractorId} onClose={() => setDetalheRec(null)} />
       )}
 
       {/* Modal Cancelar cobrança */}
@@ -3977,10 +4052,8 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
             <h3 className="text-base font-bold text-gray-900 mb-3">Confirmação</h3>
             <p className="text-sm text-gray-600 mb-6">Deseja realmente cancelar este recebimento?</p>
             <div className="flex justify-end gap-4">
-              <button onClick={() => setCancelarRec(null)} disabled={cancelando}
-                className="text-sm font-bold text-gray-500 hover:underline">NÃO</button>
-              <button onClick={handleCancelarRec} disabled={cancelando}
-                className="text-sm font-bold text-primary hover:underline disabled:opacity-60">
+              <button onClick={() => setCancelarRec(null)} disabled={cancelando} className="text-sm font-bold text-gray-500 hover:underline">NÃO</button>
+              <button onClick={handleCancelarRec} disabled={cancelando} className="text-sm font-bold text-primary hover:underline disabled:opacity-60">
                 {cancelando ? "Cancelando..." : "SIM"}
               </button>
             </div>
@@ -3988,13 +4061,20 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
         </div>
       )}
 
-      {/* Pay modal */}
+      {/* ── STEP 1: Modal Registrar pagamento ── */}
       {payModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setPayModal(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Registrar pagamento</h3>
-            <p className="text-sm text-gray-500">{payModal.descricao}</p>
+            <div className="flex items-center gap-3">
+              <h3 className="text-base font-bold text-gray-900">Registrar pagamento</h3>
+              <button onClick={() => setPayModal(null)} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-500 -mt-2">{payModal.descricao}</p>
+            <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+              <span className="text-xs text-gray-500">Valor da cobrança</span>
+              <span className="text-sm font-bold text-gray-800">{fmt(payModal.valor)}</span>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor recebido</label>
               <input type="number" step="0.01" value={payVal} onChange={e => setPayVal(e.target.value)}
@@ -4011,10 +4091,54 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
             </div>
             <div className="flex justify-end gap-3 pt-1">
               <button onClick={() => setPayModal(null)} className="text-sm font-bold text-gray-500 hover:underline">Cancelar</button>
-              <button onClick={handlePay} disabled={paying}
+              <button onClick={handleConfirmarPay} disabled={paying}
                 className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40">
                 {paying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 CONFIRMAR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 2: Modal Recebimento menor que o total ── */}
+      {parcialModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Recebimento menor que o total</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Será gerada uma nova conta a receber de{" "}
+              <strong className="text-primary">{fmt(parcialModal.saldo)}</strong>{" "}
+              referente à diferença do valor do título original para o valor pago.
+              Escolha a data de vencimento deste novo título.
+            </p>
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Data de vencimento *</label>
+              <input type="date" value={parcialDate} onChange={e => setParcialDate(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setParcialModal(null); setPayModal(parcialModal.rec); }}
+                disabled={paying} className="px-3 py-2 text-sm font-bold text-gray-500 hover:underline">
+                CANCELAR
+              </button>
+              <button onClick={() => registrarPagamento(parcialModal.rec, parcialModal.valorPago, parcialModal.saldo, false)}
+                disabled={paying || !parcialDate}
+                className="px-4 py-2 text-sm font-bold text-primary border border-primary rounded-lg hover:bg-primary/5 disabled:opacity-40">
+                {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : "RECEBER DEPOIS"}
+              </button>
+              <button onClick={() => registrarPagamento(parcialModal.rec, parcialModal.valorPago, parcialModal.saldo, true)}
+                disabled={paying || !parcialDate}
+                className="px-4 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-40">
+                {paying ? <Loader2 className="w-4 h-4 animate-spin" /> : "RECEBER AGORA"}
               </button>
             </div>
           </div>
