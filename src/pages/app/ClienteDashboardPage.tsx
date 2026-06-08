@@ -2401,15 +2401,10 @@ function SuspensaoModal({ sc, contractorId, onClose, onSaved }: {
 
 /* ── Modal Encerrar Contrato ─────────────────────────────────── */
 
-const MOTIVOS_ENCERRAMENTO = [
-  "Mudança de endereço",
-  "Perda de renda",
-  "Mudou de contrato/plano",
-  "Sem Retorno Whatsapp",
-  "Atendimento do Professor",
-  "Trabalho",
-  "Incompatibilidade de Horários",
-  "Outros Motivos",
+const MOTIVOS_ENCERRAMENTO_DEFAULT = [
+  "Mudança de endereço", "Perda de renda", "Mudou de contrato/plano",
+  "Sem Retorno Whatsapp", "Atendimento do Professor", "Trabalho",
+  "Incompatibilidade de Horários", "Outros Motivos",
 ];
 
 function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
@@ -2421,20 +2416,29 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
   const [dataEnc, setDataEnc]     = useState("");
   const [opcaoContas, setOpcaoContas] = useState<"cancelar" | "manter" | null>(null);
   const [totalAberto, setTotalAberto] = useState<number>(0);
+  const [motivos, setMotivos]     = useState<string[]>(MOTIVOS_ENCERRAMENTO_DEFAULT);
   const [saving, setSaving]       = useState(false);
 
-  // Carregar total de contas em aberto
   useEffect(() => {
-    async function loadContas() {
-      const { data } = await supabase.from("receivables")
-        .select("valor")
-        .eq("student_contract_id", sc.id)
-        .in("status", ["pendente", "aguardando"]);
-      const total = (data ?? []).reduce((sum, r) => sum + Number(r.valor), 0);
+    async function load() {
+      // Carregar motivos cadastrados + contas em aberto em paralelo
+      const [{ data: motivosData }, { data: contasData }] = await Promise.all([
+        supabase.from("crm_config")
+          .select("nome").eq("contractor_id", contractorId)
+          .eq("categoria", "motivo_encerramento").eq("ativo", true)
+          .order("ordem").order("nome"),
+        supabase.from("receivables")
+          .select("valor").eq("student_contract_id", sc.id)
+          .in("status", ["pendente", "aguardando"]),
+      ]);
+      if (motivosData && motivosData.length > 0) {
+        setMotivos(motivosData.map(m => m.nome));
+      }
+      const total = (contasData ?? []).reduce((sum, r) => sum + Number(r.valor), 0);
       setTotalAberto(total);
     }
-    loadContas();
-  }, [sc.id]);
+    load();
+  }, [sc.id, contractorId]);
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
 
@@ -2538,7 +2542,7 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
               <div>
                 <select value={motivo} onChange={e => setMotivo(e.target.value)} className={inputCls}>
                   <option value="">Motivo de encerramento *</option>
-                  {MOTIVOS_ENCERRAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
+                  {motivos.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
@@ -2589,7 +2593,7 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
               <div>
                 <select value={motivo} onChange={e => setMotivo(e.target.value)} className={inputCls}>
                   <option value="">Motivo de encerramento *</option>
-                  {MOTIVOS_ENCERRAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
+                  {motivos.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>

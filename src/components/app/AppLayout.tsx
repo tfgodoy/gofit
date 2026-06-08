@@ -161,6 +161,13 @@ const bottomNav: NavItem[] = [
         ],
       },
       { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
+      {
+        icon: ScrollText, label: "Contratos", to: "/app/configuracoes/contratos",
+        iconColor: "text-gray-500",
+        children: [
+          { icon: AlertCircle, label: "Motivos de Encerramento", to: "/app/configuracoes/contratos/motivos-encerramento", iconColor: "text-red-400" },
+        ],
+      },
       { icon: Plug,          label: "Integrações",            to: "/app/configuracoes/integracoes",  iconColor: "text-gray-500" },
       {
         icon: Filter, label: "CRM", to: "/app/configuracoes/crm",

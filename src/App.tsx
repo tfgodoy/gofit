@@ -174,6 +174,7 @@ export default function App() {
             <Route path="/app/configuracoes/crm/oportunidades/tipos-visita"    element={<AppGuard><CrmConfigListPage titulo="Tipos de visitas"     descricao="Modalidades de visita em oportunidades (ex: Presencial, Online)" categoria="tipo_visita_oportunidade" /></AppGuard>} />
             <Route path="/app/configuracoes/crm/oportunidades/niveis-interesse"element={<AppGuard><CrmConfigListPage titulo="Níveis de interesse"  descricao="Grau de interesse do lead em oportunidades (ex: Alto, Médio, Baixo)" categoria="nivel_interesse_oportunidade" comCor /></AppGuard>} />
             <Route path="/app/configuracoes/crm/oportunidades/motivos-perda"   element={<AppGuard><CrmConfigListPage titulo="Motivos de Perda"     descricao="Razões pelo qual oportunidades são perdidas (ex: Preço, Concorrência)" categoria="motivo_perda" /></AppGuard>} />
+            <Route path="/app/configuracoes/contratos/motivos-encerramento"   element={<AppGuard><CrmConfigListPage titulo="Motivos de Encerramento" descricao="Motivos disponíveis ao encerrar um contrato de aluno" categoria="motivo_encerramento" /></AppGuard>} />
             <Route path="/app/configuracoes/crm/oportunidades/funis-etapas"    element={<AppGuard><ConfigCrmFunisPage /></AppGuard>} />
             <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
