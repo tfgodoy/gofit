@@ -2399,6 +2399,239 @@ function SuspensaoModal({ sc, contractorId, onClose, onSaved }: {
   );
 }
 
+/* ── Modal Encerrar Contrato ─────────────────────────────────── */
+
+const MOTIVOS_ENCERRAMENTO = [
+  "Mudança de endereço",
+  "Perda de renda",
+  "Mudou de contrato/plano",
+  "Sem Retorno Whatsapp",
+  "Atendimento do Professor",
+  "Trabalho",
+  "Incompatibilidade de Horários",
+  "Outros Motivos",
+];
+
+function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
+  sc: any; contractorId: string; studentId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [step, setStep]           = useState<"escolha" | "agora" | "programar">("escolha");
+  const [motivo, setMotivo]       = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [dataEnc, setDataEnc]     = useState("");
+  const [opcaoContas, setOpcaoContas] = useState<"cancelar" | "manter" | null>(null);
+  const [totalAberto, setTotalAberto] = useState<number>(0);
+  const [saving, setSaving]       = useState(false);
+
+  // Carregar total de contas em aberto
+  useEffect(() => {
+    async function loadContas() {
+      const { data } = await supabase.from("receivables")
+        .select("valor")
+        .eq("student_contract_id", sc.id)
+        .in("status", ["pendente", "aguardando"]);
+      const total = (data ?? []).reduce((sum, r) => sum + Number(r.valor), 0);
+      setTotalAberto(total);
+    }
+    loadContas();
+  }, [sc.id]);
+
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
+
+  async function handleEncerrar() {
+    if (!motivo) { toast.error("Selecione o motivo de encerramento."); return; }
+    if (totalAberto > 0 && !opcaoContas) { toast.error("Escolha o que fazer com as contas em aberto."); return; }
+    setSaving(true);
+
+    // Atualizar contrato
+    const { error } = await supabase.from("student_contracts").update({
+      status: "encerrado",
+      motivo_encerramento: motivo,
+      descricao_encerramento: descricao.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", sc.id);
+    if (error) { toast.error("Erro ao encerrar contrato."); setSaving(false); return; }
+
+    // Tratar contas em aberto
+    if (totalAberto > 0 && opcaoContas === "cancelar") {
+      await supabase.from("receivables")
+        .delete()
+        .eq("student_contract_id", sc.id)
+        .in("status", ["pendente", "aguardando"]);
+    }
+
+    // Registrar evento no histórico
+    await supabase.from("contract_events").insert({
+      contractor_id: contractorId,
+      student_contract_id: sc.id,
+      descricao: `Contrato encerrado. Motivo: ${motivo}${descricao.trim() ? ` — ${descricao.trim()}` : ""}`,
+    });
+
+    toast.success("Contrato encerrado.");
+    setSaving(false);
+    onSaved();
+  }
+
+  async function handleProgramar() {
+    if (!motivo) { toast.error("Selecione o motivo de encerramento."); return; }
+    if (!dataEnc) { toast.error("Informe a data de encerramento."); return; }
+    setSaving(true);
+
+    const { error } = await supabase.from("student_contracts").update({
+      data_encerramento_prog: dataEnc,
+      motivo_encerramento: motivo,
+      descricao_encerramento: descricao.trim() || null,
+      cancelar_contas_encerrar: opcaoContas === "cancelar",
+      updated_at: new Date().toISOString(),
+    }).eq("id", sc.id);
+    if (error) { toast.error("Erro ao programar encerramento."); setSaving(false); return; }
+
+    await supabase.from("contract_events").insert({
+      contractor_id: contractorId,
+      student_contract_id: sc.id,
+      descricao: `Encerramento programado para ${new Date(dataEnc + "T00:00:00").toLocaleDateString("pt-BR")}. Motivo: ${motivo}`,
+    });
+
+    toast.success(`Encerramento programado para ${new Date(dataEnc + "T00:00:00").toLocaleDateString("pt-BR")}.`);
+    setSaving(false);
+    onSaved();
+  }
+
+  const fmtBRL = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+
+        {/* ── Passo 1: escolha ── */}
+        {step === "escolha" && (
+          <div className="p-8 flex flex-col items-center text-center gap-4">
+            <div className="w-16 h-16 rounded-full border-2 border-gray-200 flex items-center justify-center">
+              <span className="text-3xl text-gray-300 font-light">?</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">Confirmação</h3>
+              <p className="text-sm text-gray-500">Deseja encerrar agora ou programar o encerramento do contrato?</p>
+            </div>
+            <div className="flex flex-col gap-2 w-full mt-2">
+              <button onClick={() => setStep("agora")}
+                className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-colors text-sm">
+                Encerrar agora
+              </button>
+              <button onClick={() => setStep("programar")}
+                className="w-full py-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-colors text-sm">
+                Programar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Passo 2a: Encerrar agora ── */}
+        {step === "agora" && (
+          <>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">Encerrar contrato</h3>
+              <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <select value={motivo} onChange={e => setMotivo(e.target.value)} className={inputCls}>
+                  <option value="">Motivo de encerramento *</option>
+                  {MOTIVOS_ENCERRAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
+                  placeholder="Descrição (opcional)" className={inputCls} />
+              </div>
+              {totalAberto > 0 && (
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <p className="text-sm text-gray-600">
+                    Este contrato possui contas a receber em aberto no valor de{" "}
+                    <span className="font-bold text-green-600">{fmtBRL(totalAberto)}</span>.
+                  </p>
+                  <p className="text-xs font-semibold text-gray-500">O que deseja fazer?</p>
+                  {["cancelar", "manter"].map(op => (
+                    <label key={op} className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="opcao_agora" value={op}
+                        checked={opcaoContas === op}
+                        onChange={() => setOpcaoContas(op as any)}
+                        className="mt-0.5 accent-primary" />
+                      <span className="text-sm text-gray-700">
+                        {op === "cancelar"
+                          ? "Encerrar contrato e cancelar as contas a receber em aberto"
+                          : "Encerrar apenas o contrato (manter as contas a receber em aberto)"}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+              <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:underline">FECHAR</button>
+              <button onClick={handleEncerrar} disabled={saving}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg disabled:opacity-60 transition-colors">
+                {saving ? "Encerrando..." : "ENCERRAR"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Passo 2b: Programar ── */}
+        {step === "programar" && (
+          <>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">Programar encerramento do contrato</h3>
+              <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <select value={motivo} onChange={e => setMotivo(e.target.value)} className={inputCls}>
+                  <option value="">Motivo de encerramento *</option>
+                  {MOTIVOS_ENCERRAMENTO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <input type="text" value={descricao} onChange={e => setDescricao(e.target.value)}
+                  placeholder="Descrição (opcional)" className={inputCls} />
+              </div>
+              <div>
+                <input type="date" value={dataEnc} onChange={e => setDataEnc(e.target.value)}
+                  placeholder="Data encerramento *" className={inputCls} />
+              </div>
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-500">O que deseja fazer caso o contrato possua contas em aberto no momento do encerramento?</p>
+                {["cancelar", "manter"].map(op => (
+                  <label key={op} className="flex items-start gap-3 cursor-pointer">
+                    <input type="radio" name="opcao_prog" value={op}
+                      checked={opcaoContas === op}
+                      onChange={() => setOpcaoContas(op as any)}
+                      className="mt-0.5 accent-primary" />
+                    <span className="text-sm text-gray-700">
+                      {op === "cancelar"
+                        ? "Encerrar contrato e cancelar as contas a receber em aberto"
+                        : "Encerrar apenas o contrato (manter as contas a receber em aberto)"}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+              <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:underline">FECHAR</button>
+              <button onClick={handleProgramar} disabled={saving}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg disabled:opacity-60 transition-colors">
+                {saving ? "Salvando..." : "PROGRAMAR"}
+              </button>
+            </div>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 /* ── Contratos Tab ─────────────────────────────────────────── */
 
 const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
@@ -2424,6 +2657,7 @@ function ContratosTab({ studentId, contractorId, student }: {
   /* novos modais */
   const [detalheOpen,   setDetalheOpen]   = useState<any | null>(null); // sc object
   const [suspensaoOpen, setSuspensaoOpen] = useState<any | null>(null); // sc object
+  const [encerrarOpen,  setEncerrarOpen]  = useState<any | null>(null); // sc object
 
   const [saving, setSaving] = useState(false);
 
@@ -2610,6 +2844,12 @@ function ContratosTab({ studentId, contractorId, student }: {
                     ⏸ Contrato suspenso
                   </div>
                 )}
+                {sc.data_encerramento_prog && sc.status === "ativo" && (
+                  <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3 text-sm text-orange-700">
+                    🕐 Encerramento programado para {new Date(sc.data_encerramento_prog + "T00:00:00").toLocaleDateString("pt-BR")}
+                    {sc.motivo_encerramento && <span className="ml-1">· {sc.motivo_encerramento}</span>}
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -2695,7 +2935,7 @@ function ContratosTab({ studentId, contractorId, student }: {
                         </button>
                         <div className="border-t border-gray-100 my-1" />
                         {/* Encerrar */}
-                        <button onClick={() => { setAction({ type: "cancelar", id: sc.id, plano_id: sc.contrato_id }); setMenuOpenId(null); }}
+                        <button onClick={() => { setEncerrarOpen(sc); setMenuOpenId(null); }}
                           className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                           Encerrar
                         </button>
@@ -2780,7 +3020,7 @@ function ContratosTab({ studentId, contractorId, student }: {
           studentNome={student?.nome_completo ?? ""}
           onClose={() => setDetalheOpen(null)}
           onEncerrar={() => {
-            setAction({ type: "cancelar", id: detalheOpen.id, plano_id: detalheOpen.contrato_id });
+            setEncerrarOpen(detalheOpen);
             setDetalheOpen(null);
           }}
         />
@@ -2793,6 +3033,17 @@ function ContratosTab({ studentId, contractorId, student }: {
           contractorId={contractorId}
           onClose={() => setSuspensaoOpen(null)}
           onSaved={() => { setSuspensaoOpen(null); load(); }}
+        />
+      )}
+
+      {/* Modal Encerrar */}
+      {encerrarOpen && (
+        <EncerrarModal
+          sc={encerrarOpen}
+          contractorId={contractorId}
+          studentId={studentId}
+          onClose={() => setEncerrarOpen(null)}
+          onSaved={() => { setEncerrarOpen(null); load(); }}
         />
       )}
 
