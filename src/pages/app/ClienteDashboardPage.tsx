@@ -2409,7 +2409,7 @@ const STATUS_SC: Record<string, { label: string; bg: string; text: string }> = {
   encerrado:  { label: "Encerrado",  bg: "bg-gray-100",   text: "text-gray-500"   },
 };
 
-type ContratoAction = { type: "cancelar" | "cancelar_venda" | "suspender" | "congelar" | "reativar"; id: string; plano_id?: string } | null;
+type ContratoAction = { type: "cancelar" | "cancelar_venda" | "suspender" | "reativar"; id: string; plano_id?: string } | null;
 
 function ContratosTab({ studentId, contractorId, student }: {
   studentId: string; contractorId: string; student: StudentDetail | null;
@@ -2425,10 +2425,6 @@ function ContratosTab({ studentId, contractorId, student }: {
   const [detalheOpen,   setDetalheOpen]   = useState<any | null>(null); // sc object
   const [suspensaoOpen, setSuspensaoOpen] = useState<any | null>(null); // sc object
 
-  /* congelar form state (mantido para compatibilidade) */
-  const [congelarInicio, setCongelarInicio] = useState("");
-  const [congelarFim,    setCongelarFim]    = useState("");
-  const [congelarMotivo, setCongelarMotivo] = useState("");
   const [saving, setSaving] = useState(false);
 
   /* assinatura eletrônica state */
@@ -2548,12 +2544,6 @@ function ContratosTab({ studentId, contractorId, student }: {
       update.data_congelamento_inicio = null;
       update.data_congelamento_fim    = null;
       update.motivo_congelamento      = null;
-    } else if (action.type === "congelar") {
-      if (!congelarInicio || !congelarFim) { toast.error("Informe as datas de congelamento."); setSaving(false); return; }
-      update.status = "congelado";
-      update.data_congelamento_inicio = congelarInicio;
-      update.data_congelamento_fim    = congelarFim;
-      update.motivo_congelamento      = congelarMotivo.trim() || null;
     }
 
     const { error } = await supabase.from("student_contracts").update(update as any).eq("id", action.id);
@@ -2561,11 +2551,10 @@ function ContratosTab({ studentId, contractorId, student }: {
 
     const labels: Record<string, string> = {
       cancelar: "Matrícula cancelada.", suspender: "Contrato suspenso.",
-      reativar: "Contrato reativado.", congelar: "Contrato congelado.",
+      reativar: "Contrato reativado.",
     };
     toast.success(labels[action.type]);
     setAction(null);
-    setCongelarInicio(""); setCongelarFim(""); setCongelarMotivo("");
     setSaving(false);
     load();
   }
@@ -2595,7 +2584,7 @@ function ContratosTab({ studentId, contractorId, student }: {
             const contrato = sc.contratos as any;
             const sStyle = STATUS_SC[sc.status] ?? STATUS_SC.encerrado;
             const isActive    = sc.status === "ativo";
-            const isFrozen    = sc.status === "congelado";
+            const isFrozen    = false; // congelamento removido — use suspensão
             const isSuspended = sc.status === "suspenso";
             const canReactivate = isFrozen || isSuspended;
             return (
@@ -2692,13 +2681,7 @@ function ContratosTab({ studentId, contractorId, student }: {
                             Suspensão
                           </button>
                         )}
-                        {/* Congelar / Reativar */}
-                        {isActive && (
-                          <button onClick={() => { setAction({ type: "congelar", id: sc.id }); setMenuOpenId(null); }}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            Congelar
-                          </button>
-                        )}
+                        {/* Reativar */}
                         {canReactivate && (
                           <button onClick={() => { setAction({ type: "reativar", id: sc.id }); setMenuOpenId(null); }}
                             className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50">
@@ -2848,7 +2831,7 @@ function ContratosTab({ studentId, contractorId, student }: {
       )}
 
       {/* Modais de ação */}
-      {action && action.type !== "congelar" && (
+      {action && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setAction(null)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
@@ -2888,59 +2871,6 @@ function ContratosTab({ studentId, contractorId, student }: {
         </div>
       )}
 
-      {action && action.type === "congelar" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setAction(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-900 mb-1">Congelar contrato</h3>
-            <p className="text-sm text-gray-400 mb-4">O aluno ficará afastado por um período determinado.</p>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Início</label>
-                  <input
-                    type="date"
-                    value={congelarInicio}
-                    onChange={e => setCongelarInicio(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Retorno previsto</label>
-                  <input
-                    type="date"
-                    value={congelarFim}
-                    onChange={e => setCongelarFim(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Motivo (opcional)</label>
-                <input
-                  type="text"
-                  value={congelarMotivo}
-                  onChange={e => setCongelarMotivo(e.target.value)}
-                  placeholder="Ex: Viagem, cirurgia, licença maternidade..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => setAction(null)} className="text-sm font-bold text-gray-500 hover:underline" disabled={saving}>
-                Cancelar
-              </button>
-              <button
-                onClick={handleAction}
-                disabled={saving}
-                className="bg-blue-600 text-white text-sm font-bold px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
-              >
-                {saving ? "Salvando..." : "Congelar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
