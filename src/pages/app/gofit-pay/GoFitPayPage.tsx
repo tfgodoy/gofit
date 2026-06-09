@@ -1,11 +1,10 @@
 /**
- * Fase 3 — GoFit Pay: Dashboard básico
+ * Fase 5 — GoFit Pay: Dashboard
  * Rota: /app/gofit-pay
  *
- * - Exibe status de onboarding
- * - KPI cards (vazios por enquanto)
- * - Lista de cobranças (vazia)
- * - NÃO chama Asaas
+ * - Exibe status da ativação (onboarding + module status)
+ * - KPI cards (ativos após moduleStatus = 'active')
+ * - Botão "Tentar novamente" quando activation_failed
  */
 
 import { useState, useEffect } from "react";
@@ -14,21 +13,23 @@ import {
   CreditCard, Clock, CheckCircle2, AlertCircle,
   TrendingUp, Wallet, Users, ArrowUpRight,
   RefreshCcw, Loader2, Settings, ChevronRight,
-  QrCode, FileText, XCircle,
+  QrCode, FileText, XCircle, RotateCcw, AlertTriangle,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { GoFitPayService } from "@/services/gofit-pay";
 
 /* ─── Status config ──────────────────────────────────────────────── */
-// onboarding_status da gofit_pay_config (wizard interno)
+// Status de exibição do dashboard (combina onboarding_status + module_status)
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType; desc: string }> = {
-  rascunho:   { label: "Cadastro em andamento", color: "gray",   icon: Clock,         desc: "Você iniciou o cadastro mas ainda não enviou todas as informações." },
-  enviado:    { label: "Dados enviados",         color: "blue",   icon: Clock,         desc: "Seus dados foram preenchidos. A ativação será processada em breve." },
-  em_analise: { label: "Em análise",             color: "blue",   icon: Clock,         desc: "Nossa equipe está revisando seus documentos. Prazo: até 2 dias úteis." },
-  ativo:      { label: "Ativo",                  color: "green",  icon: CheckCircle2,  desc: "Seu GoFit Pay está ativo e pronto para receber pagamentos." },
-  suspenso:   { label: "Suspenso",               color: "yellow", icon: AlertCircle,   desc: "Sua conta está temporariamente suspensa. Entre em contato com o suporte." },
-  cancelado:  { label: "Cancelado",              color: "red",    icon: XCircle,       desc: "Sua conta foi cancelada. Reative para voltar a receber pagamentos." },
+  rascunho:          { label: "Cadastro em andamento",    color: "gray",   icon: Clock,          desc: "Você iniciou o cadastro mas ainda não enviou todas as informações." },
+  enviado:           { label: "Dados enviados",            color: "blue",   icon: Clock,          desc: "Seus dados foram preenchidos. Conectando ao gateway de pagamentos..." },
+  em_analise:        { label: "Em análise no Asaas",       color: "blue",   icon: Clock,          desc: "Subconta criada. Aguardando validação pelo Asaas (até 2 dias úteis)." },
+  ativo:             { label: "Ativo",                     color: "green",  icon: CheckCircle2,   desc: "Seu GoFit Pay está ativo e pronto para receber pagamentos." },
+  suspenso:          { label: "Suspenso",                  color: "yellow", icon: AlertCircle,    desc: "Sua conta está temporariamente suspensa. Entre em contato com o suporte." },
+  cancelado:         { label: "Cancelado",                 color: "red",    icon: XCircle,        desc: "Sua conta foi cancelada. Reative para voltar a receber pagamentos." },
+  activation_failed: { label: "Falha na ativação",         color: "red",    icon: AlertTriangle,  desc: "Ocorreu um erro ao processar sua ativação. Verifique os dados e tente novamente." },
 };
 
 const COLOR_CLASSES: Record<string, { badge: string; icon: string; border: string }> = {
@@ -66,7 +67,8 @@ export default function GoFitPayPage() {
 
   const [onboardingStatus, setOnboardingStatus] = useState<string>("enviado");
   const [moduleStatus,     setModuleStatus]     = useState<string>("pending");
-  const [loading, setLoading] = useState(true);
+  const [loading,          setLoading]          = useState(true);
+  const [retrying,         setRetrying]         = useState(false);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -104,12 +106,30 @@ export default function GoFitPayPage() {
     setLoading(false);
   }
 
-  const statusInfo = STATUS_CONFIG[onboardingStatus] ?? STATUS_CONFIG["enviado"];
+  // moduleStatus tem precedência para states pós-Asaas
+  const effectiveStatus = (
+    moduleStatus === "activation_failed" ? "activation_failed" :
+    moduleStatus === "active"            ? "ativo"             :
+    moduleStatus === "in_review"         ? "em_analise"        :
+    onboardingStatus
+  );
+
+  const statusInfo = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG["enviado"];
   const colorCls   = COLOR_CLASSES[statusInfo.color] ?? COLOR_CLASSES["gray"];
   const StatusIcon = statusInfo.icon;
 
-  // Ativo = company_modules.status === 'active' (definido pela Fase 5/Asaas)
-  const isAtivo = moduleStatus === "active";
+  const isAtivo            = moduleStatus === "active";
+  const isActivationFailed = moduleStatus === "activation_failed" || onboardingStatus === "activation_failed";
+
+  async function handleRetry() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await GoFitPayService.retryActivation();
+    } catch { /* Edge Function lida com o erro */ }
+    setRetrying(false);
+    loadConfig();    // recarrega status após retry
+  }
 
   return (
     <AppLayout>
@@ -134,11 +154,25 @@ export default function GoFitPayPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {!isAtivo && (
+              {/* Wizard incompleto → Continuar ativação */}
+              {!isAtivo && effectiveStatus === "rascunho" && (
                 <button onClick={() => navigate("/app/loja/gofit-pay/ativar")}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors">
                   <ArrowUpRight className="w-3 h-3" />
                   Continuar ativação
+                </button>
+              )}
+              {/* Falha → Tentar novamente (header) */}
+              {isActivationFailed && (
+                <button
+                  onClick={handleRetry}
+                  disabled={retrying}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-60">
+                  {retrying
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RotateCcw className="w-3 h-3" />
+                  }
+                  {retrying ? "Tentando..." : "Tentar novamente"}
                 </button>
               )}
               <button onClick={() => navigate("/app/loja/gofit-pay")}
@@ -164,16 +198,27 @@ export default function GoFitPayPage() {
                   <div className="flex-1">
                     <p className="text-sm font-bold text-gray-900 mb-0.5">{statusInfo.label}</p>
                     <p className="text-xs text-gray-500">{statusInfo.desc}</p>
-                    {(onboardingStatus === "enviado" || onboardingStatus === "em_analise") && (
+                    {(effectiveStatus === "em_analise") && (
                       <p className="text-xs text-gray-400 mt-2">
-                        A ativação completa será processada em breve. Em caso de dúvidas, entre em contato com o suporte GoFit.
+                        Sua subconta foi criada no Asaas. A análise pode levar até 2 dias úteis.
                       </p>
                     )}
                   </div>
-                  {(onboardingStatus === "rascunho" || onboardingStatus === "cancelado") && (
+                  {(effectiveStatus === "rascunho" || effectiveStatus === "cancelado") && (
                     <button onClick={() => navigate("/app/loja/gofit-pay/ativar")}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors flex-shrink-0">
                       Continuar <ChevronRight className="w-3 h-3" />
+                    </button>
+                  )}
+                  {isActivationFailed && (
+                    <button
+                      onClick={handleRetry}
+                      disabled={retrying}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-colors flex-shrink-0 disabled:opacity-60">
+                      {retrying
+                        ? <><Loader2 className="w-3 h-3 animate-spin" /> Tentando...</>
+                        : <><RotateCcw className="w-3 h-3" /> Tentar novamente</>
+                      }
                     </button>
                   )}
                 </div>

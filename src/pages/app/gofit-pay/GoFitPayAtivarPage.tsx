@@ -1,12 +1,14 @@
 /**
- * Fase 3 — GoFit Pay: Wizard de ativação
+ * Fase 5 — GoFit Pay: Wizard de ativação
  * Rota: /app/loja/gofit-pay/ativar
  *
  * 5 etapas: Empresa → Responsável → Conta bancária → Configurações → Revisão
  * - Salva em gofit_pay_config a cada etapa (upsert por contractor_id)
- * - Ao finalizar: atualiza company_modules.status = 'pending'
- *   (in_review será usado somente após envio real ao Asaas na Fase 5)
- * - NÃO chama Asaas
+ * - Ao finalizar (etapa 5):
+ *     1. Atualiza onboarding_status = 'enviado' e company_modules.status = 'pending'
+ *     2. Chama GoFitPayService.createAccount() → Edge Function → Asaas sandbox
+ *     3. Exibe overlay de loading durante a chamada Asaas
+ *     4. Navega para /app/loja/gofit-pay com status atualizado
  */
 
 import { useState, useEffect } from "react";
@@ -19,6 +21,7 @@ import {
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { GoFitPayService } from "@/services/gofit-pay";
 
 /* ─── Tipos ──────────────────────────────────────────────────────── */
 interface EmpresaForm {
@@ -128,8 +131,9 @@ export default function GoFitPayAtivarPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep]   = useState(1);
-  const [saving, setSaving] = useState(false);
+  const [step, setStep]         = useState(1);
+  const [saving, setSaving]     = useState(false);
+  const [activating, setActivating] = useState(false);   // overlay Fase 5
   const [configId, setConfigId] = useState<string | null>(null);
   const [moduleId, setModuleId] = useState<string | null>(null);
 
@@ -318,39 +322,52 @@ export default function GoFitPayAtivarPage() {
     setSaving(true);
     const now = new Date().toISOString();
 
-    // Atualiza status do config
+    // ── 1. Marca onboarding como 'enviado' ──────────────────────────────
     await supabase
       .from("gofit_pay_config")
       .update({ onboarding_status: "enviado", updated_at: now })
       .eq("contractor_id", user!.contractorId);
 
-    // Atualiza ou cria company_modules → pending
-    // OBS: 'in_review' só será usado na Fase 5, após envio real ao Asaas
-    const { data: existing } = await supabase
+    // ── 2. Garante company_modules.status = 'pending' ───────────────────
+    const { data: existingMod } = await supabase
       .from("company_modules")
       .select("id")
       .eq("contractor_id", user!.contractorId)
       .eq("module_id", moduleId)
       .maybeSingle();
 
-    if (existing) {
+    if (existingMod) {
       await supabase
         .from("company_modules")
         .update({ status: "pending", updated_at: now })
-        .eq("id", existing.id);
+        .eq("id", existingMod.id);
     } else {
       await supabase
         .from("company_modules")
         .insert({
           contractor_id: user!.contractorId,
-          module_id: moduleId,
-          status: "pending",
-          activated_at: now,
-          config_json: {},
+          module_id:     moduleId,
+          status:        "pending",
+          activated_at:  now,
+          config_json:   {},
         });
     }
 
     setSaving(false);
+
+    // ── 3. Chama Asaas via Edge Function (Fase 5) ───────────────────────
+    setActivating(true);
+    try {
+      await GoFitPayService.createAccount(user!.contractorId, "sandbox");
+      // Sucesso ou falha: a Edge Function já atualizou os status no banco.
+      // Navegamos para a landing page que mostrará o status correto.
+    } catch {
+      // Erro inesperado: a Edge Function captura internamente.
+      // Navega mesmo assim — landing page mostrará activation_failed.
+    } finally {
+      setActivating(false);
+    }
+
     navigate("/app/loja/gofit-pay");
   }
 
@@ -690,6 +707,27 @@ export default function GoFitPayAtivarPage() {
 
   return (
     <AppLayout>
+      {/* ── Overlay de ativação Asaas (Fase 5) ── */}
+      {activating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-10 max-w-sm w-full mx-4 text-center shadow-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mb-2">Ativando GoFit Pay…</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Estamos criando sua subconta no gateway de pagamentos.<br />
+              Não feche esta página.
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:0ms]" />
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:150ms]" />
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col min-h-full bg-gray-50">
 
         {/* Sub-header */}

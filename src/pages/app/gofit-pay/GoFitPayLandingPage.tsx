@@ -15,10 +15,12 @@ import {
   CreditCard, CheckCircle2, ArrowLeft, Zap, Clock,
   ArrowRight, QrCode, FileText, RefreshCcw,
   TrendingDown, Link2, Shield, ChevronRight, Loader2,
+  AlertTriangle, RotateCcw,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { GoFitPayService } from "@/services/gofit-pay";
 
 /* ─── Benefícios ─────────────────────────────────────────────────── */
 const BENEFICIOS = [
@@ -44,9 +46,9 @@ export default function GoFitPayLandingPage() {
   const navigate = useNavigate();
 
   const [companyStatus,    setCompanyStatus]    = useState<string | null>(null);
-  // onboardingStatus diferencia wizard incompleto ('rascunho') de completo ('enviado')
   const [onboardingStatus, setOnboardingStatus] = useState<string | null>(null);
   const [loading,          setLoading]          = useState(true);
+  const [retrying,         setRetrying]         = useState(false);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -86,20 +88,36 @@ export default function GoFitPayLandingPage() {
     setLoading(false);
   }
 
-  // Wizard completo quando onboarding_status é 'enviado' ou superior
-  const wizardCompleto = ["enviado", "em_analise", "ativo", "suspenso"].includes(onboardingStatus ?? "");
+  // Wizard completo quando onboarding_status é 'enviado' ou posterior
+  const wizardCompleto = [
+    "enviado", "em_analise", "ativo", "suspenso", "activation_failed",
+  ].includes(onboardingStatus ?? "");
+
+  const isActivationFailed = companyStatus === "activation_failed";
+
+  async function handleRetry() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await GoFitPayService.retryActivation();
+    } catch { /* Edge Function captura — navegar para dashboard */ }
+    setRetrying(false);
+    await loadStatus();               // recarrega status após retry
+    navigate("/app/gofit-pay");
+  }
 
   function handleCTA() {
+    if (isActivationFailed) {
+      void handleRetry();
+      return;
+    }
     if (!companyStatus || companyStatus === "inactive" || companyStatus === "cancelled") {
       navigate("/app/loja/gofit-pay/ativar");
     } else if (companyStatus === "pending" && !wizardCompleto) {
-      // Wizard ainda incompleto — retorna ao wizard
       navigate("/app/loja/gofit-pay/ativar");
     } else if (companyStatus === "pending" && wizardCompleto) {
-      // Wizard completo, aguardando Asaas (Fase 5) — vai para dashboard
       navigate("/app/gofit-pay");
     } else if (companyStatus === "in_review") {
-      // Em análise real (pós-Fase 5) — vai para dashboard
       navigate("/app/gofit-pay");
     } else if (companyStatus === "active") {
       navigate("/app/gofit-pay");
@@ -107,17 +125,18 @@ export default function GoFitPayLandingPage() {
   }
 
   const ctaLabel = (() => {
-    if (!companyStatus || companyStatus === "inactive") return "Ativar GoFit Pay";
-    if (companyStatus === "cancelled") return "Reativar GoFit Pay";
+    if (retrying) return "Tentando novamente...";
+    if (isActivationFailed)                              return "Tentar novamente";
+    if (!companyStatus || companyStatus === "inactive")  return "Ativar GoFit Pay";
+    if (companyStatus === "cancelled")                   return "Reativar GoFit Pay";
     if (companyStatus === "pending" && !wizardCompleto)  return "Continuar ativação";
     if (companyStatus === "pending" && wizardCompleto)   return "Acompanhar status";
-    if (companyStatus === "in_review") return "Acompanhar análise";
-    if (companyStatus === "active")    return "Acessar GoFit Pay";
+    if (companyStatus === "in_review")                   return "Acompanhar análise";
+    if (companyStatus === "active")                      return "Acessar GoFit Pay";
     return "Ativar GoFit Pay";
   })();
 
-  const isAtivo = companyStatus === "active";
-  // Wizard completo mas aguardando ativação real
+  const isAtivo      = companyStatus === "active";
   const isAguardando = companyStatus === "pending" && wizardCompleto;
 
   return (
@@ -155,6 +174,11 @@ export default function GoFitPayLandingPage() {
                 <Clock className="w-3 h-3" /> Ativação pendente
               </span>
             )}
+            {isActivationFailed && (
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">
+                <AlertTriangle className="w-3 h-3" /> Falha na ativação
+              </span>
+            )}
           </div>
         </div>
 
@@ -190,9 +214,22 @@ export default function GoFitPayLandingPage() {
               ) : (
                 <button
                   onClick={handleCTA}
-                  className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-base transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 hover:scale-105"
+                  disabled={retrying}
+                  className={`inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-base transition-all shadow-lg hover:scale-105 disabled:opacity-70 disabled:cursor-wait ${
+                    isActivationFailed
+                      ? "bg-red-600 hover:bg-red-700 text-white shadow-red-200"
+                      : "bg-primary hover:bg-primary/90 text-white shadow-primary/20 hover:shadow-primary/30"
+                  }`}
                 >
-                  {(isAtivo || isAguardando) ? <ArrowRight className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
+                  {retrying ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : isActivationFailed ? (
+                    <RotateCcw className="w-5 h-5" />
+                  ) : (isAtivo || isAguardando) ? (
+                    <ArrowRight className="w-5 h-5" />
+                  ) : (
+                    <Zap className="w-5 h-5" />
+                  )}
                   {ctaLabel}
                 </button>
               )}

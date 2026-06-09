@@ -1,5 +1,5 @@
 /**
- * GoFit Pay — Service Layer (Fase 4)
+ * GoFit Pay — Service Layer (Fase 5)
  *
  * Exports públicos para uso nos componentes React.
  * AsaasService NÃO é exportado daqui — vive apenas nas Edge Functions.

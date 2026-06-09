@@ -222,31 +222,115 @@ export const GoFitPayService = {
   /* ─── Edge Functions (Fase 5+) ───────────────────────────────────── */
 
   /**
-   * FASE 5 — Cria subconta Asaas para a empresa.
+   * FASE 5 — Cria/vincula subconta Asaas para a empresa.
    *
-   * Edge Function:
+   * Edge Function (activate_gofit_pay):
    *   1. Lê gofit_pay_config (dados do wizard)
-   *   2. POST /accounts no Asaas com ASAAS_API_KEY da plataforma
-   *   3. Criptografa a subconta apiKey com GOFIT_PAY_ENCRYPTION_KEY
-   *   4. Salva em gofit_pay_accounts (provider_api_key_encrypted)
-   *   5. Atualiza company_modules.status = 'in_review'
+   *   2. POST /accounts no Asaas com ASAAS_API_KEY da plataforma (sandbox)
+   *   3. Criptografa a subconta apiKey com AES-256-GCM
+   *   4. Salva em gofit_pay_accounts (provider_api_key_encrypted nunca retornado)
+   *   5. Salva gofit_pay_settings (multa, juros, desconto)
+   *   6. Atualiza company_modules.status = 'in_review' ou 'active'
+   *
+   * SEGURANÇA: contractor_id vem do JWT na Edge Function — nunca do body.
    */
   async createAccount(
-    contractorId: string,
-    environment:  AsaasEnvironment = "sandbox"
-  ): Promise<EdgeFunctionResponse<{ provider_account_id: string }>> {
-    throw new GoFitPayNotImplementedError(
-      "createAccount", 5,
-      "A criação de subconta será implementada na Fase 5."
-    );
-
-    /* FASE 5:
+    _contractorId: string,
+    _environment:  AsaasEnvironment = "sandbox"
+  ): Promise<EdgeFunctionResponse<{
+    status:              string;
+    provider_account_id: string;
+    provider_wallet_id:  string | null;
+    account_key_stored:  boolean | null;
+    onboarding_status:   string;
+    environment:         string | null;
+    message:             string;
+    already_activated?:  boolean;
+  }>> {
     const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
-      body: { action: "create-account", contractor_id: contractorId, environment },
+      body: { action: "activate_gofit_pay" },
+      // contractor_id NÃO enviado no body — Edge Function resolve via JWT
     });
-    if (error) return { success: false, error: error.message };
-    return data as EdgeFunctionResponse<{ provider_account_id: string }>;
-    */
+
+    if (error) {
+      console.error("[GoFitPayService] createAccount error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return data as EdgeFunctionResponse<{
+      status:              string;
+      provider_account_id: string;
+      provider_wallet_id:  string | null;
+      account_key_stored:  boolean | null;
+      onboarding_status:   string;
+      environment:         string | null;
+      message:             string;
+      already_activated?:  boolean;
+    }>;
+  },
+
+  /**
+   * FASE 5 — Consulta status atual da ativação.
+   * Retorna dados seguros: status, provider_account_id, provider_wallet_id, datas.
+   * Nunca retorna provider_api_key_encrypted.
+   */
+  async getActivationStatus(): Promise<EdgeFunctionResponse<{
+    activated:           boolean;
+    status:              string | null;
+    module_status:       string | null;
+    provider_account_id: string | null;
+    provider_wallet_id:  string | null;
+    activated_at:        string | null;
+    last_sync_at:        string | null;
+    sync_error:          string | null;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "get_activation_status" },
+    });
+
+    if (error) {
+      console.error("[GoFitPayService] getActivationStatus error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return data as EdgeFunctionResponse<{
+      activated:           boolean;
+      status:              string | null;
+      module_status:       string | null;
+      provider_account_id: string | null;
+      provider_wallet_id:  string | null;
+      activated_at:        string | null;
+      last_sync_at:        string | null;
+      sync_error:          string | null;
+    }>;
+  },
+
+  /**
+   * FASE 5 — Retry após falha de ativação.
+   * Só permitido quando status = 'activation_failed'.
+   * Em sandbox: limpa o registro anterior e re-cria subconta.
+   */
+  async retryActivation(): Promise<EdgeFunctionResponse<{
+    status:              string;
+    provider_account_id: string;
+    provider_wallet_id:  string | null;
+    message:             string;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "retry_activation" },
+    });
+
+    if (error) {
+      console.error("[GoFitPayService] retryActivation error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return data as EdgeFunctionResponse<{
+      status:              string;
+      provider_account_id: string;
+      provider_wallet_id:  string | null;
+      message:             string;
+    }>;
   },
 
   /**
