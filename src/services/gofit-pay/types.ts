@@ -1,12 +1,11 @@
 /**
  * Fase 4 — GoFit Pay: Tipos compartilhados
- *
- * Usados por GoFitPayService (frontend→EdgeFunction) e pelas
- * Edge Functions (server-side). AsaasService vive apenas no servidor.
+ * Alinhado ao spec formal (campos canônicos do spec + aliases de compat)
  */
 
-/* ─── Ambiente ────────────────────────────────────────────────────── */
-export type AsaasEnvironment = "sandbox" | "production";
+/* ─── Provedor / Ambiente ─────────────────────────────────────────── */
+export type GatewayProvider    = "asaas";                          // extensível para outros gateways
+export type AsaasEnvironment   = "sandbox" | "production";
 
 /* ─── Status de conta (gofit_pay_accounts) ────────────────────────── */
 export type AccountStatus = "pending" | "active" | "suspended" | "cancelled" | "rejected";
@@ -26,7 +25,7 @@ export type ChargeStatus =
   | "AWAITING_RISK_ANALYSIS"
   | "CANCELLED";
 
-/* ─── Formas de pagamento suportadas ──────────────────────────────── */
+/* ─── Formas de pagamento ─────────────────────────────────────────── */
 export type BillingType = "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD" | "UNDEFINED";
 
 /* ─── Status de onboarding (gofit_pay_config) ─────────────────────── */
@@ -38,114 +37,165 @@ export type OnboardingStatus =
   | "suspenso"
   | "cancelado";
 
-/* ─── Conta GoFit Pay (gofit_pay_accounts) ────────────────────────── */
+/* ─── gofit_pay_accounts ──────────────────────────────────────────── */
 export interface GoFitPayAccount {
-  id: string;
-  contractor_id: string;
-  account_status: AccountStatus;
-  asaas_account_id: string | null;
-  asaas_environment: AsaasEnvironment | null;
-  asaas_wallet_id: string | null;
-  activated_at: string | null;
-  last_sync_at: string | null;
-  sync_error: string | null;
+  id:                               string;
+  contractor_id:                    string;
+  provider:                         GatewayProvider;
+  provider_account_id:              string | null;   // ID da subconta no provedor
+  provider_wallet_id:               string | null;   // wallet ID para splits
+  // provider_api_key_encrypted: OMITIDO — nunca retornar ao frontend
+  status:                           AccountStatus;
+  account_status:                   AccountStatus;   // alias legado (mesmo valor)
+  display_name:                     string | null;
+  automatic_transfer_enabled:       boolean;
+  credit_card_anticipation_enabled: boolean;
+  activated_at:                     string | null;
+  last_sync_at:                     string | null;
+  sync_error:                       string | null;
+  created_at:                       string;
+  updated_at:                       string;
 }
 
-/* ─── Configurações operacionais (gofit_pay_settings) ─────────────── */
+/* ─── gofit_pay_settings ──────────────────────────────────────────── */
 export interface GoFitPaySettings {
-  id: string;
-  contractor_id: string;
-  webhook_url: string | null;
+  id:                       string;
+  contractor_id:            string;
+  gofit_pay_account_id:     string | null;
+  display_name:             string | null;
+  // Multa (spec: late_fee_*)
+  late_fee_enabled:         boolean;
+  late_fee_percent:         number | null;
+  // Juros (spec: interest_*)
+  interest_enabled:         boolean;
+  interest_percent:         number | null;
+  // Desconto antecipado (spec: early_discount_*)
+  early_discount_enabled:   boolean;
+  early_discount_percent:   number | null;
+  early_discount_days:      number | null;
+  // Transferência e antecipação
+  auto_transfer_disabled:   boolean;
+  auto_anticipation_enabled: boolean;
+  // Campos extras (mantidos da implementação inicial)
+  webhook_url:              string | null;
   charge_description_template: string;
-  boleto_expiry_days: number;
-  pix_expiry_hours: number;
-  send_payment_email: boolean;
-  send_payment_sms: boolean;
-  send_payment_whatsapp: boolean;
-  auto_confirm_received: boolean;
-  notify_on_overdue: boolean;
+  boleto_expiry_days:       number;
+  pix_expiry_hours:         number;
+  send_payment_email:       boolean;
+  send_payment_sms:         boolean;
+  send_payment_whatsapp:    boolean;
+  auto_confirm_received:    boolean;
+  notify_on_overdue:        boolean;
 }
 
-/* ─── Customer de pagamento (payment_customers) ───────────────────── */
+/* ─── payment_customers ───────────────────────────────────────────── */
 export interface PaymentCustomer {
-  id: string;
-  contractor_id: string;
-  client_id: string;
-  name: string;
-  email: string | null;
-  cpf_cnpj: string | null;
-  phone: string | null;
-  asaas_customer_id: string | null;
-  asaas_environment: AsaasEnvironment | null;
-  synced_at: string | null;
+  id:                    string;
+  contractor_id:         string;
+  student_id:            string | null;    // nome canônico do spec
+  client_id:             string | null;    // alias legado (mesmo valor)
+  provider:              GatewayProvider;
+  provider_customer_id:  string | null;    // ex: cus_xxx (Asaas)
+  // Campos extras (cache do aluno)
+  name:                  string;
+  email:                 string | null;
+  cpf_cnpj:              string | null;
+  phone:                 string | null;
+  synced_at:             string | null;
+  created_at:            string;
+  updated_at:            string;
 }
 
-/* ─── Cobrança (payment_charges) ──────────────────────────────────── */
+/* ─── payment_charges ─────────────────────────────────────────────── */
 export interface PaymentCharge {
-  id: string;
-  contractor_id: string;
-  payment_customer_id: string | null;
-  receivable_id: string | null;
-  asaas_payment_id: string | null;
-  billing_type: BillingType;
-  value: number;
-  net_value: number | null;
-  due_date: string;             // YYYY-MM-DD
-  description: string | null;
-  status: ChargeStatus;
-  payment_url: string | null;
-  bank_slip_url: string | null;
-  pix_qr_code: string | null;
-  pix_copy_paste: string | null;
-  confirmed_at: string | null;
-  paid_at: string | null;
-  refunded_at: string | null;
-  created_at: string;
+  id:                    string;
+  contractor_id:         string;
+  student_id:            string | null;
+  student_contract_id:   string | null;
+  receivable_id:         string | null;
+  provider:              GatewayProvider;
+  provider_charge_id:    string | null;    // ex: pay_xxx (Asaas)
+  billing_type:          BillingType;
+  amount:                number;           // nome canônico do spec
+  value:                 number;           // alias legado (mesmo valor)
+  due_date:              string;           // YYYY-MM-DD
+  status:                ChargeStatus;
+  invoice_url:           string | null;    // URL da fatura Asaas
+  payment_url:           string | null;    // link interativo de pagamento
+  bank_slip_url:         string | null;
+  pix_qr_code:           string | null;
+  pix_copy_paste:        string | null;
+  raw_response_json:     Record<string, unknown>;
+  paid_at:               string | null;
+  refunded_at:           string | null;
+  created_at:            string;
+  updated_at:            string;
 }
 
-/* ─── Evento de webhook (gofit_pay_webhook_events) ────────────────── */
+/* ─── gofit_pay_webhook_events ────────────────────────────────────── */
 export interface WebhookEvent {
-  id: string;
-  contractor_id: string;
-  event_type: string;
-  asaas_payment_id: string | null;
-  raw_payload: Record<string, unknown>;
-  processed: boolean;
-  processed_at: string | null;
-  processing_attempts: number;
-  error_message: string | null;
-  received_at: string;
+  id:                    string;
+  contractor_id:         string;
+  provider:              GatewayProvider;
+  event_type:            string;
+  provider_event_id:     string | null;    // ID único do evento no provedor
+  provider_payment_id:   string | null;    // ID da cobrança no provedor
+  receivable_id:         string | null;    // receivable afetado (Fase 6)
+  payload_json:          Record<string, unknown>;
+  processed:             boolean;
+  processed_at:          string | null;
+  error_message:         string | null;
+  received_at:           string;
+  created_at:            string;
 }
 
 /* ─── Payloads para Edge Functions ────────────────────────────────── */
 
-/** Payload enviado pelo frontend para criar subconta (Fase 5) */
+/** Frontend → Edge Function: criar subconta (Fase 5) */
 export interface CreateAccountPayload {
   contractor_id: string;
-  environment: AsaasEnvironment;
+  environment:   AsaasEnvironment;
 }
 
-/** Payload enviado pelo frontend para criar cobrança (Fase 5) */
+/** Frontend → Edge Function: criar cobrança (Fase 5) */
 export interface CreateChargePayload {
-  contractor_id: string;
-  client_id: string;
-  receivable_id?: string;
-  billing_type: BillingType;
-  value: number;
-  due_date: string;       // YYYY-MM-DD
-  description?: string;
+  contractor_id:       string;
+  student_id:          string;
+  student_contract_id?: string;
+  receivable_id?:      string;
+  billing_type:        BillingType;
+  amount:              number;
+  due_date:            string;        // YYYY-MM-DD
+  description?:        string;
   external_reference?: string;
 }
 
 /** Resposta padrão das Edge Functions */
 export interface EdgeFunctionResponse<T = unknown> {
   success: boolean;
-  data?: T;
-  error?: string;
-  code?: string;
+  data?:   T;
+  error?:  string;
+  code?:   string;
 }
 
-/* ─── Mapeamento de status Asaas → PT-BR ─────────────────────────── */
+/* ─── Variáveis de ambiente da Edge Function ──────────────────────── */
+/**
+ * Definidas em Supabase Secrets (nunca no frontend):
+ *   ASAAS_ENV              = sandbox | production
+ *   ASAAS_BASE_URL         = https://sandbox.asaas.com/api/v3
+ *   ASAAS_API_KEY          = $aact_xxx (chave da plataforma — para criar subcontas)
+ *   ASAAS_WEBHOOK_TOKEN    = token de validação HMAC dos webhooks
+ *   GOFIT_PAY_ENCRYPTION_KEY = chave AES-256-GCM para criptografar provider_api_key
+ */
+export const ASAAS_ENV_VARS = [
+  "ASAAS_ENV",
+  "ASAAS_BASE_URL",
+  "ASAAS_API_KEY",
+  "ASAAS_WEBHOOK_TOKEN",
+  "GOFIT_PAY_ENCRYPTION_KEY",
+] as const;
+
+/* ─── Mapeamentos de display ──────────────────────────────────────── */
 export const CHARGE_STATUS_LABEL: Record<ChargeStatus, string> = {
   PENDING:                      "Aguardando pagamento",
   RECEIVED:                     "Recebido",

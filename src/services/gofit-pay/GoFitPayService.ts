@@ -1,20 +1,25 @@
 /**
  * Fase 4 — GoFit Pay: Serviço frontend
+ * Alinhado ao spec formal (campos canônicos: amount, student_id, provider_*)
  *
- * ARQUITETURA OBRIGATÓRIA:
- *   Componente → GoFitPayService → Supabase Edge Function → AsaasService → API Asaas
+ * ARQUITETURA (obrigatória):
+ *   Tela/Componente
+ *   → GoFitPayService          (este arquivo — frontend)
+ *   → Supabase Edge Function   (gofit-pay-base)
+ *   → AsaasService             (server-side — _asaas.ts)
+ *   → API Asaas
  *
  * REGRAS DE SEGURANÇA:
  *   ✗ NUNCA chama a API Asaas diretamente
  *   ✗ NUNCA expõe ASAAS_API_KEY no frontend
  *   ✗ NUNCA usa VITE_SUPABASE_SERVICE_ROLE_KEY no frontend
+ *   ✗ NUNCA lê provider_api_key_encrypted do banco (omitir da query)
  *   ✓ Toda operação sensível → Edge Function via supabase.functions.invoke()
- *   ✓ Leituras de display → queries diretas ao Supabase (tabelas públicas RLS)
+ *   ✓ Leituras de display → queries Supabase com RLS
  *
- * FASE ATUAL: 4 (estrutura isolada)
- *   - Métodos de leitura: operacionais (leem do banco)
- *   - Métodos de escrita: stubs que retornam erro explicativo
- *     (serão implementados na Fase 5 com as Edge Functions)
+ * FASE ATUAL: 4
+ *   - Leituras: funcionais
+ *   - Escritas via Asaas: stubs (GoFitPayNotImplementedError)
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -23,24 +28,34 @@ import type {
   GoFitPaySettings,
   PaymentCharge,
   PaymentCustomer,
+  WebhookEvent,
   CreateChargePayload,
   EdgeFunctionResponse,
+  AsaasEnvironment,
 } from "./types";
+
+/* ── Campos seguros para SELECT (omite provider_api_key_encrypted) ── */
+const ACCOUNT_SAFE_FIELDS = [
+  "id", "contractor_id", "provider", "provider_account_id", "provider_wallet_id",
+  "status", "account_status", "display_name",
+  "automatic_transfer_enabled", "credit_card_anticipation_enabled",
+  "activated_at", "last_sync_at", "sync_error", "created_at", "updated_at",
+].join(",");
 
 /* ══════════════════════════════════════════════════════════════════ */
 
 export const GoFitPayService = {
 
-  /* ─── LEITURA — Conta GoFit Pay ─────────────────────────────────── */
+  /* ─── Conta GoFit Pay ────────────────────────────────────────────── */
 
   /**
-   * Busca a conta Asaas da empresa.
-   * Retorna null se ainda não foi criada (pré-Fase 5).
+   * Busca a conta do provedor da empresa.
+   * OMITE provider_api_key_encrypted por segurança.
    */
   async getAccount(contractorId: string): Promise<GoFitPayAccount | null> {
     const { data, error } = await supabase
       .from("gofit_pay_accounts")
-      .select("*")
+      .select(ACCOUNT_SAFE_FIELDS)
       .eq("contractor_id", contractorId)
       .maybeSingle();
 
@@ -48,15 +63,11 @@ export const GoFitPayService = {
       console.error("[GoFitPayService] getAccount error:", error.message);
       return null;
     }
-    return data;
+    return data as GoFitPayAccount | null;
   },
 
-  /* ─── LEITURA — Configurações operacionais ───────────────────────── */
+  /* ─── Configurações operacionais ─────────────────────────────────── */
 
-  /**
-   * Busca as configurações de runtime da empresa.
-   * Retorna null se ainda não configuradas.
-   */
   async getSettings(contractorId: string): Promise<GoFitPaySettings | null> {
     const { data, error } = await supabase
       .from("gofit_pay_settings")
@@ -68,12 +79,12 @@ export const GoFitPayService = {
       console.error("[GoFitPayService] getSettings error:", error.message);
       return null;
     }
-    return data;
+    return data as GoFitPaySettings | null;
   },
 
   /**
-   * Salva/atualiza configurações operacionais.
-   * Estas são editadas pelo usuário diretamente (sem Edge Function).
+   * Salva configurações operacionais (editadas pelo usuário).
+   * Campos de billing (late_fee, interest, discount) também passam por aqui.
    */
   async saveSettings(
     contractorId: string,
@@ -92,27 +103,31 @@ export const GoFitPayService = {
         .from("gofit_pay_settings")
         .update({ ...settings, updated_at: now })
         .eq("contractor_id", contractorId);
-
       if (error) return { success: false, error: error.message };
     } else {
       const { error } = await supabase
         .from("gofit_pay_settings")
         .insert({ contractor_id: contractorId, ...settings, created_at: now, updated_at: now });
-
       if (error) return { success: false, error: error.message };
     }
 
     return { success: true };
   },
 
-  /* ─── LEITURA — Cobranças ────────────────────────────────────────── */
+  /* ─── Cobranças ──────────────────────────────────────────────────── */
 
   /**
-   * Lista cobranças da empresa com filtros opcionais.
+   * Lista cobranças usando campos canônicos do spec.
    */
   async listCharges(
     contractorId: string,
-    opts?: { status?: string; limit?: number; offset?: number }
+    opts?: {
+      status?:        string;
+      student_id?:    string;
+      receivable_id?: string;
+      limit?:         number;
+      offset?:        number;
+    }
   ): Promise<PaymentCharge[]> {
     let query = supabase
       .from("payment_charges")
@@ -120,9 +135,11 @@ export const GoFitPayService = {
       .eq("contractor_id", contractorId)
       .order("created_at", { ascending: false });
 
-    if (opts?.status) query = query.eq("status", opts.status);
-    if (opts?.limit)  query = query.limit(opts.limit);
-    if (opts?.offset) query = query.range(opts.offset, (opts.offset + (opts.limit ?? 50)) - 1);
+    if (opts?.status)        query = query.eq("status", opts.status);
+    if (opts?.student_id)    query = query.eq("student_id", opts.student_id);
+    if (opts?.receivable_id) query = query.eq("receivable_id", opts.receivable_id);
+    if (opts?.limit)         query = query.limit(opts.limit);
+    if (opts?.offset)        query = query.range(opts.offset, (opts.offset + (opts.limit ?? 50)) - 1);
 
     const { data, error } = await query;
     if (error) {
@@ -133,135 +150,152 @@ export const GoFitPayService = {
   },
 
   /**
-   * Busca uma cobrança por ID de pagamento Asaas.
+   * Busca cobrança pelo provider_charge_id (ex: pay_xxx do Asaas).
    */
-  async getChargeByAsaasId(asaasPaymentId: string): Promise<PaymentCharge | null> {
+  async getChargeByProviderChargeId(providerChargeId: string): Promise<PaymentCharge | null> {
     const { data, error } = await supabase
       .from("payment_charges")
       .select("*")
-      .eq("asaas_payment_id", asaasPaymentId)
+      .eq("provider_charge_id", providerChargeId)
       .maybeSingle();
 
     if (error) {
-      console.error("[GoFitPayService] getChargeByAsaasId error:", error.message);
+      console.error("[GoFitPayService] getChargeByProviderChargeId error:", error.message);
       return null;
     }
-    return data;
+    return data as PaymentCharge | null;
   },
 
-  /* ─── LEITURA — Customers ────────────────────────────────────────── */
+  /* ─── Customers ──────────────────────────────────────────────────── */
 
   /**
-   * Busca o customer Asaas de um aluno específico.
+   * Busca o customer do provedor para um aluno específico.
+   * Usa student_id (canônico do spec).
    */
-  async getCustomerByClientId(
+  async getCustomerByStudentId(
     contractorId: string,
-    clientId: string
+    studentId:    string
   ): Promise<PaymentCustomer | null> {
     const { data, error } = await supabase
       .from("payment_customers")
       .select("*")
       .eq("contractor_id", contractorId)
-      .eq("client_id", clientId)
+      .eq("student_id", studentId)
       .maybeSingle();
 
     if (error) {
-      console.error("[GoFitPayService] getCustomerByClientId error:", error.message);
-      return null;
+      // Tenta por client_id (legado) se não encontrou por student_id
+      const { data: fallback } = await supabase
+        .from("payment_customers")
+        .select("*")
+        .eq("contractor_id", contractorId)
+        .eq("client_id", studentId)
+        .maybeSingle();
+      return (fallback as PaymentCustomer | null);
     }
-    return data;
+    return data as PaymentCustomer | null;
   },
 
-  /* ─── ESCRITA — Edge Functions (Fase 5+) ─────────────────────────── */
+  /* ─── Webhook events (auditoria) ─────────────────────────────────── */
+
+  async listWebhookEvents(
+    contractorId: string,
+    opts?: { processed?: boolean; limit?: number }
+  ): Promise<WebhookEvent[]> {
+    let query = supabase
+      .from("gofit_pay_webhook_events")
+      .select("id,contractor_id,provider,event_type,provider_event_id,provider_payment_id,receivable_id,processed,processed_at,error_message,received_at,created_at")
+      .eq("contractor_id", contractorId)
+      .order("received_at", { ascending: false });
+
+    if (opts?.processed !== undefined) query = query.eq("processed", opts.processed);
+    if (opts?.limit) query = query.limit(opts.limit);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("[GoFitPayService] listWebhookEvents error:", error.message);
+      return [];
+    }
+    return (data ?? []) as WebhookEvent[];
+  },
+
+  /* ─── Edge Functions (Fase 5+) ───────────────────────────────────── */
 
   /**
    * FASE 5 — Cria subconta Asaas para a empresa.
    *
-   * Chamar apenas após wizard completo (onboarding_status = 'enviado').
-   * A Edge Function:
-   *   1. Lê gofit_pay_config para obter os dados do onboarding
-   *   2. Chama POST /v3/accounts no Asaas
-   *   3. Salva o retorno em gofit_pay_accounts
-   *   4. Atualiza company_modules.status = 'in_review'
-   *
-   * @throws Error com mensagem amigável se a Fase 5 ainda não estiver disponível
+   * Edge Function:
+   *   1. Lê gofit_pay_config (dados do wizard)
+   *   2. POST /accounts no Asaas com ASAAS_API_KEY da plataforma
+   *   3. Criptografa a subconta apiKey com GOFIT_PAY_ENCRYPTION_KEY
+   *   4. Salva em gofit_pay_accounts (provider_api_key_encrypted)
+   *   5. Atualiza company_modules.status = 'in_review'
    */
   async createAccount(
     contractorId: string,
-    environment: "sandbox" | "production" = "sandbox"
-  ): Promise<EdgeFunctionResponse<{ account_id: string }>> {
-    // ── Fase 4: Edge Function ainda não existe ──
-    // Remover este bloco e implementar na Fase 5
+    environment:  AsaasEnvironment = "sandbox"
+  ): Promise<EdgeFunctionResponse<{ provider_account_id: string }>> {
     throw new GoFitPayNotImplementedError(
-      "createAccount",
-      5,
-      "A criação de subconta Asaas será implementada na Fase 5."
+      "createAccount", 5,
+      "A criação de subconta será implementada na Fase 5."
     );
 
-    /* FASE 5 — descomentar e implementar:
-    const { data, error } = await supabase.functions.invoke("gofit-pay-create-account", {
-      body: { contractor_id: contractorId, environment },
+    /* FASE 5:
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "create-account", contractor_id: contractorId, environment },
     });
     if (error) return { success: false, error: error.message };
-    return data as EdgeFunctionResponse<{ account_id: string }>;
+    return data as EdgeFunctionResponse<{ provider_account_id: string }>;
     */
   },
 
   /**
-   * FASE 5 — Cria uma cobrança via Asaas.
+   * FASE 5 — Cria cobrança via provedor.
    *
-   * A Edge Function:
-   *   1. Cria/verifica o customer Asaas do aluno
-   *   2. Chama POST /v3/payments no Asaas
-   *   3. Salva em payment_charges
-   *   4. Atualiza receivables com os campos gateway se receivable_id fornecido
-   *
-   * @throws GoFitPayNotImplementedError se Fase 5 ainda não disponível
+   * Edge Function:
+   *   1. Resolve/cria customer (upsertCustomer)
+   *   2. Descriptografa provider_api_key_encrypted da subconta
+   *   3. POST /payments no Asaas
+   *   4. Salva em payment_charges (campos canônicos + aliases)
+   *   5. Atualiza receivable.gateway_* se receivable_id fornecido
    */
   async createCharge(
-    _payload: CreateChargePayload
-  ): Promise<EdgeFunctionResponse<{ charge_id: string; payment_url: string }>> {
-    // ── Fase 4: Edge Function ainda não existe ──
+    payload: CreateChargePayload
+  ): Promise<EdgeFunctionResponse<{ charge_id: string; invoice_url: string; pix_qr_code?: string; bank_slip_url?: string }>> {
     throw new GoFitPayNotImplementedError(
-      "createCharge",
-      5,
+      "createCharge", 5,
       "A emissão de cobranças será implementada na Fase 5."
     );
 
-    /* FASE 5 — descomentar e implementar:
-    const { data, error } = await supabase.functions.invoke("gofit-pay-create-charge", {
-      body: _payload,
+    /* FASE 5:
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "create-charge", ...payload },
     });
     if (error) return { success: false, error: error.message };
-    return data as EdgeFunctionResponse<{ charge_id: string; payment_url: string }>;
+    return data;
     */
   },
 
   /**
-   * FASE 6 — Cancela uma cobrança via Asaas.
-   *
-   * @throws GoFitPayNotImplementedError se Fase 6 ainda não disponível
+   * FASE 6 — Cancela cobrança.
    */
-  async cancelCharge(
-    _chargeId: string
-  ): Promise<EdgeFunctionResponse> {
+  async cancelCharge(chargeId: string): Promise<EdgeFunctionResponse> {
     throw new GoFitPayNotImplementedError(
-      "cancelCharge",
-      6,
+      "cancelCharge", 6,
       "O cancelamento de cobranças será implementado na Fase 6."
     );
   },
 
 } as const;
 
-/* ─── Erro de funcionalidade ainda não implementada ──────────────── */
+/* ─── Erro de funcionalidade não implementada ────────────────────── */
 export class GoFitPayNotImplementedError extends Error {
   constructor(
     public readonly method: string,
     public readonly availableInPhase: number,
     message: string
   ) {
-    super(`[GoFitPay] ${method}: ${message} (disponível na Fase ${availableInPhase})`);
+    super(`[GoFitPay] ${method}: ${message} (Fase ${availableInPhase})`);
     this.name = "GoFitPayNotImplementedError";
   }
 }
