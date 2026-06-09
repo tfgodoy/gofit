@@ -21,13 +21,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 /* ─── Status config ──────────────────────────────────────────────── */
+// onboarding_status da gofit_pay_config (wizard interno)
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType; desc: string }> = {
-  rascunho:   { label: "Rascunho",          color: "gray",   icon: Clock,         desc: "Você iniciou o cadastro mas ainda não enviou para análise." },
-  enviado:    { label: "Em análise",         color: "blue",   icon: Clock,         desc: "Seus dados foram enviados e estão sendo analisados pela nossa equipe." },
-  em_analise: { label: "Em análise",         color: "blue",   icon: Clock,         desc: "Nossa equipe está revisando seus documentos. Prazo: até 2 dias úteis." },
-  ativo:      { label: "Ativo",              color: "green",  icon: CheckCircle2,  desc: "Seu GoFit Pay está ativo e pronto para receber pagamentos." },
-  suspenso:   { label: "Suspenso",           color: "yellow", icon: AlertCircle,   desc: "Sua conta está temporariamente suspensa. Entre em contato com o suporte." },
-  cancelado:  { label: "Cancelado",          color: "red",    icon: XCircle,       desc: "Sua conta foi cancelada. Reative para voltar a receber pagamentos." },
+  rascunho:   { label: "Cadastro em andamento", color: "gray",   icon: Clock,         desc: "Você iniciou o cadastro mas ainda não enviou todas as informações." },
+  enviado:    { label: "Dados enviados",         color: "blue",   icon: Clock,         desc: "Seus dados foram preenchidos. A ativação será processada em breve." },
+  em_analise: { label: "Em análise",             color: "blue",   icon: Clock,         desc: "Nossa equipe está revisando seus documentos. Prazo: até 2 dias úteis." },
+  ativo:      { label: "Ativo",                  color: "green",  icon: CheckCircle2,  desc: "Seu GoFit Pay está ativo e pronto para receber pagamentos." },
+  suspenso:   { label: "Suspenso",               color: "yellow", icon: AlertCircle,   desc: "Sua conta está temporariamente suspensa. Entre em contato com o suporte." },
+  cancelado:  { label: "Cancelado",              color: "red",    icon: XCircle,       desc: "Sua conta foi cancelada. Reative para voltar a receber pagamentos." },
 };
 
 const COLOR_CLASSES: Record<string, { badge: string; icon: string; border: string }> = {
@@ -64,6 +65,7 @@ export default function GoFitPayPage() {
   const navigate = useNavigate();
 
   const [onboardingStatus, setOnboardingStatus] = useState<string>("enviado");
+  const [moduleStatus,     setModuleStatus]     = useState<string>("pending");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -74,13 +76,31 @@ export default function GoFitPayPage() {
   async function loadConfig() {
     if (!user?.contractorId) return;
 
-    const { data } = await supabase
+    const { data: cfg } = await supabase
       .from("gofit_pay_config")
       .select("onboarding_status")
       .eq("contractor_id", user!.contractorId)
       .maybeSingle();
 
-    if (data) setOnboardingStatus(data.onboarding_status ?? "enviado");
+    if (cfg) setOnboardingStatus(cfg.onboarding_status ?? "enviado");
+
+    // Status do módulo (pending → wizard completo mas Asaas ainda não ativado)
+    const { data: mod } = await supabase
+      .from("modules")
+      .select("id")
+      .eq("slug", "gofit_pay")
+      .maybeSingle();
+
+    if (mod) {
+      const { data: cm } = await supabase
+        .from("company_modules")
+        .select("status")
+        .eq("contractor_id", user!.contractorId)
+        .eq("module_id", mod.id)
+        .maybeSingle();
+      if (cm) setModuleStatus(cm.status);
+    }
+
     setLoading(false);
   }
 
@@ -88,7 +108,8 @@ export default function GoFitPayPage() {
   const colorCls   = COLOR_CLASSES[statusInfo.color] ?? COLOR_CLASSES["gray"];
   const StatusIcon = statusInfo.icon;
 
-  const isAtivo = onboardingStatus === "ativo";
+  // Ativo = company_modules.status === 'active' (definido pela Fase 5/Asaas)
+  const isAtivo = moduleStatus === "active";
 
   return (
     <AppLayout>
@@ -145,7 +166,7 @@ export default function GoFitPayPage() {
                     <p className="text-xs text-gray-500">{statusInfo.desc}</p>
                     {(onboardingStatus === "enviado" || onboardingStatus === "em_analise") && (
                       <p className="text-xs text-gray-400 mt-2">
-                        Em caso de dúvidas, entre em contato com o suporte GoFit.
+                        A ativação completa será processada em breve. Em caso de dúvidas, entre em contato com o suporte GoFit.
                       </p>
                     )}
                   </div>

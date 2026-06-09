@@ -4,7 +4,8 @@
  *
  * 5 etapas: Empresa → Responsável → Conta bancária → Configurações → Revisão
  * - Salva em gofit_pay_config a cada etapa (upsert por contractor_id)
- * - Ao finalizar: atualiza company_modules.status = 'in_review'
+ * - Ao finalizar: atualiza company_modules.status = 'pending'
+ *   (in_review será usado somente após envio real ao Asaas na Fase 5)
  * - NÃO chama Asaas
  */
 
@@ -323,7 +324,8 @@ export default function GoFitPayAtivarPage() {
       .update({ onboarding_status: "enviado", updated_at: now })
       .eq("contractor_id", user!.contractorId);
 
-    // Atualiza ou cria company_modules → in_review
+    // Atualiza ou cria company_modules → pending
+    // OBS: 'in_review' só será usado na Fase 5, após envio real ao Asaas
     const { data: existing } = await supabase
       .from("company_modules")
       .select("id")
@@ -334,7 +336,7 @@ export default function GoFitPayAtivarPage() {
     if (existing) {
       await supabase
         .from("company_modules")
-        .update({ status: "in_review", updated_at: now })
+        .update({ status: "pending", updated_at: now })
         .eq("id", existing.id);
     } else {
       await supabase
@@ -342,7 +344,7 @@ export default function GoFitPayAtivarPage() {
         .insert({
           contractor_id: user!.contractorId,
           module_id: moduleId,
-          status: "in_review",
+          status: "pending",
           activated_at: now,
           config_json: {},
         });
