@@ -73,6 +73,7 @@ import AnamnesePublicPage           from "@/pages/public/AnamnesePublicPage";
 import BookingPage                  from "@/pages/public/BookingPage";
 import PublicReciboPage             from "@/pages/public/PublicReciboPage";
 import ConfigAgendamentoPublicoPage from "@/pages/app/ConfigAgendamentoPublicoPage";
+import LojaModulosPage             from "@/pages/app/LojaModulosPage";
 
 const queryClient = new QueryClient();
 
@@ -208,7 +209,8 @@ export default function App() {
             <Route path="/app/configuracoes/*"   element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Recursos do Sistema" /></AdminOnlyGuard></AppGuard>} />
-            <Route path="/app/loja"              element={<AppGuard><PlaceholderPage title="Loja" /></AppGuard>} />
+            {/* Loja de Módulos — Fase 2 GoFit Pay */}
+            <Route path="/app/loja"              element={<AppGuard><LojaModulosPage /></AppGuard>} />
             <Route path="/app/ajuda/*"           element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
 
             {/* Fallback */}
