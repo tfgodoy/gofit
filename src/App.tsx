@@ -74,6 +74,9 @@ import BookingPage                  from "@/pages/public/BookingPage";
 import PublicReciboPage             from "@/pages/public/PublicReciboPage";
 import ConfigAgendamentoPublicoPage from "@/pages/app/ConfigAgendamentoPublicoPage";
 import LojaModulosPage             from "@/pages/app/LojaModulosPage";
+import GoFitPayLandingPage        from "@/pages/app/gofit-pay/GoFitPayLandingPage";
+import GoFitPayAtivarPage         from "@/pages/app/gofit-pay/GoFitPayAtivarPage";
+import GoFitPayPage               from "@/pages/app/gofit-pay/GoFitPayPage";
 
 const queryClient = new QueryClient();
 
@@ -209,9 +212,13 @@ export default function App() {
             <Route path="/app/configuracoes/*"   element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
             <Route path="/app/empresa"           element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
             <Route path="/app/recursos"          element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Recursos do Sistema" /></AdminOnlyGuard></AppGuard>} />
-            {/* Loja de Módulos — Fase 2 GoFit Pay */}
-            <Route path="/app/loja"              element={<AppGuard><LojaModulosPage /></AppGuard>} />
-            <Route path="/app/ajuda/*"           element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
+            {/* Loja de Módulos — Fase 2 */}
+            <Route path="/app/loja"                    element={<AppGuard><LojaModulosPage /></AppGuard>} />
+            {/* GoFit Pay — Fase 3 */}
+            <Route path="/app/loja/gofit-pay"          element={<AppGuard><GoFitPayLandingPage /></AppGuard>} />
+            <Route path="/app/loja/gofit-pay/ativar"   element={<AppGuard><GoFitPayAtivarPage /></AppGuard>} />
+            <Route path="/app/gofit-pay"               element={<AppGuard><GoFitPayPage /></AppGuard>} />
+            <Route path="/app/ajuda/*"                 element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
