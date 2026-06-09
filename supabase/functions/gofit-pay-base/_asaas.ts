@@ -1,62 +1,162 @@
 /**
  * AsaasService — SERVER-SIDE ONLY (Edge Function)
  *
- * SEGURANÇA:
- *   - Este arquivo NUNCA deve ser importado por código frontend/React
- *   - Variáveis de ambiente lidas APENAS de Deno.env (Supabase Secrets):
- *       ASAAS_ENV              = sandbox | production
- *       ASAAS_BASE_URL         = URL base da API Asaas
- *       ASAAS_API_KEY          = chave da plataforma (para criar subcontas)
- *       ASAAS_WEBHOOK_TOKEN    = token de validação HMAC
- *       GOFIT_PAY_ENCRYPTION_KEY = chave AES-256-GCM para criptografar subconta keys
- *   - provider_api_key_encrypted lida do DB e descriptografada aqui (Fase 5)
- *   - Nenhuma chave é logada, retornada ou exposta em respostas
+ * SEGURANÇA OBRIGATÓRIA:
+ *   - Variáveis sensíveis APENAS de Deno.env (Supabase Secrets)
+ *   - ASAAS_API_KEY       → chave da plataforma (criar subcontas)
+ *   - ASAAS_WEBHOOK_TOKEN → validação HMAC de webhooks
+ *   - GOFIT_PAY_ENCRYPTION_KEY → chave AES-256-GCM para criptografar subconta keys
+ *   - provider_api_key_encrypted → lida do DB e descriptografada aqui; nunca exposta
+ *   - Nenhuma chave aparece em console.log, response, toast ou exception pública
  *
- * FASE ATUAL: 4 (estrutura — sem chamadas reais ao Asaas)
- * FASE 5: descomentar e implementar os métodos
+ * CRIPTOGRAFIA (item 5 do checklist):
+ *   - AES-256-GCM via Web Crypto API (nativa no Deno)
+ *   - IV: 12 bytes aleatórios por operação
+ *   - Formato armazenado: base64(iv[12] || ciphertext+tag)
+ *   - Chave: primeiros 32 bytes de GOFIT_PAY_ENCRYPTION_KEY (UTF-8)
+ *
+ * FASE ATUAL: 4/hardening
+ * FASE 5: descomentar métodos de chamada real ao Asaas
  */
+
+import { sanitizeError, maskSecret } from "./_security.ts";
 
 export type AsaasEnvironment = "sandbox" | "production";
 
-/* ─── Configuração de ambiente ──────────────────────────────────── */
+/* ─── Configuração de ambiente (validada pelo _security.ts) ─────── */
 
-function getEnv(): { env: AsaasEnvironment; baseUrl: string; apiKey: string; webhookToken: string } {
-  const env        = (Deno.env.get("ASAAS_ENV") ?? "sandbox") as AsaasEnvironment;
-  const baseUrl    = Deno.env.get("ASAAS_BASE_URL");
-  const apiKey     = Deno.env.get("ASAAS_API_KEY");
+function getAsaasConfig(): { baseUrl: string; apiKey: string; webhookToken: string } {
+  const baseUrl      = Deno.env.get("ASAAS_BASE_URL");
+  const apiKey       = Deno.env.get("ASAAS_API_KEY");
   const webhookToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
 
-  if (!baseUrl)     throw new AsaasConfigError("ASAAS_BASE_URL não configurada nos Supabase Secrets.");
-  if (!apiKey)      throw new AsaasConfigError("ASAAS_API_KEY não configurada nos Supabase Secrets.");
-  if (!webhookToken) throw new AsaasConfigError("ASAAS_WEBHOOK_TOKEN não configurado nos Supabase Secrets.");
+  // validateSecrets() já foi chamado antes — esta é uma segunda camada
+  if (!baseUrl)      throw new AsaasConfigError("ASAAS_BASE_URL ausente.");
+  if (!apiKey)       throw new AsaasConfigError("ASAAS_API_KEY ausente.");
+  if (!webhookToken) throw new AsaasConfigError("ASAAS_WEBHOOK_TOKEN ausente.");
 
-  return { env, baseUrl, apiKey, webhookToken };
+  return { baseUrl, apiKey, webhookToken };
+}
+
+/* ─── Criptografia AES-256-GCM ──────────────────────────────────── */
+
+/**
+ * Deriva a CryptoKey a partir de GOFIT_PAY_ENCRYPTION_KEY.
+ * Usa os primeiros 32 bytes da chave UTF-8.
+ * Lança AsaasConfigError se a variável estiver ausente ou curta demais.
+ */
+async function deriveEncryptionKey(usage: "encrypt" | "decrypt"): Promise<CryptoKey> {
+  const raw = Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY");
+  if (!raw) throw new AsaasConfigError("GOFIT_PAY_ENCRYPTION_KEY não configurada.");
+
+  const bytes = new TextEncoder().encode(raw);
+  if (bytes.length < 32) {
+    throw new AsaasConfigError(
+      "GOFIT_PAY_ENCRYPTION_KEY deve ter no mínimo 32 bytes (256 bits)."
+    );
+  }
+
+  return crypto.subtle.importKey(
+    "raw",
+    bytes.slice(0, 32),     // AES-256: exatamente 32 bytes
+    { name: "AES-GCM" },
+    false,                  // não exportável
+    [usage]
+  );
 }
 
 /**
- * Descriptografa a API key da subconta armazenada em provider_api_key_encrypted.
- * Fase 4: stub — implementar com Web Crypto API na Fase 5.
- * A chave de criptografia vem de GOFIT_PAY_ENCRYPTION_KEY (Supabase Secret).
+ * Criptografa a API key da subconta Asaas.
+ *
+ * Formato do resultado: base64(iv[12] || ciphertext+tag)
+ *   - iv: 12 bytes aleatórios (96 bits, padrão GCM)
+ *   - ciphertext+tag: saída do AES-256-GCM (inclui tag de 16 bytes)
+ *
+ * NUNCA logar plainKey. Nunca retornar ao frontend.
+ * Se falhar, lança AsaasConfigError — impede salvar subconta incompleta.
  */
-async function decryptSubAccountKey(encryptedKey: string): Promise<string> {
-  // Fase 4: ainda não implementado
-  void encryptedKey;
-  throw new AsaasNotImplementedError("decryptSubAccountKey", 5);
+export async function encryptSubAccountKey(plainKey: string): Promise<string> {
+  if (!plainKey || plainKey.trim() === "") {
+    throw new AsaasConfigError("API key da subconta não pode ser vazia.");
+  }
 
-  /* FASE 5 — implementar com Web Crypto API:
-  const masterKeyRaw = Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY");
-  if (!masterKeyRaw) throw new AsaasConfigError("GOFIT_PAY_ENCRYPTION_KEY não configurada.");
-  // ... AES-256-GCM decrypt ...
-  */
+  const key = await deriveEncryptionKey("encrypt");
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+
+  const cipherBuffer = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plainKey)
+  );
+
+  // Concatena iv + ciphertext em um único buffer
+  const combined = new Uint8Array(iv.length + cipherBuffer.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(cipherBuffer), iv.length);
+
+  // Encode como base64 para armazenar como texto no DB
+  return btoa(String.fromCharCode(...combined));
 }
 
 /**
- * Criptografa a API key da subconta antes de salvar no DB.
- * Fase 4: stub — implementar na Fase 5.
+ * Descriptografa a API key da subconta.
+ * Usado apenas internamente antes de chamar a API Asaas.
+ * NUNCA expor o resultado em log ou response.
  */
-async function encryptSubAccountKey(plainKey: string): Promise<string> {
-  void plainKey;
-  throw new AsaasNotImplementedError("encryptSubAccountKey", 5);
+export async function decryptSubAccountKey(encryptedB64: string): Promise<string> {
+  if (!encryptedB64) throw new AsaasConfigError("Chave criptografada ausente.");
+
+  const key = await deriveEncryptionKey("decrypt");
+
+  let combined: Uint8Array;
+  try {
+    combined = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
+  } catch {
+    throw new AsaasConfigError("Formato de chave criptografada inválido (base64 corrompido).");
+  }
+
+  if (combined.length < 13) { // 12 IV + mínimo 1 byte
+    throw new AsaasConfigError("Chave criptografada muito curta.");
+  }
+
+  const iv         = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+
+  let plainBuffer: ArrayBuffer;
+  try {
+    plainBuffer = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      ciphertext
+    );
+  } catch {
+    // Não expor detalhes — pode indicar key errada ou dado corrompido
+    throw new AsaasConfigError("Falha ao descriptografar chave da subconta.");
+  }
+
+  return new TextDecoder().decode(plainBuffer);
+}
+
+/* ─── Validação de webhook ───────────────────────────────────────── */
+
+/**
+ * Valida o header asaas-access-token de uma requisição webhook.
+ * Compara com timing-safe (evita timing attacks).
+ * NUNCA logar o token.
+ */
+export function validateWebhookToken(req: Request): boolean {
+  const { webhookToken } = getAsaasConfig();
+  const headerToken = req.headers.get("asaas-access-token") ?? "";
+
+  if (!headerToken) return false;
+  if (headerToken.length !== webhookToken.length) return false;
+
+  // Comparação constante simples (Deno não tem timingSafeEqual nativo em stdlib 0.168)
+  let equal = true;
+  for (let i = 0; i < webhookToken.length; i++) {
+    if (headerToken.charCodeAt(i) !== webhookToken.charCodeAt(i)) equal = false;
+  }
+  return equal;
 }
 
 /* ─── Requisição autenticada à API Asaas ───────────────────────── */
@@ -71,21 +171,25 @@ async function asaasRequest<T>(
   const res = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
-      "access_token": apiKey,
+      "access_token": apiKey,   // header proprietário Asaas
       "Content-Type": "application/json",
       "User-Agent":   "GoFit/4.0 (+https://fitcoresys.com.br)",
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const json = await res.json();
+  // Lê o body uma vez
+  let json: Record<string, unknown> = {};
+  try {
+    json = await res.json();
+  } catch { /* body não-JSON — ignore */ }
 
   if (!res.ok) {
-    throw new AsaasApiError(
-      res.status,
-      json?.errors?.[0]?.description ?? "Erro na API Asaas",
-      json?.errors?.[0]?.code        ?? "ASAAS_ERROR"
-    );
+    const desc = (json?.errors as Array<{ description?: string }>)?.[0]?.description
+      ?? "Erro na API Asaas";
+    const code = (json?.errors as Array<{ code?: string }>)?.[0]?.code
+      ?? "ASAAS_ERROR";
+    throw new AsaasApiError(res.status, desc, code);
   }
 
   return json as T;
@@ -93,121 +197,81 @@ async function asaasRequest<T>(
 
 /* ══════════════════════════════════════════════════════════════════
    AsaasService
-   Fase 4: contratos definidos, zero chamadas reais
-   Fase 5: implementar os métodos
+   Fase 4/hardening: contratos + crypto implementados; chamadas reais = Fase 5
    ══════════════════════════════════════════════════════════════════ */
 
 export const AsaasService = {
 
-  /** Expõe utilitário de criptografia para o handler de criação de subconta */
+  /* ─── Exportações de utilidades ─────────────────────────────────── */
   encryptSubAccountKey,
   decryptSubAccountKey,
+  validateWebhookToken,
 
   /* ─── Subcontas ─────────────────────────────────────────────────── */
 
   /**
    * FASE 5 — Cria subconta Asaas (White Label).
-   * Usa a ASAAS_API_KEY da plataforma (não da subconta).
-   * POST /accounts
+   * Usa ASAAS_API_KEY da plataforma (não da subconta).
+   * Retorna AsaasAccount incluindo apiKey — que DEVE ser criptografada
+   * antes de persistir e nunca retornada ao frontend.
    */
-  async createSubAccount(params: CreateSubAccountParams): Promise<AsaasAccount> {
+  async createSubAccount(_params: CreateSubAccountParams): Promise<AsaasAccount> {
     throw new AsaasNotImplementedError("createSubAccount", 5);
 
-    /* FASE 5:
-    const { baseUrl, apiKey } = getEnv();
-    return asaasRequest<AsaasAccount>(apiKey, baseUrl, "POST", "/accounts", {
-      name:          params.razao_social,
-      email:         params.resp_email,
-      cpfCnpj:       params.cnpj,
-      birthDate:     params.resp_nascimento,
-      companyType:   toAsaasCompanyType(params.tipo_empresa),
-      phone:         params.resp_celular,
-      mobilePhone:   params.resp_celular,
-      address:       params.logradouro,
-      addressNumber: params.numero_end,
-      complement:    params.complemento,
-      province:      params.bairro,
-      postalCode:    params.cep,
+    /* FASE 5 — implementar:
+    const { baseUrl, apiKey } = getAsaasConfig();
+    const result = await asaasRequest<AsaasAccount>(apiKey, baseUrl, "POST", "/accounts", {
+      name:          _params.razao_social,
+      email:         _params.resp_email,
+      cpfCnpj:       _params.cnpj,
+      birthDate:     _params.resp_nascimento,
+      companyType:   toAsaasCompanyType(_params.tipo_empresa),
+      phone:         _params.resp_celular,
+      mobilePhone:   _params.resp_celular,
+      address:       _params.logradouro,
+      addressNumber: _params.numero_end,
+      complement:    _params.complemento,
+      province:      _params.bairro,
+      postalCode:    _params.cep,
     });
+    // CRÍTICO: nunca logar result.apiKey
+    return result;
     */
   },
 
   /* ─── Customers ─────────────────────────────────────────────────── */
 
-  /**
-   * FASE 5 — Cria ou atualiza customer no Asaas.
-   * Usa a API key da SUBCONTA (descriptografada de provider_api_key_encrypted).
-   * POST /customers
-   */
+  /** FASE 5 — Cria/atualiza customer no Asaas com API key da subconta. */
   async upsertCustomer(
-    encryptedSubAccountKey: string,
-    params: CreateCustomerParams
+    _encryptedSubAccountKey: string,
+    _params: CreateCustomerParams
   ): Promise<AsaasCustomer> {
     throw new AsaasNotImplementedError("upsertCustomer", 5);
 
     /* FASE 5:
-    const { baseUrl } = getEnv();
-    const subKey = await decryptSubAccountKey(encryptedSubAccountKey);
-    return asaasRequest<AsaasCustomer>(subKey, baseUrl, "POST", "/customers", {
-      name:              params.name,
-      email:             params.email,
-      cpfCnpj:           params.cpfCnpj,
-      phone:             params.phone,
-      externalReference: params.externalReference,
-    });
+    const { baseUrl } = getAsaasConfig();
+    const subKey = await decryptSubAccountKey(_encryptedSubAccountKey);
+    // CRÍTICO: nunca logar subKey
+    return asaasRequest<AsaasCustomer>(subKey, baseUrl, "POST", "/customers", { ... });
     */
   },
 
   /* ─── Cobranças ─────────────────────────────────────────────────── */
 
-  /**
-   * FASE 5 — Cria cobrança.
-   * Usa a API key da SUBCONTA.
-   * POST /payments
-   */
+  /** FASE 5 — Cria cobrança. */
   async createPayment(
-    encryptedSubAccountKey: string,
-    params: CreatePaymentParams
+    _encryptedSubAccountKey: string,
+    _params: CreatePaymentParams
   ): Promise<AsaasPayment> {
     throw new AsaasNotImplementedError("createPayment", 5);
-
-    /* FASE 5:
-    const { baseUrl } = getEnv();
-    const subKey = await decryptSubAccountKey(encryptedSubAccountKey);
-    return asaasRequest<AsaasPayment>(subKey, baseUrl, "POST", "/payments", {
-      customer:          params.customer,
-      billingType:       params.billingType,
-      value:             params.amount,
-      dueDate:           params.dueDate,
-      description:       params.description,
-      externalReference: params.externalReference,
-    });
-    */
   },
 
-  /**
-   * FASE 6 — Cancela cobrança.
-   * DELETE /payments/:id
-   */
+  /** FASE 6 — Cancela cobrança. */
   async cancelPayment(
-    encryptedSubAccountKey: string,
-    providerChargeId: string
+    _encryptedSubAccountKey: string,
+    _providerChargeId: string
   ): Promise<void> {
     throw new AsaasNotImplementedError("cancelPayment", 6);
-  },
-
-  /**
-   * FASE 6 — Valida assinatura HMAC do webhook.
-   * Compara header 'asaas-access-token' com ASAAS_WEBHOOK_TOKEN.
-   */
-  async validateWebhookSignature(req: Request): Promise<boolean> {
-    throw new AsaasNotImplementedError("validateWebhookSignature", 6);
-
-    /* FASE 6:
-    const { webhookToken } = getEnv();
-    const headerToken = req.headers.get("asaas-access-token");
-    return headerToken === webhookToken;
-    */
   },
 
 } as const;
@@ -215,17 +279,17 @@ export const AsaasService = {
 /* ─── Tipos de parâmetros ────────────────────────────────────────── */
 
 export interface CreateSubAccountParams {
-  cnpj:             string;
-  razao_social:     string;
-  resp_email:       string;
-  resp_celular:     string;
-  resp_nascimento:  string;
-  tipo_empresa:     string;
-  logradouro:       string;
-  numero_end:       string;
-  complemento?:     string;
-  bairro:           string;
-  cep:              string;
+  cnpj:            string;
+  razao_social:    string;
+  resp_email:      string;
+  resp_celular:    string;
+  resp_nascimento: string;
+  tipo_empresa:    string;
+  logradouro:      string;
+  numero_end:      string;
+  complemento?:    string;
+  bairro:          string;
+  cep:             string;
 }
 
 export interface CreateCustomerParams {
@@ -237,23 +301,20 @@ export interface CreateCustomerParams {
 }
 
 export interface CreatePaymentParams {
-  customer:           string;    // provider_customer_id
-  billingType:        string;    // PIX | BOLETO | CREDIT_CARD
-  amount:             number;    // spec usa amount
-  dueDate:            string;    // YYYY-MM-DD
+  customer:           string;
+  billingType:        string;
+  amount:             number;
+  dueDate:            string;
   description?:       string;
   externalReference?: string;
 }
-
-/* ─── Tipos de resposta Asaas ────────────────────────────────────── */
 
 export interface AsaasAccount {
   id:       string;
   name:     string;
   email:    string;
   walletId: string;
-  // apiKey retornado apenas na criação — NUNCA logar ou retornar ao frontend
-  apiKey?:  string;
+  apiKey?:  string;   // presente só na criação — NUNCA logar/retornar
 }
 
 export interface AsaasCustomer {
@@ -264,19 +325,19 @@ export interface AsaasCustomer {
 }
 
 export interface AsaasPayment {
-  id:           string;
-  status:       string;
-  billingType:  string;
-  value:        number;
-  netValue:     number;
-  dueDate:      string;
-  invoiceUrl:   string | null;
-  bankSlipUrl:  string | null;
-  pixQrCode?:   string;
+  id:          string;
+  status:      string;
+  billingType: string;
+  value:       number;
+  netValue:    number;
+  dueDate:     string;
+  invoiceUrl:  string | null;
+  bankSlipUrl: string | null;
+  pixQrCode?:  string;
   pixCopyCola?: string;
 }
 
-/* ─── Erros ──────────────────────────────────────────────────────── */
+/* ─── Classes de erro ────────────────────────────────────────────── */
 
 export class AsaasApiError extends Error {
   constructor(
