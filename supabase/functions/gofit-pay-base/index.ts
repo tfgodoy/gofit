@@ -562,6 +562,64 @@ async function handleCancelCharge(): Promise<Response> {
   return err("Cancelamento disponível na Fase 6.", "NOT_IMPLEMENTED_PHASE_6", 501);
 }
 
+/* ─── webhook: resolução de contractor ──────────────────────────────── */
+/**
+ * Tenta resolver o contractor_id a partir do payload do Asaas.
+ * Ordem de tentativa (spec Fase 5):
+ *   1. payment.id → payment_charges.provider_charge_id → contractor_id
+ *   2. payment.externalReference → payment_charges.external_reference → contractor_id
+ *   3. account/subconta → gofit_pay_accounts.provider_account_id → contractor_id
+ *   4. Não encontrou → null (evento salvo como resolution_pending)
+ *
+ * Na Fase 6, ao criar cobranças usar externalReference com receivable_id
+ * para tornar a resolução determinística.
+ */
+async function resolveContractorFromWebhook(
+  db: ReturnType<typeof serviceClient>,
+  paymentObj: Record<string, unknown> | null,
+  payload: Record<string, unknown>
+): Promise<string | null> {
+
+  // 1. Tenta por provider_charge_id (payment.id)
+  if (typeof paymentObj?.id === "string" && paymentObj.id) {
+    const { data: charge } = await db
+      .from("payment_charges")
+      .select("contractor_id")
+      .eq("provider_charge_id", paymentObj.id)
+      .maybeSingle();
+    if (charge?.contractor_id) return charge.contractor_id;
+  }
+
+  // 2. Tenta por externalReference → payment_charges (preparado para Fase 6)
+  if (typeof paymentObj?.externalReference === "string" && paymentObj.externalReference) {
+    const { data: charge } = await db
+      .from("payment_charges")
+      .select("contractor_id")
+      .eq("external_reference", paymentObj.externalReference)
+      .maybeSingle();
+    if (charge?.contractor_id) return charge.contractor_id;
+  }
+
+  // 3. Tenta por provider_account_id da subconta (payload.account.id ou account.id)
+  const accountObj = (
+    payload.account   && typeof payload.account   === "object" ? payload.account   :
+    payload.subaccount && typeof payload.subaccount === "object" ? payload.subaccount :
+    null
+  ) as Record<string, unknown> | null;
+
+  if (typeof accountObj?.id === "string" && accountObj.id) {
+    const { data: acct } = await db
+      .from("gofit_pay_accounts")
+      .select("contractor_id")
+      .eq("provider_account_id", accountObj.id)
+      .maybeSingle();
+    if (acct?.contractor_id) return acct.contractor_id;
+  }
+
+  // 4. Não foi possível resolver — salvar com contractor_id = null
+  return null;
+}
+
 /* ─── webhook-receive ────────────────────────────────────────────────── */
 async function handleWebhookReceive(req: Request): Promise<Response> {
   let tokenValid = false;
@@ -587,35 +645,38 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
     return err("Payload inválido.", "INVALID_PAYLOAD", 400);
   }
 
-  const eventType     = typeof payload.event === "string" ? payload.event : "UNKNOWN";
-  const providerEvenId = typeof payload.id    === "string" ? payload.id    : null;
+  const eventType      = typeof payload.event === "string" ? payload.event : "UNKNOWN";
+  const providerEventId = typeof payload.id   === "string" ? payload.id    : null;
 
-  const paymentObj  = payload.payment && typeof payload.payment === "object"
+  const paymentObj    = payload.payment && typeof payload.payment === "object"
     ? (payload.payment as Record<string, unknown>) : null;
   const providerPayId = typeof paymentObj?.id === "string" ? paymentObj.id : null;
 
   const db = serviceClient();
 
   // Idempotência
-  if (providerEvenId) {
+  if (providerEventId) {
     const { data: dup } = await db
       .from("gofit_pay_webhook_events")
       .select("id")
       .eq("provider", "asaas")
-      .eq("provider_event_id", providerEvenId)
+      .eq("provider_event_id", providerEventId)
       .maybeSingle();
     if (dup) {
       return json({ success: true, data: { duplicate: true, message: "Evento já registrado." } });
     }
   }
 
+  // Resolução do contractor (null se não encontrado)
+  const contractorId = await resolveContractorFromWebhook(db, paymentObj, payload);
+
   const { error: insertErr } = await db
     .from("gofit_pay_webhook_events")
     .insert({
-      contractor_id:       "00000000-0000-0000-0000-000000000000",
+      contractor_id:       contractorId,   // null quando não resolvido
       provider:            "asaas",
       event_type:          eventType,
-      provider_event_id:   providerEvenId,
+      provider_event_id:   providerEventId,
       provider_payment_id: providerPayId,
       payload_json:        payload,
       raw_payload:         payload,
@@ -626,16 +687,37 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
     });
 
   if (insertErr) {
+    // Idempotência via constraint (corrida entre requests)
     if (insertErr.code === "23505") {
       return json({ success: true, data: { duplicate: true } });
     }
-    console.error("[gofit-pay-webhook] Insert failed:", insertErr.message);
-    return json({ success: true, data: { queued: false } });
+    // Falha real: logar sanitizado e retornar 200 para evitar retry infinito do Asaas,
+    // mas com indicação clara de falha para auditoria
+    const safeMsg = insertErr.message.substring(0, 120).replace(/\s+/g, " ");
+    console.error(`[gofit-pay-webhook] Insert failed: code=${insertErr.code} hint=${safeMsg}`);
+    return json({
+      success: false,
+      data:    { queued: false, error: "Falha ao registrar evento. Verifique os logs da Edge Function." },
+    }, 200); // 200 para não acionar retry do Asaas
   }
+
+  console.log(
+    `[gofit-pay-webhook] Evento registrado: type=${eventType} ` +
+    `eventId=${providerEventId ?? "?"} payId=${providerPayId ?? "?"} ` +
+    `contractor=${contractorId ?? "unresolved"}`
+  );
 
   return json({
     success: true,
-    data: { queued: true, processed: false, event_type: eventType, message: "Evento registrado." },
+    data: {
+      queued:             true,
+      processed:          false,
+      contractor_resolved: contractorId !== null,
+      event_type:         eventType,
+      message:            contractorId
+        ? "Evento registrado."
+        : "Evento registrado. Contractor não resolvido — será processado posteriormente.",
+    },
   });
 }
 
