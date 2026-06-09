@@ -41,7 +41,7 @@ const TIPO_BADGE: Record<string, { label: string; cls: string }> = {
   padrao:    { label: "Padrão",    cls: "bg-gray-100 text-gray-600" },
   totalpass: { label: "TotalPass", cls: "bg-pink-100 text-pink-700" },
   wellhub:   { label: "Wellhub",   cls: "bg-pink-100 text-pink-700" },
-  gympass:   { label: "GymPass",   cls: "bg-purple-100 text-purple-700" },
+  gympass:   { label: "GymPass",   cls: "bg-orange-100 text-orange-700" },
 };
 
 const PAGTO_LABEL: Record<string, string> = {

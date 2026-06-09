@@ -61,7 +61,7 @@ function calcAge(birthDate: string | null): string {
 
 const ETAPA_STYLE: Record<string, string> = {
   "Novo lead":        "bg-blue-100 text-blue-700",
-  "Visita agendada":  "bg-purple-100 text-purple-700",
+  "Visita agendada":  "bg-orange-100 text-orange-700",
   "Proposta enviada": "bg-orange-100 text-orange-700",
   "Matrícula":        "bg-green-100 text-green-700",
   "Perdido":          "bg-red-100 text-red-700",

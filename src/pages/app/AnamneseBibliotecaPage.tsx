@@ -50,9 +50,9 @@ const TIPO_BADGE: Record<TipoQuestao, string> = {
   texto:        "bg-gray-100 text-gray-600",
   numero:       "bg-gray-100 text-gray-600",
   data:         "bg-gray-100 text-gray-600",
-  radio:        "bg-purple-100 text-purple-800",
-  checkbox:     "bg-purple-100 text-purple-800",
-  select:       "bg-purple-100 text-purple-800",
+  radio:        "bg-orange-100 text-orange-800",
+  checkbox:     "bg-orange-100 text-orange-800",
+  select:       "bg-orange-100 text-orange-800",
 };
 
 const TIPOS_COM_OPCOES: TipoQuestao[] = ["radio", "checkbox", "select"];

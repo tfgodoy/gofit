@@ -78,7 +78,7 @@ function calcAge(birthDate: string | null): string {
 }
 
 export default function ClientesPage() {
-  const { user } = useAuth();
+  const { user, canCreate, canEdit, canDelete } = useAuth();
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [filtered, setFiltered] = useState<Student[]>([]);
@@ -184,18 +184,22 @@ export default function ClientesPage() {
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
-              <Link
-                to="/app/clientes/novo"
-                className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                <UserPlus className="w-4 h-4" /> CLIENTE
-              </Link>
-              <button
-                onClick={() => setShowInvite(true)}
-                className="inline-flex items-center gap-2 border border-primary text-primary text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/5 transition-colors"
-              >
-                <Send className="w-4 h-4" /> CONVIDAR CLIENTE
-              </button>
+              {canCreate("clientes") && (
+                <Link
+                  to="/app/clientes/novo"
+                  className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <UserPlus className="w-4 h-4" /> CLIENTE
+                </Link>
+              )}
+              {canCreate("clientes") && (
+                <button
+                  onClick={() => setShowInvite(true)}
+                  className="inline-flex items-center gap-2 border border-primary text-primary text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/5 transition-colors"
+                >
+                  <Send className="w-4 h-4" /> CONVIDAR CLIENTE
+                </button>
+              )}
               <div ref={filterRef} className="relative">
                 <button
                   onClick={() => setShowFilters(o => !o)}
@@ -422,12 +426,14 @@ export default function ClientesPage() {
                               >
                                 Visualizar perfil
                               </button>
-                              <button
-                                onClick={() => { navigate(`/app/clientes/${s.id}/cadastro`); setMenuOpen(null); }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                Editar cadastro
-                              </button>
+                              {canEdit("clientes") && (
+                                <button
+                                  onClick={() => { navigate(`/app/clientes/${s.id}/cadastro`); setMenuOpen(null); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  Editar cadastro
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

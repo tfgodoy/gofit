@@ -158,7 +158,7 @@ export default function GradesPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            g.tipo === "servico" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                            g.tipo === "servico" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
                           }`}>
                             {g.tipo === "servico" ? "Serviço" : "Contrato"}
                           </span>

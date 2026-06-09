@@ -450,7 +450,7 @@ export default function ModalidadeContratoModal({ initial, onSave, onClose }: Pr
                             {opt.badge && (
                               <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">{opt.badge}</span>
                             )}
-                            {opt.sparkle && <Sparkles className="w-3.5 h-3.5 text-purple-400" />}
+                            {opt.sparkle && <Sparkles className="w-3.5 h-3.5 text-orange-400" />}
                           </div>
                           <p className="text-xs text-gray-500 leading-relaxed">{opt.description}</p>
                         </div>

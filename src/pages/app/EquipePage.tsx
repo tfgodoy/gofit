@@ -38,7 +38,7 @@ const ROLE_COLOR: Record<StaffRole, string> = {
   receptionist:     "bg-green-100 text-green-700",
   sales:            "bg-orange-100 text-orange-700",
   nutritionist:     "bg-teal-100 text-teal-700",
-  physiotherapist:  "bg-purple-100 text-purple-700",
+  physiotherapist:  "bg-orange-100 text-orange-700",
   evaluator:        "bg-pink-100 text-pink-700",
 };
 

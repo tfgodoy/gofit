@@ -63,7 +63,7 @@ const PARTNERS: PartnerDef[] = [
   },
   {
     key: "classpass", name: "ClassPass", logoText: "CP",
-    logoBg: "bg-purple-600", logoColor: "text-white",
+    logoBg: "bg-orange-600", logoColor: "text-white",
     description: "Plataforma global de reservas de aulas e academias.",
     website: "https://classpass.com",
     category: "fitness",

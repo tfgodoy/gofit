@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import { X, ChevronDown, Settings, Clock, Users, Shield, Smartphone, DollarSign, SlidersHorizontal, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";

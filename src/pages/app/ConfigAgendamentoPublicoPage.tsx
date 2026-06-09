@@ -88,8 +88,8 @@ export default function ConfigAgendamentoPublicoPage() {
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-8 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center">
-              <Globe className="w-5 h-5 text-purple-600" />
+            <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Globe className="w-5 h-5 text-orange-600" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">Agendamento Público</h1>
@@ -139,7 +139,7 @@ export default function ConfigAgendamentoPublicoPage() {
               <div className="flex-1 min-w-0">
                 {/* URL box */}
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-                  <Globe className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  <Globe className="w-4 h-4 text-orange-500 flex-shrink-0" />
                   <span className="text-sm text-gray-700 font-mono truncate flex-1">{bookingUrl}</span>
                 </div>
                 {/* Action buttons */}
@@ -149,7 +149,7 @@ export default function ConfigAgendamentoPublicoPage() {
                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                       copied
                         ? "bg-green-100 text-green-700"
-                        : "bg-purple-600 text-white hover:bg-purple-700"
+                        : "bg-orange-600 text-white hover:bg-orange-700"
                     }`}
                   >
                     {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -189,8 +189,8 @@ export default function ConfigAgendamentoPublicoPage() {
           {!loading && (
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <CalendarCheck className="w-5 h-5 text-purple-600" />
+                <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                  <CalendarCheck className="w-5 h-5 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-extrabold text-gray-900">{stats.agendamentos}</p>
@@ -258,7 +258,7 @@ export default function ConfigAgendamentoPublicoPage() {
                         onClick={() => podeHabilitar && toggleModalidade(m)}
                         disabled={!podeHabilitar}
                         className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                          m.permite_agendamento_publico ? "bg-purple-600" : "bg-gray-200"
+                          m.permite_agendamento_publico ? "bg-orange-600" : "bg-gray-200"
                         } disabled:cursor-not-allowed`}
                         title={podeHabilitar ? "" : "Habilite a agenda primeiro nas configurações da modalidade"}
                       >
@@ -286,7 +286,7 @@ export default function ConfigAgendamentoPublicoPage() {
                 "Antes da aula, o professor verifica se a ficha de saúde foi preenchida na Agenda.",
               ].map((txt, i) => (
                 <li key={i} className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                     {i + 1}
                   </span>
                   <span>{txt}</span>

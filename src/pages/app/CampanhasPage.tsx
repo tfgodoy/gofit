@@ -35,7 +35,7 @@ interface Campaign {
 const CANAL_CONFIG: Record<CanalType, { label: string; icon: React.ReactNode; bg: string; color: string }> = {
   whatsapp: { label: "WhatsApp",  icon: <MessageCircle className="w-3.5 h-3.5" />, bg: "bg-green-100",  color: "text-green-700"  },
   email:    { label: "E-mail",    icon: <Mail className="w-3.5 h-3.5" />,          bg: "bg-blue-100",   color: "text-blue-700"   },
-  sms:      { label: "SMS",       icon: <Send className="w-3.5 h-3.5" />,          bg: "bg-purple-100", color: "text-purple-700" },
+  sms:      { label: "SMS",       icon: <Send className="w-3.5 h-3.5" />,          bg: "bg-orange-100", color: "text-orange-700" },
 };
 
 const STATUS_CONFIG: Record<StatusType, { label: string; bg: string; text: string }> = {

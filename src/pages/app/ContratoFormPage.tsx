@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -351,11 +352,9 @@ export default function ContratoFormPage() {
                     <label className={LBL}>Valor total do contrato {REQ}</label>
                     <div className="relative">
                       <span className="absolute left-0 top-2.5 text-xs text-gray-400">R$</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
+                      <CurrencyInput
                         value={form.valor_total}
-                        onChange={e => setForm(f => ({ ...f, valor_total: formatCurrency(e.target.value) }))}
+                        onChange={v => setForm(f => ({ ...f, valor_total: v }))}
                         className={INP + " pl-7"}
                         placeholder="0,00"
                       />
@@ -625,8 +624,8 @@ export default function ContratoFormPage() {
                   {form.possui_valor_adesao && (
                     <div className="ml-6">
                       <label className={LBL}>Valor de adesão (R$)</label>
-                      <input type="number" min={0} step={0.01} value={form.valor_adesao}
-                        onChange={e => setForm(f => ({ ...f, valor_adesao: e.target.value }))}
+                      <CurrencyInput value={form.valor_adesao}
+                        onChange={v => setForm(f => ({ ...f, valor_adesao: v }))}
                         className={INP} placeholder="0,00" />
                     </div>
                   )}

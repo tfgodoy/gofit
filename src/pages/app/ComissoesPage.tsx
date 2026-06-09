@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import { Plus, Search, ChevronLeft, ChevronRight, X, CheckCircle } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
@@ -134,10 +135,9 @@ function LancarComissaoModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor base (R$) *</label>
-              <input
-                type="text"
+              <CurrencyInput
                 value={valorBase}
-                onChange={e => setValorBase(e.target.value)}
+                onChange={setValorBase}
                 placeholder="0,00"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />

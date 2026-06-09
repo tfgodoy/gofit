@@ -223,9 +223,9 @@ export default function DashboardCRMPage() {
             <KpiCard loading={loading} label="Total de leads"    value={String(totalOpps)}
               icon={<UserPlus className="w-5 h-5 text-blue-500" />} />
             <KpiCard loading={loading} label="Ativos no funil"   value={String(ativas)}
-              color="text-purple-700"
+              color="text-orange-700"
               sub={valorAberto > 0 ? fmtMoney(valorAberto) : undefined}
-              icon={<TrendingUp className="w-5 h-5 text-purple-500" />} />
+              icon={<TrendingUp className="w-5 h-5 text-orange-500" />} />
             <KpiCard loading={loading} label="Convertidos"       value={String(convertidos)}
               color="text-green-700" sub={`${convRate}% de conversão`}
               icon={<Target className="w-5 h-5 text-green-500" />} />

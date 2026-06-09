@@ -4,12 +4,12 @@ import {
   Dumbbell, Users, Calendar, DollarSign, Package, FileText,
   Settings, LogOut, Home, Filter, SlidersHorizontal,
   ShoppingCart, HelpCircle, ChevronDown, Zap, TrendingUp,
-  Building2, BarChart2, PieChart, Activity, GraduationCap,
+  Building2, BarChart2, PieChart, Activity, GraduationCap, Truck,
   UserPlus, Lightbulb, CheckSquare, Bot, Search, Gift,
   LayoutGrid, CalendarCheck, Wallet, Landmark, ShoppingBag,
   ArrowUpCircle, ArrowDownCircle, CreditCard,
   Tags, Scale, ClipboardList, Shield, PlayCircle,
-  BookOpen, LayoutTemplate, ScrollText, Banknote, Plug, TrendingDown,
+  BookOpen, LayoutTemplate, ScrollText, Banknote, Plug, TrendingDown, GitMerge,
   Tag, MapPin, Star, AlertCircle, GitBranch, Globe,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -107,6 +107,7 @@ const mainNav: NavItem[] = [
       { icon: FileText,        label: "NFS-e",              to: "/app/financeiro/nfs-e",              iconColor: "text-green-500" },
       { icon: FileText,        label: "NFC-e",              to: "/app/financeiro/nfc-e",              iconColor: "text-green-500" },
       { icon: ShoppingBag,     label: "Vendas",             to: "/app/financeiro/vendas",             iconColor: "text-green-500" },
+      { icon: GitMerge,        label: "Conciliar extrato",  to: "/app/financeiro/conciliar-extrato",  iconColor: "text-green-500" },
     ],
   },
   {
@@ -148,18 +149,20 @@ const bottomNav: NavItem[] = [
     iconColor: "text-gray-500",
     children: [
       { icon: LayoutGrid,    label: "Modalidades",            to: "/app/configuracoes/modalidades",  iconColor: "text-gray-500" },
-      { icon: Globe,         label: "Agendamento Público",    to: "/app/configuracoes/agendamento-publico", iconColor: "text-purple-500" },
+      { icon: Globe,         label: "Agendamento Público",    to: "/app/configuracoes/agendamento-publico", iconColor: "text-orange-500" },
       { icon: GraduationCap, label: "Graduações",             to: "/app/configuracoes/graduacoes",   iconColor: "text-gray-500" },
       {
         icon: DollarSign, label: "Financeiro", to: "/app/configuracoes/financeiro",
         iconColor: "text-gray-500",
         children: [
-          { icon: Banknote,     label: "Parâmetros",         to: "/app/configuracoes/financeiro",              iconColor: "text-gray-500" },
-          { icon: TrendingDown, label: "Centros de custo",   to: "/app/configuracoes/centros-custo",           iconColor: "text-red-500" },
-          { icon: TrendingUp,   label: "Centros de receita", to: "/app/configuracoes/centros-receita",         iconColor: "text-green-600" },
-          { icon: Tags,         label: "Categorias",         to: "/app/configuracoes/categorias-financeiras",  iconColor: "text-primary" },
+          { icon: Banknote,     label: "Parâmetros",              to: "/app/configuracoes/financeiro",              iconColor: "text-gray-500" },
+          { icon: TrendingDown, label: "Centros de custo",      to: "/app/configuracoes/centros-custo",           iconColor: "text-red-500" },
+          { icon: TrendingUp,   label: "Centros de receita",    to: "/app/configuracoes/centros-receita",         iconColor: "text-green-600" },
+          { icon: Tags,         label: "Categorias de despesa", to: "/app/configuracoes/categorias-despesa",      iconColor: "text-red-400" },
+          { icon: Tags,         label: "Categorias de receita", to: "/app/configuracoes/categorias-receita",      iconColor: "text-green-500" },
         ],
       },
+      { icon: Truck,         label: "Fornecedores",           to: "/app/configuracoes/fornecedores", iconColor: "text-orange-500" },
       { icon: Building2,     label: "Unidades",               to: "/app/configuracoes/unidades",     iconColor: "text-gray-500" },
       {
         icon: ScrollText, label: "Contratos", to: "/app/configuracoes/contratos",
@@ -433,11 +436,43 @@ function NavItemLink({
   );
 }
 
+// Mapeamento label do item → chave do módulo de permissões
+const NAV_MODULE: Record<string, string> = {
+  "Clientes":           "clientes",
+  "Dashboards":         "dashboards",
+  "CRM":                "crm",
+  "Agenda":             "agenda",
+  "Financeiro":         "financeiro",
+  "Estoque":            "estoque",
+  "Treino":             "treinos",
+  "WOD":                "wod",
+  "Relatórios":         "relatorios",
+  "Avaliações Físicas": "avaliacoes",
+  "Configurações":      "configuracoes",
+};
+
+// Itens visíveis apenas para contractor/owner (não para staff)
+const ADMIN_ONLY_LABELS = new Set(["Administrativo", "Recursos do sistema"]);
+
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, canView } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  // Filtra itens de nav conforme permissões do usuário
+  function filterNav(items: NavItem[]): NavItem[] {
+    if (!user?.isStaff) return items; // contractor/owner vê tudo
+    return items.filter(item => {
+      if (ADMIN_ONLY_LABELS.has(item.label)) return false;
+      const moduleKey = NAV_MODULE[item.label];
+      if (!moduleKey) return true; // sem mapeamento = sempre visível (Início, Dashboards, Loja, Ajuda)
+      return canView(moduleKey);
+    });
+  }
+
+  const visibleMainNav   = filterNav(mainNav);
+  const visibleBottomNav = filterNav(bottomNav);
 
   useEffect(() => {
     const all = [...mainNav, ...bottomNav];
@@ -488,7 +523,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
         {/* Main nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {mainNav.map(item => (
+          {visibleMainNav.map(item => (
             <NavItemLink
               key={item.to}
               item={item}
@@ -499,7 +534,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
           <div className="my-2 border-t border-gray-100" />
 
-          {bottomNav.map(item => (
+          {visibleBottomNav.map(item => (
             <NavItemLink
               key={item.to}
               item={item}

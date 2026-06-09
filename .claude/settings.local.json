@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:app.nextfit.com.br)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__read_page",
+      "mcp__5388b4e5-99b0-4397-8186-00a9a7670abe__execute_sql",
+      "mcp__Claude_in_Chrome__get_page_text",
+      "Bash(grep -v \"//\\\\|import\\\\|CRM\\\\|crm/a\\\\|crm/o\\\\|crm/auto\\\\|crm/clube\\\\|crm/\\\\*\")",
+      "Bash(npx tsc *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'fix\\(leads\\): realizar venda navega para wizard sem alterar status do lead *)",
+      "Bash(git commit -m 'fix\\(venda\\): mover opportunity para Matrícula ao concluir venda *)",
+      "Bash(git commit -m 'feat\\(kanban\\): clique no card abre perfil do lead, drag mantém mover etapa *)",
+      "Bash(git commit -m 'feat\\(contrato\\): toggle contabilizar sessões conjuntas e exibir sessoes_por_semana nos cards *)",
+      "mcp__5388b4e5-99b0-4397-8186-00a9a7670abe__apply_migration",
+      "Bash(git commit -m 'feat\\(contrato\\): alinhar modal de modalidade e form contrato ao fluxo NextFit *)",
+      "Bash(git commit -m 'feat\\(contrato\\): máscara de moeda automática no campo valor total *)",
+      "Bash(git commit -m 'fix\\(contrato\\): corrigir texto tooltip permite antecipações *)",
+      "Bash(git commit -m 'fix\\(contrato\\): desabilitar checkboxes considerar antecipações/reagendamentos quando toggle correspondente estiver desligado *)",
+      "Bash(git commit -m 'feat\\(contrato\\): substituir forma de pagamento por 3 cards \\(Sem recorrência / GoFit Pay / Escolha na venda\\) *)",
+      "Bash(git commit -m 'fix\\(contrato\\): corrigir erro ao salvar - adicionar coluna contabilizar_sessoes_conjunto e formas_pagamento no payload *)",
+      "Bash(git commit -m 'feat\\(convite\\): validação obrigatória de nome completo e todos os campos no cadastro via link *)",
+      "Bash(git commit -m 'feat\\(clientes\\): implementar painel de filtros por Sexo e Objetivo *)",
+      "Bash(git commit -m 'feat\\(clientes\\): filtros em dropdown - Situação, Sexo, Objetivo, Origem + campo origem no banco *)",
+      "Bash(git commit -m 'fix\\(clientes\\): filtro origem inclui leads quando nenhuma situação específica selecionada *)",
+      "Bash(grep -rl \"<Plus.*\\\\/> + \" src/ --include=\"*.tsx\")",
+      "Bash(xargs sed -i 's/<Plus \\\\\\(.*\\\\\\)\\\\/> + /<Plus \\\\1\\\\/> /g')",
+      "Bash(grep -rn \"<Plus.*\\\\/> + \" src/ --include=\"*.tsx\")",
+      "Bash(git commit -m 'fix: remover + duplicado em todos os botões com ícone Plus *)"
+    ]
+  }
+}

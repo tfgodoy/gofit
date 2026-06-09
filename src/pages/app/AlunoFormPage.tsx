@@ -103,8 +103,15 @@ export default function AlunoFormPage() {
   const { id } = useParams<{ id?: string }>();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, canCreate, canEdit } = useAuth();
   const { fetchCEP, loading: cepLoading } = useCEP();
+
+  // Proteção de rota por permissão
+  useEffect(() => {
+    if (!user) return;
+    if (isEdit && !canEdit("clientes")) { navigate("/app/clientes"); }
+    if (!isEdit && !canCreate("clientes")) { navigate("/app/clientes"); }
+  }, [user, isEdit]);
 
   const [form, setForm] = useState<FormState>(initial);
   const [extras, setExtras] = useState<ExtraContact[]>([{ type: "instagram", value: "" }]);

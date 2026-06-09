@@ -1,7 +1,9 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export type UserRole = "owner" | "contractor" | "teacher" | "receptionist" | "sales" | "nutritionist" | "physiotherapist" | "evaluator";
+export type UserRole = "owner" | "contractor" | "teacher" | "receptionist" | "sales" | "nutritionist" | "physiotherapist" | "evaluator" | "admin";
+
+export type ModulePerm = { can_view: boolean; can_create: boolean; can_edit: boolean; can_delete: boolean };
 
 export interface AuthUser {
   id: string;
@@ -10,6 +12,9 @@ export interface AuthUser {
   role: UserRole;
   contractorId?: string;
   contractorName?: string;
+  staffId?: string;
+  isStaff?: boolean;
+  permissions?: Record<string, ModulePerm>; // module_name → perms
 }
 
 interface AuthContextValue {
@@ -17,80 +22,190 @@ interface AuthContextValue {
   loading: boolean;
   login: (credential: string, password: string) => Promise<{ error?: string }>;
   logout: () => void;
+  canView:   (module: string) => boolean;
+  canCreate: (module: string) => boolean;
+  canEdit:   (module: string) => boolean;
+  canDelete: (module: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const OWNER_CREDENTIAL = import.meta.env.VITE_OWNER_EMAIL ?? "owner@fitcoresys.com.br";
-const OWNER_PASSWORD = import.meta.env.VITE_OWNER_PASSWORD ?? "FitCore@2025!";
+const OWNER_CREDENTIAL = import.meta.env.VITE_OWNER_EMAIL    ?? "owner@fitcoresys.com.br";
+const OWNER_PASSWORD   = import.meta.env.VITE_OWNER_PASSWORD ?? "FitCore@2025!";
+
+// Permissões padrão por papel (fallback se não houver no banco)
+const DEFAULT_PERMS: Record<string, Record<string, ModulePerm>> = {
+  admin: {},
+  teacher: {
+    clientes:    { can_view: true,  can_create: false, can_edit: true,  can_delete: false },
+    dashboards:  { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    crm:         { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    agenda:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+    financeiro:  { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    estoque:     { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    treinos:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+    wod:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+    relatorios:  { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+    avaliacoes:  { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+  },
+  receptionist: {
+    clientes:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+    dashboards:  { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    crm:         { can_view: true,  can_create: true,  can_edit: false, can_delete: false },
+    agenda:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: true  },
+    financeiro:  { can_view: true,  can_create: true,  can_edit: false, can_delete: false },
+    estoque:     { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    treinos:     { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+    wod:         { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+    relatorios:  { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+  },
+  sales: {
+    clientes:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false },
+    dashboards:  { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+    crm:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: true  },
+    agenda:      { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+    financeiro:  { can_view: true,  can_create: true,  can_edit: false, can_delete: false },
+    estoque:     { can_view: false, can_create: false, can_edit: false, can_delete: false },
+    relatorios:  { can_view: true,  can_create: false, can_edit: false, can_delete: false },
+  },
+};
+
+async function loadStaffPermissions(contractorId: string, role: string): Promise<Record<string, ModulePerm>> {
+  const { data } = await supabase
+    .from("role_permissions")
+    .select("module_name, can_view, can_create, can_edit, can_delete")
+    .eq("contractor_id", contractorId)
+    .eq("role", role);
+
+  if (data && data.length > 0) {
+    const perms: Record<string, ModulePerm> = {};
+    for (const row of data) {
+      perms[row.module_name] = {
+        can_view:   row.can_view,
+        can_create: row.can_create,
+        can_edit:   row.can_edit,
+        can_delete: row.can_delete,
+      };
+    }
+    return perms;
+  }
+
+  // Fallback para defaults em memória
+  return DEFAULT_PERMS[role] ?? {};
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser]     = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("fitcoresys_user");
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored) as AuthUser);
-      } catch {
-        localStorage.removeItem("fitcoresys_user");
+    async function init() {
+      const stored = localStorage.getItem("fitcoresys_user");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as AuthUser;
+          // Para staff, re-busca permissões do banco a cada carregamento
+          // assim mudanças no painel de permissões refletem imediatamente
+          if (parsed.isStaff && parsed.contractorId && parsed.role) {
+            const freshPerms = await loadStaffPermissions(parsed.contractorId, parsed.role);
+            const updated = { ...parsed, permissions: freshPerms };
+            setUser(updated);
+            localStorage.setItem("fitcoresys_user", JSON.stringify(updated));
+          } else {
+            setUser(parsed);
+          }
+        } catch {
+          localStorage.removeItem("fitcoresys_user");
+        }
       }
+      setLoading(false);
     }
-    setLoading(false);
+    init();
   }, []);
 
   async function login(credential: string, password: string): Promise<{ error?: string }> {
+    // ── 1. Owner hardcoded ───────────────────────────────────────
     if (credential === OWNER_CREDENTIAL && password === OWNER_PASSWORD) {
       const ownerUser: AuthUser = {
-        id: "owner-0",
-        name: "FitCoreSys Admin",
-        email: OWNER_CREDENTIAL,
-        role: "owner",
+        id: "owner-0", name: "FitCoreSys Admin",
+        email: OWNER_CREDENTIAL, role: "owner",
       };
       setUser(ownerUser);
       localStorage.setItem("fitcoresys_user", JSON.stringify(ownerUser));
       return {};
     }
 
+    // ── 2. Contractor (dono da academia) ─────────────────────────
     const isCNPJ = credential.replace(/\D/g, "").length === 14;
-    const query = supabase
+    const contractorQuery = supabase
       .from("contractors")
       .select("id, razao_social, email, cnpj, status")
       .eq("status", "active");
 
-    const { data: contractor, error: contractorError } = isCNPJ
-      ? await query.eq("cnpj", credential.replace(/\D/g, "")).maybeSingle()
-      : await query.eq("email", credential).maybeSingle();
+    const { data: contractor } = isCNPJ
+      ? await contractorQuery.eq("cnpj", credential.replace(/\D/g, "")).maybeSingle()
+      : await contractorQuery.eq("email", credential).maybeSingle();
 
-    if (contractorError || !contractor) {
-      return { error: "Credenciais inválidas ou empresa não encontrada." };
+    if (contractor) {
+      const { data: authData } = await supabase
+        .from("contractor_auth")
+        .select("password_hash")
+        .eq("contractor_id", contractor.id)
+        .single();
+
+      if (!authData) return { error: "Falha na autenticação. Contate o suporte." };
+      if (authData.password_hash !== btoa(password)) return { error: "Senha incorreta." };
+
+      const contractorUser: AuthUser = {
+        id:             contractor.id,
+        name:           contractor.razao_social,
+        email:          contractor.email,
+        role:           "contractor",
+        contractorId:   contractor.id,
+        contractorName: contractor.razao_social,
+      };
+      setUser(contractorUser);
+      localStorage.setItem("fitcoresys_user", JSON.stringify(contractorUser));
+      return {};
     }
 
-    const { data: authData, error: authError } = await supabase
-      .from("contractor_auth")
-      .select("password_hash")
-      .eq("contractor_id", contractor.id)
-      .single();
+    // ── 3. Staff (colaborador da equipe) ─────────────────────────
+    const { data: staffMember } = await supabase
+      .from("staff")
+      .select("id, name, email, role, password_hash, contractor_id, blocked, active, deleted_at")
+      .eq("email", credential.trim().toLowerCase())
+      .is("deleted_at", null)
+      .maybeSingle();
 
-    if (authError || !authData) {
-      return { error: "Falha na autenticação. Contate o suporte." };
-    }
+    if (!staffMember) return { error: "Credenciais inválidas ou empresa não encontrada." };
+    if (staffMember.blocked)  return { error: "Seu acesso foi bloqueado. Contate o administrador." };
+    if (!staffMember.active)  return { error: "Conta inativa. Contate o administrador." };
+    if (!staffMember.password_hash) return { error: "Senha não definida. Solicite ao administrador." };
+    if (staffMember.password_hash !== btoa(password)) return { error: "Senha incorreta." };
 
-    if (authData.password_hash !== btoa(password)) {
-      return { error: "Senha incorreta." };
-    }
+    // Busca o nome da academia
+    const { data: contractorData } = await supabase
+      .from("contractors")
+      .select("razao_social")
+      .eq("id", staffMember.contractor_id)
+      .maybeSingle();
 
-    const contractorUser: AuthUser = {
-      id: contractor.id,
-      name: contractor.razao_social,
-      email: contractor.email,
-      role: "contractor",
-      contractorId: contractor.id,
-      contractorName: contractor.razao_social,
+    // Carrega permissões do banco
+    const permissions = await loadStaffPermissions(staffMember.contractor_id, staffMember.role);
+
+    const staffUser: AuthUser = {
+      id:             staffMember.id,
+      name:           staffMember.name,
+      email:          staffMember.email,
+      role:           staffMember.role as UserRole,
+      contractorId:   staffMember.contractor_id,
+      contractorName: contractorData?.razao_social ?? "",
+      staffId:        staffMember.id,
+      isStaff:        true,
+      permissions,
     };
-    setUser(contractorUser);
-    localStorage.setItem("fitcoresys_user", JSON.stringify(contractorUser));
+    setUser(staffUser);
+    localStorage.setItem("fitcoresys_user", JSON.stringify(staffUser));
     return {};
   }
 
@@ -99,8 +214,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("fitcoresys_user");
   }
 
+  // Helpers de permissão — contractor/owner sempre tem tudo
+  function isFullAccess() {
+    return !user?.isStaff || user.role === "admin";
+  }
+  function canView(module: string)   { return isFullAccess() || (user?.permissions?.[module]?.can_view   ?? false); }
+  function canCreate(module: string) { return isFullAccess() || (user?.permissions?.[module]?.can_create ?? false); }
+  function canEdit(module: string)   { return isFullAccess() || (user?.permissions?.[module]?.can_edit   ?? false); }
+  function canDelete(module: string) { return isFullAccess() || (user?.permissions?.[module]?.can_delete ?? false); }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, canView, canCreate, canEdit, canDelete }}>
       {children}
     </AuthContext.Provider>
   );
