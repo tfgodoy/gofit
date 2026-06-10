@@ -1,6 +1,6 @@
 /**
- * Edge Function: gofit-pay-base  v9
- * Fase 8 — Cancelamento seguro de cobranças
+ * Edge Function: gofit-pay-base  v10
+ * Fase 9 — Cartão de crédito (CREDIT_CARD)
  *
  * AÇÕES DISPONÍVEIS:
  *   ping                      → keepalive
@@ -542,8 +542,9 @@ async function handleCreatePaymentCharge(
 
   if (!receivableId) return err("receivable_id obrigatório.", "MISSING_RECEIVABLE_ID");
   if (!billingType)  return err("billing_type obrigatório.", "MISSING_BILLING_TYPE");
-  if (billingType !== "PIX" && billingType !== "BOLETO") {
-    return err("billing_type inválido. Use PIX ou BOLETO.", "INVALID_BILLING_TYPE");
+  const ALLOWED_BILLING = ["PIX", "BOLETO", "CREDIT_CARD"] as const;
+  if (!ALLOWED_BILLING.includes(billingType as typeof ALLOWED_BILLING[number])) {
+    return err("billing_type inválido. Use PIX, BOLETO ou CREDIT_CARD.", "INVALID_BILLING_TYPE");
   }
 
   const db = serviceClient();
@@ -650,7 +651,7 @@ async function handleCreatePaymentCharge(
   let asaasPayment: AsaasPayment;
   try {
     asaasPayment = await AsaasService.createPayment(subAccountApiKey, {
-      customer: providerCustomerId, billingType: billingType as "PIX" | "BOLETO",
+      customer: providerCustomerId, billingType: billingType as "PIX" | "BOLETO" | "CREDIT_CARD",
       amount, dueDate: dueDateFormatted,
       description: receivable.descricao
         ? String(receivable.descricao).substring(0, 200)
@@ -721,7 +722,11 @@ async function handleCreatePaymentCharge(
       pix_qr_code: pixQrCode?.encodedImage ?? null,
       pix_copy_paste: pixQrCode?.payload ?? null,
       already_existed: false,
-      message: billingType === "PIX" ? "Cobrança Pix criada com sucesso." : "Cobrança Boleto criada com sucesso.",
+      message: billingType === "PIX"
+        ? "Cobrança Pix criada com sucesso."
+        : billingType === "BOLETO"
+        ? "Cobrança Boleto criada com sucesso."
+        : "Cobrança cartão de crédito criada com sucesso.",
     },
   });
 }
@@ -1307,7 +1312,7 @@ serve(async (req) => {
 
   const action = typeof body?.action === "string" ? body.action : null;
 
-  if (action === "ping") return json({ success: true, data: { pong: true, phase: 8 } });
+  if (action === "ping") return json({ success: true, data: { pong: true, phase: 9 } });
 
   const identity = await resolveContractor(req);
   if (!identity) return err("Não autenticado ou empresa não encontrada.", "UNAUTHORIZED", 401);

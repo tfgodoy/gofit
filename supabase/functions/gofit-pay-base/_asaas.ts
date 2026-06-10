@@ -14,10 +14,10 @@
  *   - Formato: base64(iv[12] || ciphertext+tag)
  *   - Chave: primeiros 32 bytes de GOFIT_PAY_ENCRYPTION_KEY (UTF-8)
  *
- * FASE ATUAL: 8
+ * FASE ATUAL: 9
  *   - createSubAccount:  IMPLEMENTADO (sandbox) — Fase 5
  *   - upsertCustomer:    IMPLEMENTADO (sandbox) — Fase 6
- *   - createPayment:     IMPLEMENTADO (sandbox) — Fase 6
+ *   - createPayment:     IMPLEMENTADO (sandbox) — Fase 6 (PIX, BOLETO, CREDIT_CARD)
  *   - getPixQrCode:      IMPLEMENTADO (sandbox) — Fase 6
  *   - getPayment:        IMPLEMENTADO (sandbox) — Fase 7.1
  *   - cancelPayment:     IMPLEMENTADO (sandbox) — Fase 8
@@ -416,7 +416,7 @@ export interface CreateCustomerParams {
 
 export interface CreatePaymentParams {
   customer:           string;   // Asaas customer ID (cus_xxx)
-  billingType:        "PIX" | "BOLETO";
+  billingType:        "PIX" | "BOLETO" | "CREDIT_CARD";
   amount:             number;
   dueDate:            string;   // YYYY-MM-DD
   description?:       string;

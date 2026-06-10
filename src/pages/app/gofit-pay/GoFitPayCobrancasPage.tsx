@@ -110,8 +110,9 @@ function GoFitBadge({ status }: { status: string | null }) {
 }
 
 function BillingBadge({ type }: { type: string | null }) {
-  if (type === "PIX")    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"><QrCode className="w-2.5 h-2.5" />Pix</span>;
-  if (type === "BOLETO") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700"><FileText className="w-2.5 h-2.5" />Boleto</span>;
+  if (type === "PIX")         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"><QrCode className="w-2.5 h-2.5" />Pix</span>;
+  if (type === "BOLETO")      return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700"><FileText className="w-2.5 h-2.5" />Boleto</span>;
+  if (type === "CREDIT_CARD") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700"><CreditCard className="w-2.5 h-2.5" />Cartão</span>;
   return <span className="text-xs text-gray-400">{type ?? "—"}</span>;
 }
 
@@ -708,7 +709,7 @@ function EmitirCobrancaModal({
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRcv, setSelectedRcv] = useState<Receivable | null>(null);
-  const [billingType, setBillingType] = useState<"PIX" | "BOLETO" | null>(null);
+  const [billingType, setBillingType] = useState<"PIX" | "BOLETO" | "CREDIT_CARD" | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chargeResult, setChargeResult] = useState<ChargeResult | null>(null);
@@ -809,20 +810,28 @@ function EmitirCobrancaModal({
           <div className="px-6 py-3 border-t border-gray-100">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Forma de pagamento</p>
             <div className="flex gap-2">
-              {(["PIX", "BOLETO"] as const).map(bt => (
-                <button
-                  key={bt}
-                  onClick={() => setBillingType(bt)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
-                    billingType === bt
-                      ? bt === "PIX" ? "border-green-400 bg-green-50 text-green-700" : "border-blue-400 bg-blue-50 text-blue-700"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
-                  }`}
-                >
-                  {bt === "PIX" ? <QrCode className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                  {bt === "PIX" ? "Pix" : "Boleto"}
-                </button>
-              ))}
+              {(["PIX", "BOLETO", "CREDIT_CARD"] as const).map(bt => {
+                const active = billingType === bt;
+                const activeClass =
+                  bt === "PIX"         ? "border-green-400 bg-green-50 text-green-700"
+                  : bt === "BOLETO"    ? "border-blue-400 bg-blue-50 text-blue-700"
+                                       : "border-purple-400 bg-purple-50 text-purple-700";
+                const label = bt === "PIX" ? "Pix" : bt === "BOLETO" ? "Boleto" : "Cartão";
+                const icon  = bt === "PIX" ? <QrCode className="w-4 h-4" />
+                            : bt === "BOLETO" ? <FileText className="w-4 h-4" />
+                            : <CreditCard className="w-4 h-4" />;
+                return (
+                  <button
+                    key={bt}
+                    onClick={() => setBillingType(bt)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                      active ? activeClass : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                  >
+                    {icon}{label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -864,17 +873,26 @@ interface ChargeResult {
 
 function ChargeResultModal({ result, onClose }: { result: ChargeResult; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const isPix = result.billing_type === "PIX";
+  const isPix  = result.billing_type === "PIX";
+  const isCard = result.billing_type === "CREDIT_CARD";
   function copy(text: string) { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }
+
+  const headerBg    = isPix ? "bg-green-50"    : isCard ? "bg-purple-50"    : "bg-blue-50";
+  const iconBg      = isPix ? "bg-green-100"   : isCard ? "bg-purple-100"   : "bg-blue-100";
+  const headerIcon  = isPix ? <QrCode className="w-5 h-5 text-green-600" />
+                    : isCard ? <CreditCard className="w-5 h-5 text-purple-600" />
+                    : <FileText className="w-5 h-5 text-blue-600" />;
+  const headerLabel = isPix ? "Cobrança Pix" : isCard ? "Cartão de Crédito" : "Boleto Bancário";
+
   return (
     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-      <div className={`px-6 py-5 ${isPix ? "bg-green-50" : "bg-blue-50"} flex items-center justify-between`}>
+      <div className={`px-6 py-5 ${headerBg} flex items-center justify-between`}>
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${isPix ? "bg-green-100" : "bg-blue-100"}`}>
-            {isPix ? <QrCode className="w-5 h-5 text-green-600" /> : <FileText className="w-5 h-5 text-blue-600" />}
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${iconBg}`}>
+            {headerIcon}
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{isPix ? "Cobrança Pix" : "Boleto Bancário"}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{headerLabel}</p>
             <p className="text-lg font-black text-gray-900">{fmtCurrency(result.amount)}</p>
           </div>
         </div>
@@ -896,13 +914,19 @@ function ChargeResultModal({ result, onClose }: { result: ChargeResult; onClose:
             )}
           </div>
         )}
-        {!isPix && result.bank_slip_url && (
+        {!isPix && !isCard && result.bank_slip_url && (
           <a href={result.bank_slip_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-sm font-bold text-white">
             <ExternalLink className="w-4 h-4" /> Abrir boleto
           </a>
         )}
-        {result.invoice_url && (
+        {isCard && result.invoice_url && (
+          <a href={result.invoice_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-sm font-bold text-white">
+            <ExternalLink className="w-4 h-4" /> Abrir link de pagamento
+          </a>
+        )}
+        {!isCard && result.invoice_url && (
           <a href={result.invoice_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700">
             <ExternalLink className="w-4 h-4" /> Abrir link de pagamento
