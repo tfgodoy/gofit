@@ -247,9 +247,8 @@ export const AsaasService = {
       province:      params.bairro,
       postalCode:    cepClean,
     };
-    if (params.complemento) {
-      requestBody.complement = params.complemento;
-    }
+    if (params.complemento)        requestBody.complement   = params.complemento;
+    if (params.resp_renda_mensal)  requestBody.incomeValue  = params.resp_renda_mensal;
 
     const result = await asaasRequest<AsaasAccount>(
       apiKey, baseUrl, "POST", "/accounts", requestBody
@@ -369,17 +368,18 @@ export const AsaasService = {
 /* ─── Tipos de parâmetros ─────────────────────────────────────────────── */
 
 export interface CreateSubAccountParams {
-  cnpj:             string;
-  razao_social:     string;
-  tipo_empresa:     string;
-  resp_email:       string;
-  resp_celular:     string;
-  resp_nascimento:  string;
-  logradouro:       string;
-  numero_end:       string;
-  complemento?:     string;
-  bairro:           string;
-  cep:              string;
+  cnpj:               string;
+  razao_social:       string;
+  tipo_empresa:       string;
+  resp_email:         string;
+  resp_celular:       string;
+  resp_nascimento:    string;
+  logradouro:         string;
+  numero_end:         string;
+  complemento?:       string;
+  bairro:             string;
+  cep:                string;
+  resp_renda_mensal?: number;
 }
 
 export interface CreateCustomerParams {
