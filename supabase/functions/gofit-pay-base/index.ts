@@ -45,6 +45,8 @@ import {
 import {
   processWebhookEvent,
   sanitizeWebhookPayload,
+  mapBillingTypeToFormaPagamento,
+  extractPaymentDate,
   WebhookEventRow,
 } from "./_webhook.ts";
 
@@ -754,6 +756,133 @@ async function handleListCharges(body: Record<string, unknown>, contractorId: st
   return json({ success: true, data: data ?? [] });
 }
 
+// ─── Fase 7.1: sync_charge_status ────────────────────────────────────────────
+
+async function handleSyncChargeStatus(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const chargeId = typeof body.charge_id === "string" ? body.charge_id : null;
+  if (!chargeId) return err("charge_id obrigatório.", "MISSING_CHARGE_ID");
+
+  const db = serviceClient();
+
+  const { data: charge, error: chgErr } = await db
+    .from("payment_charges")
+    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status, pix_qr_code, pix_copy_paste")
+    .eq("id", chargeId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (chgErr || !charge) return err("Cobrança não encontrada.", "CHARGE_NOT_FOUND", 404);
+  if (!charge.provider_charge_id) return err("Cobrança sem provider_charge_id.", "NO_PROVIDER_ID", 422);
+
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch {
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  let asaasPayment: AsaasPayment;
+  try {
+    asaasPayment = await AsaasService.getPayment(subAccountApiKey, charge.provider_charge_id);
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      const { message } = sanitizeError(e);
+      return err(message, "ASAAS_FETCH_ERROR", 502);
+    }
+    throw e;
+  }
+
+  const now = new Date().toISOString();
+
+  // Tenta buscar QR code Pix se estiver faltando
+  let pixQrCode: AsaasPixQrCode | null = null;
+  if (charge.billing_type === "PIX" && !charge.pix_qr_code && asaasPayment.status !== "RECEIVED" && asaasPayment.status !== "CANCELLED") {
+    try {
+      pixQrCode = await AsaasService.getPixQrCode(subAccountApiKey, charge.provider_charge_id);
+    } catch {
+      // QR code pode não estar disponível ainda — não bloqueia o sync
+    }
+  }
+
+  const chargeUpdate: Record<string, unknown> = {
+    status:     asaasPayment.status,
+    updated_at: now,
+    invoice_url: asaasPayment.invoiceUrl ?? null,
+    bank_slip_url: asaasPayment.bankSlipUrl ?? null,
+  };
+  if (pixQrCode?.encodedImage) chargeUpdate.pix_qr_code   = pixQrCode.encodedImage;
+  if (pixQrCode?.payload)      chargeUpdate.pix_copy_paste = pixQrCode.payload;
+  if (asaasPayment.status === "RECEIVED" || asaasPayment.status === "CONFIRMED") chargeUpdate.paid_at = now;
+  if (asaasPayment.status === "CANCELLED") chargeUpdate.cancelled_at = now;
+
+  await db.from("payment_charges").update(chargeUpdate).eq("id", chargeId);
+
+  // Atualiza receivable.gateway_status + baixa automática se RECEIVED
+  let receivableUpdated = false;
+  if (charge.receivable_id) {
+    const { data: receivable } = await db
+      .from("receivables")
+      .select("id, status, pago_em")
+      .eq("id", charge.receivable_id)
+      .maybeSingle();
+
+    if (receivable) {
+      const baseRcv: Record<string, unknown> = {
+        gateway_status:   asaasPayment.status,
+        gateway_provider: "asaas",
+        updated_at:       now,
+      };
+
+      if (asaasPayment.status === "RECEIVED" && receivable.status !== "pago") {
+        const payDate = extractPaymentDate(asaasPayment as unknown as Record<string, unknown>);
+        await db.from("receivables").update({
+          ...baseRcv,
+          status:           "pago",
+          pago_em:          payDate ? `${payDate}T12:00:00Z` : now,
+          hora_recebimento: now.substring(11, 19),
+          forma_pagamento:  mapBillingTypeToFormaPagamento(charge.billing_type),
+          valor_pago:       asaasPayment.value ?? charge.amount,
+        }).eq("id", charge.receivable_id);
+        receivableUpdated = true;
+        console.log(`[gofit-pay] sync_charge_status: baixa automática rcv=${charge.receivable_id}`);
+      } else {
+        await db.from("receivables").update(baseRcv).eq("id", charge.receivable_id);
+      }
+    }
+  }
+
+  console.log(`[gofit-pay] sync_charge_status: charge=${chargeId} status=${asaasPayment.status}`);
+
+  return json({
+    success: true,
+    data: {
+      charge_id:         chargeId,
+      provider_charge_id: charge.provider_charge_id,
+      status:            asaasPayment.status,
+      invoice_url:       asaasPayment.invoiceUrl ?? null,
+      bank_slip_url:     asaasPayment.bankSlipUrl ?? null,
+      pix_qr_code:       pixQrCode?.encodedImage ?? (charge.pix_qr_code as string | null) ?? null,
+      pix_copy_paste:    pixQrCode?.payload ?? (charge.pix_copy_paste as string | null) ?? null,
+      receivable_updated: receivableUpdated,
+      message:           `Status atualizado: ${asaasPayment.status}`,
+    },
+  });
+}
+
 // ─── Fase 7: process_webhook_event ───────────────────────────────────────────
 
 async function handleProcessWebhookEvent(
@@ -1058,6 +1187,9 @@ serve(async (req) => {
 
       case "list_charges":
         return await handleListCharges(body, identity.contractorId);
+
+      case "sync_charge_status":
+        return await handleSyncChargeStatus(body, identity.contractorId, secrets);
 
       case "process_webhook_event":
         return await handleProcessWebhookEvent(body, identity.contractorId);

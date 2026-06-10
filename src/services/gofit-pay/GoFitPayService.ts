@@ -395,12 +395,123 @@ export const GoFitPayService = {
   },
 
   /**
+   * FASE 7.1 — Sincroniza status de uma cobrança com o Asaas.
+   * Busca o status atual e atualiza payment_charges + receivable.
+   * Aplica baixa automática se status for RECEIVED (mesmas regras do webhook).
+   */
+  async syncChargeStatus(
+    chargeId: string
+  ): Promise<EdgeFunctionResponse<{
+    charge_id:          string;
+    provider_charge_id: string;
+    status:             string;
+    invoice_url:        string | null;
+    bank_slip_url:      string | null;
+    pix_qr_code:        string | null;
+    pix_copy_paste:     string | null;
+    receivable_updated: boolean;
+    message:            string;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "sync_charge_status", charge_id: chargeId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] syncChargeStatus error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      charge_id:          string;
+      provider_charge_id: string;
+      status:             string;
+      invoice_url:        string | null;
+      bank_slip_url:      string | null;
+      pix_qr_code:        string | null;
+      pix_copy_paste:     string | null;
+      receivable_updated: boolean;
+      message:            string;
+    }>;
+  },
+
+  /**
+   * FASE 7.1 — Reprocessa um evento de webhook específico.
+   */
+  async processWebhookEvent(eventId: string): Promise<EdgeFunctionResponse<{
+    already_processed?: boolean;
+    processed:          boolean;
+    message:            string;
+    receivableUpdated:  boolean;
+    chargeId:           string | null;
+    receivableId:       string | null;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "process_webhook_event", event_id: eventId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] processWebhookEvent error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      already_processed?: boolean;
+      processed:          boolean;
+      message:            string;
+      receivableUpdated:  boolean;
+      chargeId:           string | null;
+      receivableId:       string | null;
+    }>;
+  },
+
+  /**
+   * FASE 7.1 — Processa eventos pendentes em lote.
+   */
+  async processPendingWebhooks(limit = 20): Promise<EdgeFunctionResponse<{
+    processed_count: number;
+    failed_count:    number;
+    total:           number;
+    events:          Array<{ event_id: string; event_type: string; result: string }>;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "process_pending_webhooks", limit },
+    });
+    if (error) {
+      console.error("[GoFitPayService] processPendingWebhooks error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      processed_count: number;
+      failed_count:    number;
+      total:           number;
+      events:          Array<{ event_id: string; event_type: string; result: string }>;
+    }>;
+  },
+
+  /**
+   * FASE 7.1 — Lista eventos de webhook por provider_payment_id (para drawer de detalhe).
+   */
+  async listWebhookEventsByProviderPaymentId(
+    contractorId: string,
+    providerPaymentId: string
+  ): Promise<WebhookEvent[]> {
+    const { data, error } = await supabase
+      .from("gofit_pay_webhook_events")
+      .select("id,contractor_id,provider,event_type,provider_event_id,provider_payment_id,receivable_id,processed,processed_at,error_message,processing_attempts,received_at,created_at")
+      .eq("contractor_id", contractorId)
+      .eq("provider_payment_id", providerPaymentId)
+      .order("received_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      console.error("[GoFitPayService] listWebhookEventsByProviderPaymentId error:", error.message);
+      return [];
+    }
+    return (data ?? []) as WebhookEvent[];
+  },
+
+  /**
    * FASE 7 — Cancela cobrança.
    */
   async cancelCharge(_chargeId: string): Promise<EdgeFunctionResponse> {
     throw new GoFitPayNotImplementedError(
-      "cancelCharge", 7,
-      "O cancelamento de cobranças será implementado na Fase 7."
+      "cancelCharge", 8,
+      "O cancelamento de cobranças será implementado na Fase 8."
     );
   },
 

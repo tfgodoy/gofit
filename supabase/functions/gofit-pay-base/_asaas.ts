@@ -355,6 +355,20 @@ export const AsaasService = {
     );
   },
 
+  /**
+   * FASE 7.1 — Consulta status atual de uma cobrança no Asaas.
+   * Usado pelo sync_charge_status para atualizar o DB sem depender de webhook.
+   */
+  async getPayment(
+    subAccountApiKey: string,
+    paymentId: string
+  ): Promise<AsaasPayment> {
+    const baseUrl = getBaseUrl();
+    return asaasRequest<AsaasPayment>(
+      subAccountApiKey, baseUrl, "GET", `/payments/${paymentId}`
+    );
+  },
+
   /** FASE 7 — Cancela cobrança. */
   async cancelPayment(
     _subAccountApiKey: string,
