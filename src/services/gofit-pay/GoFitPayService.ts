@@ -506,13 +506,42 @@ export const GoFitPayService = {
   },
 
   /**
-   * FASE 7 — Cancela cobrança.
+   * FASE 8 — Cancela cobrança no Asaas.
+   *
+   * Regras (aplicadas na Edge Function):
+   *   - receivable.status !== 'pago' → pode cancelar
+   *   - charge.status RECEIVED/CONFIRMED → impede cancelamento
+   *   - charge já CANCELLED → retorna already_cancelled: true (idempotente)
+   *   - contractor_id resolvido server-side
    */
-  async cancelCharge(_chargeId: string): Promise<EdgeFunctionResponse> {
-    throw new GoFitPayNotImplementedError(
-      "cancelCharge", 8,
-      "O cancelamento de cobranças será implementado na Fase 8."
-    );
+  async cancelCharge(
+    chargeId: string
+  ): Promise<EdgeFunctionResponse<{
+    charge_id:          string;
+    provider_charge_id: string;
+    previous_status:    string;
+    status:             string;
+    cancelled_at:       string;
+    already_cancelled?: boolean;
+    message:            string;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "cancel_charge", charge_id: chargeId },
+      // contractor_id NÃO enviado no body — Edge Function resolve via JWT
+    });
+    if (error) {
+      console.error("[GoFitPayService] cancelCharge error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      charge_id:          string;
+      provider_charge_id: string;
+      previous_status:    string;
+      status:             string;
+      cancelled_at:       string;
+      already_cancelled?: boolean;
+      message:            string;
+    }>;
   },
 
 } as const;

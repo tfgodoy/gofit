@@ -1,6 +1,6 @@
 /**
- * Edge Function: gofit-pay-base  v8
- * Fase 7 — Processamento de webhooks e baixa automática
+ * Edge Function: gofit-pay-base  v9
+ * Fase 8 — Cancelamento seguro de cobranças
  *
  * AÇÕES DISPONÍVEIS:
  *   ping                      → keepalive
@@ -15,7 +15,8 @@
  *   list_charges              → Fase 6: lista cobranças do contractor
  *   process_webhook_event     → Fase 7: reprocessa um evento específico (por event_id)
  *   process_pending_webhooks  → Fase 7: processa eventos pendentes/falhos em lote
- *   cancel-charge             → Fase 8: stub
+ *   sync_charge_status        → Fase 7.1: consulta status no Asaas e atualiza DB
+ *   cancel_charge             → Fase 8: cancela cobrança no Asaas
  *   ?source=webhook           → endpoint de webhooks Asaas (sem auth, valida token)
  */
 
@@ -982,6 +983,158 @@ async function handleProcessPendingWebhooks(
   });
 }
 
+// ─── Fase 8: cancel_charge ───────────────────────────────────────────────────
+
+async function handleCancelCharge(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const chargeId = typeof body.charge_id === "string" ? body.charge_id : null;
+  if (!chargeId) return err("charge_id obrigatório.", "MISSING_CHARGE_ID");
+
+  const db  = serviceClient();
+  const now = new Date().toISOString();
+
+  // Busca cobrança — verificação de ownership embutida via .eq("contractor_id", ...)
+  const { data: charge, error: chgErr } = await db
+    .from("payment_charges")
+    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status")
+    .eq("id", chargeId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (chgErr || !charge) return err("Cobrança não encontrada.", "CHARGE_NOT_FOUND", 404);
+  if (!charge.provider_charge_id) return err("Cobrança sem provider_charge_id.", "NO_PROVIDER_ID", 422);
+
+  // Idempotência — já cancelada?
+  if (charge.status === "CANCELLED" || charge.status === "DELETED") {
+    return json({
+      success: true,
+      data: {
+        already_cancelled: true,
+        charge_id:          chargeId,
+        provider_charge_id: charge.provider_charge_id,
+        message:            "Cobrança já está cancelada.",
+      },
+    });
+  }
+
+  // Status impeditivos no gateway
+  const PAID_STATUSES = ["RECEIVED", "CONFIRMED"];
+  const BLOCKED_STATUSES = ["REFUNDED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE"];
+  if (PAID_STATUSES.includes(charge.status ?? "")) {
+    return err(
+      "Esta cobrança já foi paga e não pode ser cancelada. Para tratar devolução/estorno, use o fluxo financeiro apropriado em fase futura.",
+      "CHARGE_ALREADY_PAID",
+      409
+    );
+  }
+  if (BLOCKED_STATUSES.includes(charge.status ?? "")) {
+    return err(
+      `Cobrança com status '${charge.status}' não pode ser cancelada nesta fase.`,
+      "CHARGE_NOT_CANCELLABLE",
+      409
+    );
+  }
+
+  // Verifica receivable — não pode cancelar se financeiro já pago
+  if (charge.receivable_id) {
+    const { data: receivable } = await db
+      .from("receivables")
+      .select("id, status")
+      .eq("id", charge.receivable_id)
+      .eq("contractor_id", contractorId)
+      .maybeSingle();
+
+    if (receivable?.status === "pago") {
+      return err(
+        "Esta cobrança já foi paga e não pode ser cancelada. Para tratar devolução/estorno, use o fluxo financeiro apropriado em fase futura.",
+        "RECEIVABLE_ALREADY_PAID",
+        409
+      );
+    }
+  }
+
+  // Verifica GoFit Pay ativo + obtém chave da subconta
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch {
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  const previousStatus = String(charge.status ?? "UNKNOWN");
+
+  // Cancela no Asaas
+  try {
+    await AsaasService.cancelPayment(subAccountApiKey, charge.provider_charge_id);
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      // 404 no Asaas = cobrança não existe mais — prossegue para limpar o DB
+      if (e.httpStatus !== 404) {
+        const { message } = sanitizeError(e);
+        console.error(`[gofit-pay] cancel_charge AsaasApiError HTTP ${e.httpStatus} code=${e.code}`);
+        return err(message, "ASAAS_CANCEL_ERROR", 502);
+      }
+      console.log(`[gofit-pay] cancel_charge: provider_charge_id=${charge.provider_charge_id} não encontrado no Asaas (404) — prosseguindo com atualização local.`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Atualiza payment_charges
+  await db.from("payment_charges").update({
+    status:            "CANCELLED",
+    cancelled_at:      now,
+    updated_at:        now,
+    raw_response_json: { cancelled: true, cancelled_at: now, previous_status: previousStatus },
+  }).eq("id", chargeId);
+
+  // Atualiza receivable — apenas campos de gateway, NÃO altera status financeiro
+  if (charge.receivable_id) {
+    await db.from("receivables").update({
+      gateway_status:    "CANCELLED",
+      gateway_provider:  "asaas",
+      asaas_payment_id:  null,
+      asaas_payment_url: null,
+      updated_at:        now,
+    }).eq("id", charge.receivable_id);
+  }
+
+  // Audit log sanitizado (Edge Function logs + raw_response_json acima)
+  console.log(
+    `[gofit-pay] cancel_charge: OK ` +
+    `contractor=${contractorId} ` +
+    `charge=${chargeId} ` +
+    `provider=${charge.provider_charge_id} ` +
+    `prev=${previousStatus} ` +
+    `new=CANCELLED`
+  );
+
+  return json({
+    success: true,
+    data: {
+      charge_id:          chargeId,
+      provider_charge_id: charge.provider_charge_id,
+      previous_status:    previousStatus,
+      status:             "CANCELLED",
+      cancelled_at:       now,
+      message:            "Cobrança cancelada com sucesso.",
+    },
+  });
+}
+
 // ─── Webhook receive (no auth) ────────────────────────────────────────────────
 
 async function resolveContractorFromWebhook(
@@ -1154,7 +1307,7 @@ serve(async (req) => {
 
   const action = typeof body?.action === "string" ? body.action : null;
 
-  if (action === "ping") return json({ success: true, data: { pong: true, phase: 7 } });
+  if (action === "ping") return json({ success: true, data: { pong: true, phase: 8 } });
 
   const identity = await resolveContractor(req);
   if (!identity) return err("Não autenticado ou empresa não encontrada.", "UNAUTHORIZED", 401);
@@ -1197,8 +1350,9 @@ serve(async (req) => {
       case "process_pending_webhooks":
         return await handleProcessPendingWebhooks(body, identity.contractorId);
 
+      case "cancel_charge":
       case "cancel-charge":
-        return err("Cancelamento de cobranças disponível na Fase 8.", "NOT_IMPLEMENTED_PHASE_8", 501);
+        return await handleCancelCharge(body, identity.contractorId, secrets);
 
       case "create-charge":
         return err("Use action 'create_payment_charge' (Fase 6).", "USE_CREATE_PAYMENT_CHARGE", 400);

@@ -14,12 +14,13 @@
  *   - Formato: base64(iv[12] || ciphertext+tag)
  *   - Chave: primeiros 32 bytes de GOFIT_PAY_ENCRYPTION_KEY (UTF-8)
  *
- * FASE ATUAL: 6
+ * FASE ATUAL: 8
  *   - createSubAccount:  IMPLEMENTADO (sandbox) — Fase 5
  *   - upsertCustomer:    IMPLEMENTADO (sandbox) — Fase 6
  *   - createPayment:     IMPLEMENTADO (sandbox) — Fase 6
  *   - getPixQrCode:      IMPLEMENTADO (sandbox) — Fase 6
- *   - cancelPayment:     Fase 7 (stub)
+ *   - getPayment:        IMPLEMENTADO (sandbox) — Fase 7.1
+ *   - cancelPayment:     IMPLEMENTADO (sandbox) — Fase 8
  */
 
 import { sanitizeError } from "./_security.ts";
@@ -369,12 +370,21 @@ export const AsaasService = {
     );
   },
 
-  /** FASE 7 — Cancela cobrança. */
+  /**
+   * FASE 8 — Cancela cobrança no Asaas via DELETE /payments/{id}.
+   * Retorna { deleted: true } em caso de sucesso.
+   * Se o Asaas retornar 404, a cobrança já não existe — o chamador decide.
+   */
   async cancelPayment(
-    _subAccountApiKey: string,
-    _providerChargeId: string
-  ): Promise<void> {
-    throw new AsaasNotImplementedError("cancelPayment", 7);
+    subAccountApiKey: string,
+    providerChargeId: string
+  ): Promise<AsaasCancelResult> {
+    const baseUrl = getBaseUrl();
+    const result = await asaasRequest<AsaasCancelResult>(
+      subAccountApiKey, baseUrl, "DELETE", `/payments/${providerChargeId}`
+    );
+    console.log(`[gofit-pay] Cobrança cancelada no Asaas: id=${providerChargeId}`);
+    return { deleted: result.deleted ?? true };
   },
 
 } as const;
@@ -449,6 +459,10 @@ export interface AsaasPayment {
   bankSlipUrl:        string | null;
   externalReference?: string | null;
   description?:       string | null;
+}
+
+export interface AsaasCancelResult {
+  deleted: boolean;
 }
 
 export interface AsaasPixQrCode {

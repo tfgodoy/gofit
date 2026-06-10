@@ -15,7 +15,7 @@ import {
   QrCode, FileText, CreditCard, ArrowLeft, RefreshCcw, Loader2,
   CheckCircle2, AlertCircle, ChevronRight, Copy, ExternalLink, X,
   Zap, Eye, RefreshCw, RotateCcw, Webhook, User, Receipt,
-  Clock, AlertTriangle, ChevronDown, ChevronUp,
+  Clock, AlertTriangle, ChevronDown, ChevronUp, Ban,
 } from "lucide-react";
 import AppLayout          from "@/components/app/AppLayout";
 import { supabase }       from "@/integrations/supabase/client";
@@ -115,16 +115,91 @@ function BillingBadge({ type }: { type: string | null }) {
   return <span className="text-xs text-gray-400">{type ?? "—"}</span>;
 }
 
+/* ─── Cancelamento ─────────────────────────────────────────────────── */
+
+const NON_CANCELLABLE_STATUSES = [
+  "RECEIVED", "CONFIRMED", "REFUNDED", "REFUND_REQUESTED",
+  "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE",
+  "AWAITING_CHARGEBACK_REVERSAL", "CANCELLED",
+];
+
+function canCancelCharge(charge: ChargeRow): boolean {
+  if (charge.receivable_status === "pago") return false;
+  return !NON_CANCELLABLE_STATUSES.includes(charge.status ?? "");
+}
+
+function CancelConfirmModal({
+  charge, onConfirm, onCancel, loading, error,
+}: {
+  charge:    ChargeRow;
+  onConfirm: () => void;
+  onCancel:  () => void;
+  loading:   boolean;
+  error:     string | null;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center flex-shrink-0">
+              <Ban className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900">Cancelar cobrança GoFit Pay?</p>
+              <p className="text-xs text-gray-400 mt-0.5">{charge.student_name} · {fmtCurrency(charge.amount)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 space-y-3">
+          <p className="text-sm text-gray-600">
+            Essa ação cancelará a cobrança no Asaas, mas{" "}
+            <strong className="text-gray-900">não apagará a conta a receber no GoFit</strong>.
+          </p>
+          <p className="text-sm text-gray-500">
+            A mensalidade/receita continuará existindo no financeiro e poderá ser tratada
+            manualmente ou receber nova cobrança em fluxo futuro.
+          </p>
+          {error && (
+            <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
+              <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />{error}
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-600 disabled:opacity-50 transition-colors"
+          >
+            Voltar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50 transition-colors"
+          >
+            {loading
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Cancelando...</>
+              : "Confirmar cancelamento"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Drawer de detalhes ───────────────────────────────────────────── */
 
 interface DrawerProps {
-  charge:   ChargeRow;
-  onClose:  () => void;
-  onSynced: (updated: Partial<ChargeRow>) => void;
+  charge:        ChargeRow;
+  onClose:       () => void;
+  onSynced:      (updated: Partial<ChargeRow>) => void;
   onReprocessed: () => void;
+  onCancelled:   (chargeId: string) => void;
 }
 
-function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed }: DrawerProps) {
+function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed, onCancelled }: DrawerProps) {
   const { user }   = useAuth();
   const [tab, setTab] = useState<"cobranca" | "receivable" | "aluno" | "webhooks">("cobranca");
   const [webhooks, setWebhooks] = useState<WebhookEvent[]>([]);
@@ -133,8 +208,11 @@ function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed }: Drawer
   const [loadingCust, setLoadingCust] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [reproMsg, setReproMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
@@ -214,6 +292,19 @@ function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed }: Drawer
       setReproMsg({ ok: false, text: res.error ?? "Erro ao reprocessar." });
     }
     setTimeout(() => setReproMsg(null), 4000);
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    setCancelError(null);
+    const res = await GoFitPayService.cancelCharge(charge.id);
+    setCancelling(false);
+    if (res.success) {
+      setShowCancelModal(false);
+      onCancelled(charge.id);
+    } else {
+      setCancelError(res.error ?? "Erro ao cancelar cobrança.");
+    }
   }
 
   const pendingWebhooks = webhooks.filter(e => !e.processed);
@@ -312,6 +403,16 @@ function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed }: Drawer
               {copied === "pix" ? "Copiado!" : "Copiar Pix"}
             </button>
           )}
+
+          {canCancelCharge(charge) && (
+            <button
+              onClick={() => { setCancelError(null); setShowCancelModal(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-colors ml-auto"
+            >
+              <Ban className="w-3 h-3" />
+              Cancelar cobrança
+            </button>
+          )}
         </div>
 
         {/* Mensagens de feedback */}
@@ -354,6 +455,17 @@ function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed }: Drawer
             </button>
           ))}
         </div>
+
+        {/* Modal de confirmação de cancelamento */}
+        {showCancelModal && (
+          <CancelConfirmModal
+            charge={charge}
+            onConfirm={handleCancel}
+            onCancel={() => setShowCancelModal(false)}
+            loading={cancelling}
+            error={cancelError}
+          />
+        )}
 
         {/* Conteúdo da tab */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
@@ -895,6 +1007,19 @@ export default function GoFitPayCobrancasPage() {
     setSelectedCharge(prev => prev && prev.id === chargeId ? { ...prev, ...updated } : prev);
   }
 
+  // Atualiza charge no state após cancelamento
+  function handleCancelled(chargeId: string) {
+    const cancelledAt = new Date().toISOString();
+    setCharges(prev => prev.map(c =>
+      c.id === chargeId ? { ...c, status: "CANCELLED", cancelled_at: cancelledAt } : c
+    ));
+    setSelectedCharge(prev =>
+      prev && prev.id === chargeId
+        ? { ...prev, status: "CANCELLED", cancelled_at: cancelledAt }
+        : prev
+    );
+  }
+
   const filtered = charges.filter(c => {
     if (filter === "all")       return true;
     if (filter === "pending")   return c.status === "PENDING";
@@ -1026,7 +1151,7 @@ export default function GoFitPayCobrancasPage() {
               </p>
               <p className="text-xs text-gray-400 max-w-xs">
                 {charges.length === 0
-                  ? "Clique em "Emitir cobrança" para gerar sua primeira cobrança Pix ou Boleto."
+                  ? 'Clique em "Emitir cobrança" para gerar sua primeira cobrança Pix ou Boleto.'
                   : "Tente alterar o filtro acima."}
               </p>
               {charges.length === 0 && (
@@ -1086,6 +1211,7 @@ export default function GoFitPayCobrancasPage() {
             onClose={() => setSelectedCharge(null)}
             onSynced={(updated) => handleSynced(selectedCharge.id, updated)}
             onReprocessed={loadCharges}
+            onCancelled={handleCancelled}
           />
         )}
 

@@ -238,10 +238,11 @@ export async function processWebhookEvent(
         }
         await db.from("receivables").update(statusUpdate).eq("id", receivableId);
       } else if (eventType === "PAYMENT_DELETED") {
+        // Mantém o status financeiro inalterado (pendente/atrasado/aguardando).
+        // Limpa os campos do gateway para permitir nova cobrança futura.
         const statusUpdate: Record<string, unknown> = { ...baseUpdate };
         if (receivable.status !== "pago") {
-          statusUpdate.status           = "pendente";
-          statusUpdate.asaas_payment_id = null;
+          statusUpdate.asaas_payment_id  = null;
           statusUpdate.asaas_payment_url = null;
         }
         await db.from("receivables").update(statusUpdate).eq("id", receivableId);
