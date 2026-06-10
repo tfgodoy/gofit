@@ -334,39 +334,73 @@ export const GoFitPayService = {
   },
 
   /**
-   * FASE 5 — Cria cobrança via provedor.
+   * FASE 6 — Cria cobrança Pix ou Boleto para uma receivable existente.
    *
-   * Edge Function:
-   *   1. Resolve/cria customer (upsertCustomer)
-   *   2. Descriptografa provider_api_key_encrypted da subconta
-   *   3. POST /payments no Asaas
-   *   4. Salva em payment_charges (campos canônicos + aliases)
-   *   5. Atualiza receivable.gateway_* se receivable_id fornecido
+   * Edge Function (create_payment_charge):
+   *   1. Valida receivable ownership + status
+   *   2. Garante idempotência (receivable já tem cobrança?)
+   *   3. Descriptografa chave da subconta (server-side)
+   *   4. Cria/obtém customer Asaas
+   *   5. POST /payments no Asaas
+   *   6. Para PIX: GET /payments/{id}/pixQrCode
+   *   7. Salva payment_charges
+   *   8. Atualiza receivable.gateway_*
+   *
+   * SEGURANÇA: contractor_id e chave da subconta resolvidos na Edge Function.
    */
   async createCharge(
     payload: CreateChargePayload
-  ): Promise<EdgeFunctionResponse<{ charge_id: string; invoice_url: string; pix_qr_code?: string; bank_slip_url?: string }>> {
-    throw new GoFitPayNotImplementedError(
-      "createCharge", 5,
-      "A emissão de cobranças será implementada na Fase 5."
-    );
-
-    /* FASE 5:
+  ): Promise<EdgeFunctionResponse<{
+    charge_id:          string;
+    provider_charge_id: string;
+    billing_type:       string;
+    status:             string;
+    amount:             number;
+    due_date:           string;
+    invoice_url:        string | null;
+    bank_slip_url:      string | null;
+    pix_qr_code:        string | null;
+    pix_copy_paste:     string | null;
+    already_existed:    boolean;
+    message:            string;
+  }>> {
     const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
-      body: { action: "create-charge", ...payload },
+      body: {
+        action:        "create_payment_charge",
+        receivable_id: payload.receivable_id,
+        billing_type:  payload.billing_type,
+      },
+      // contractor_id NÃO enviado no body — Edge Function resolve via JWT
     });
-    if (error) return { success: false, error: error.message };
-    return data;
-    */
+
+    if (error) {
+      console.error("[GoFitPayService] createCharge error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    return data as EdgeFunctionResponse<{
+      charge_id:          string;
+      provider_charge_id: string;
+      billing_type:       string;
+      status:             string;
+      amount:             number;
+      due_date:           string;
+      invoice_url:        string | null;
+      bank_slip_url:      string | null;
+      pix_qr_code:        string | null;
+      pix_copy_paste:     string | null;
+      already_existed:    boolean;
+      message:            string;
+    }>;
   },
 
   /**
-   * FASE 6 — Cancela cobrança.
+   * FASE 7 — Cancela cobrança.
    */
-  async cancelCharge(chargeId: string): Promise<EdgeFunctionResponse> {
+  async cancelCharge(_chargeId: string): Promise<EdgeFunctionResponse> {
     throw new GoFitPayNotImplementedError(
-      "cancelCharge", 6,
-      "O cancelamento de cobranças será implementado na Fase 6."
+      "cancelCharge", 7,
+      "O cancelamento de cobranças será implementado na Fase 7."
     );
   },
 

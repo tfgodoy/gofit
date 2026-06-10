@@ -284,7 +284,9 @@ export default function GoFitPayPage() {
                       <p className="text-xs text-gray-400 max-w-xs">
                         Quando você emitir cobranças por Pix, boleto ou cartão, elas aparecerão aqui.
                       </p>
-                      <button className="mt-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors">
+                      <button
+                        onClick={() => navigate("/app/gofit-pay/cobrancas")}
+                        className="mt-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors">
                         Emitir primeira cobrança
                       </button>
                     </>
@@ -304,8 +306,27 @@ export default function GoFitPayPage() {
                 </div>
               </div>
 
+              {/* Acesso rápido a cobranças (só quando ativo) */}
+              {isAtivo && (
+                <div className="mt-6 mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => navigate("/app/gofit-pay/cobrancas")}
+                    className="flex items-center gap-4 bg-white rounded-2xl border border-primary/20 hover:border-primary/40 hover:shadow-sm p-5 text-left transition-all group"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/15 transition-colors">
+                      <CreditCard className="w-5.5 h-5.5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-gray-900">Emitir cobranças</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Gerar Pix ou Boleto para contas a receber</p>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-primary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                </div>
+              )}
+
               {/* Formas de pagamento suportadas */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`${isAtivo ? "" : "mt-6"} grid grid-cols-1 md:grid-cols-3 gap-4`}>
                 {[
                   { icon: QrCode,     label: "Pix",             desc: "Confirmação em segundos",     color: "text-green-600 bg-green-100"  },
                   { icon: FileText,   label: "Boleto bancário", desc: "Prazo de até 3 dias úteis",   color: "text-blue-600 bg-blue-100"    },

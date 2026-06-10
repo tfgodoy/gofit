@@ -1,23 +1,27 @@
 /**
- * Edge Function: gofit-pay-base
- * Fase 5 — Integração real com Asaas (sandbox)
+ * Edge Function: gofit-pay-base  v5
+ * Fase 6 — Emissão de cobranças Pix/Boleto para receivables existentes
  *
  * SEGURANÇA:
  *   - validateSecrets() em toda requisição
  *   - Todos os erros passam por sanitizeError()
- *   - provider_api_key_encrypted nunca em responses
- *   - ASAAS_API_KEY nunca em logs/response/toast
+ *   - provider_api_key_encrypted nunca em responses — descriptografada APENAS aqui
+ *   - ASAAS_API_KEY, ASAAS_WEBHOOK_TOKEN, GOFIT_PAY_ENCRYPTION_KEY nunca em logs/response
+ *   - contractor_id sempre resolvido pelo JWT — nunca pelo body
  *
  * AÇÕES DISPONÍVEIS:
- *   ping                  → keepalive
- *   health-check          → diagnóstico completo
- *   activate_gofit_pay    → FASE 5: cria subconta Asaas + salva com segurança
- *   get_activation_status → FASE 5: retorna status atual da ativação
- *   retry_activation      → FASE 5: retry após activation_failed
- *   create-account        → alias de activate_gofit_pay
- *   create-charge         → FASE 5: stub
- *   cancel-charge         → FASE 6: stub
- *   ?source=webhook       → endpoint de webhooks Asaas
+ *   ping                    → keepalive
+ *   health-check            → diagnóstico completo
+ *   activate_gofit_pay      → Fase 5: cria subconta Asaas
+ *   get_activation_status   → Fase 5: retorna status atual
+ *   retry_activation        → Fase 5: retry após activation_failed
+ *   create-account          → alias de activate_gofit_pay
+ *   create_payment_charge   → Fase 6: cria cobrança Pix/Boleto para receivable
+ *   get_or_create_customer  → Fase 6: garante customer Asaas para aluno
+ *   get_charge              → Fase 6: detalhe de uma cobrança
+ *   list_charges            → Fase 6: lista cobranças do contractor
+ *   cancel-charge           → Fase 7: stub
+ *   ?source=webhook         → endpoint de webhooks Asaas
  */
 
 import { serve }        from "https://deno.land/std@0.168.0/http/server.ts";
@@ -30,11 +34,15 @@ import {
 import {
   AsaasService,
   AsaasAccount,
+  AsaasCustomer,
+  AsaasPayment,
+  AsaasPixQrCode,
   AsaasConfigError,
   AsaasApiError,
   AsaasNotImplementedError,
   validateWebhookToken,
   encryptSubAccountKey,
+  decryptSubAccountKey,
   mapAsaasAccountStatus,
   toOnboardingStatus,
   CreateSubAccountParams,
@@ -99,7 +107,7 @@ async function resolveContractor(req: Request): Promise<{ userId: string; contra
   return null;
 }
 
-/* ─── Helper: status da conta (ambos os campos simultâneos) ─────────── */
+/* ─── Helpers de conta ──────────────────────────────────────────────── */
 async function updateGoFitPayAccountStatus(
   db: ReturnType<typeof serviceClient>,
   accountId: string,
@@ -120,7 +128,6 @@ async function updateGoFitPayAccountStatus(
   }
 }
 
-/* ─── Helper: module_id do GoFit Pay ────────────────────────────────── */
 async function getGoFitPayModuleId(db: ReturnType<typeof serviceClient>): Promise<string | null> {
   const { data } = await db
     .from("modules")
@@ -130,7 +137,6 @@ async function getGoFitPayModuleId(db: ReturnType<typeof serviceClient>): Promis
   return data?.id ?? null;
 }
 
-/* ─── Helper: upsert company_modules ───────────────────────────────── */
 async function updateCompanyModuleStatus(
   db: ReturnType<typeof serviceClient>,
   contractorId: string,
@@ -164,11 +170,101 @@ async function updateCompanyModuleStatus(
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   HANDLERS
-   ═══════════════════════════════════════════════════════════════════════ */
+/* ─── Helper: verifica se GoFit Pay está active ─────────────────────── */
+async function assertGoFitPayActive(
+  db: ReturnType<typeof serviceClient>,
+  contractorId: string
+): Promise<{
+  account_id:                  string;
+  provider_api_key_encrypted:  string;
+  provider_account_id:         string;
+}> {
+  const moduleId = await getGoFitPayModuleId(db);
+  if (moduleId) {
+    const { data: cm } = await db
+      .from("company_modules")
+      .select("status")
+      .eq("contractor_id", contractorId)
+      .eq("module_id", moduleId)
+      .maybeSingle();
+    if (cm?.status !== "active") {
+      throw new GoFitPayBusinessError(
+        "GoFit Pay não está ativo para esta empresa.",
+        "GOFIT_PAY_NOT_ACTIVE",
+        402
+      );
+    }
+  }
 
-/* ─── health-check ──────────────────────────────────────────────────── */
+  const { data: account, error } = await db
+    .from("gofit_pay_accounts")
+    .select("id, status, provider_account_id, provider_api_key_encrypted")
+    .eq("contractor_id", contractorId)
+    .eq("provider", "asaas")
+    .maybeSingle();
+
+  if (error || !account) {
+    throw new GoFitPayBusinessError(
+      "Conta GoFit Pay não encontrada. Ative o módulo primeiro.",
+      "ACCOUNT_NOT_FOUND",
+      404
+    );
+  }
+  if (account.status !== "active") {
+    throw new GoFitPayBusinessError(
+      `Conta GoFit Pay com status '${account.status}'. Aguarde a aprovação.`,
+      "ACCOUNT_NOT_ACTIVE",
+      402
+    );
+  }
+  if (!account.provider_api_key_encrypted) {
+    throw new GoFitPayBusinessError(
+      "Chave da subconta não configurada. Reative o GoFit Pay.",
+      "MISSING_SUBACCOUNT_KEY",
+      503
+    );
+  }
+
+  return {
+    account_id:                 account.id,
+    provider_api_key_encrypted: account.provider_api_key_encrypted,
+    provider_account_id:        account.provider_account_id ?? "",
+  };
+}
+
+/* ─── Sanitização de response Asaas para armazenamento ─────────────── */
+function sanitizePaymentForStorage(payment: AsaasPayment): Record<string, unknown> {
+  return {
+    id:               payment.id,
+    customer:         payment.customer,
+    billingType:      payment.billingType,
+    value:            payment.value,
+    netValue:         payment.netValue,
+    status:           payment.status,
+    dueDate:          payment.dueDate,
+    invoiceUrl:       payment.invoiceUrl,
+    bankSlipUrl:      payment.bankSlipUrl,
+    externalReference: payment.externalReference ?? null,
+    description:      payment.description ?? null,
+  };
+}
+
+/* ─── Erro de negócio ────────────────────────────────────────────────── */
+class GoFitPayBusinessError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly httpStatus: number = 400
+  ) {
+    super(message);
+    this.name = "GoFitPayBusinessError";
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   HANDLERS — Fase 5 (inalterados)
+   ══════════════════════════════════════════════════════════════════════ */
+
 async function handleHealthCheck(
   contractorId: string,
   secrets: SecretsValidation
@@ -183,7 +279,7 @@ async function handleHealthCheck(
     .maybeSingle();
 
   const accountExists   = !!account;
-  const accountComplete = !!(account?.provider_account_id && account?.provider_wallet_id);
+  const accountComplete = !!(account?.provider_account_id && account?.provider_account_id);
   const configured      = secrets.valid && accountExists && accountComplete;
 
   let message: string;
@@ -215,20 +311,6 @@ async function handleHealthCheck(
   });
 }
 
-/* ─── activate_gofit_pay ─────────────────────────────────────────────────
-   Fase 5: fluxo completo de ativação em sandbox
-    1. Valida secrets
-    2. Carrega gofit_pay_config (dados do wizard)
-    3. Valida campos obrigatórios
-    4. Verifica idempotência (subconta já existe?)
-    5. Chama Asaas.createSubAccount()
-    6. Criptografa apiKey imediatamente após recebimento
-    7. Salva gofit_pay_accounts (provider_api_key_encrypted nunca em response)
-    8. Salva gofit_pay_settings
-    9. Atualiza gofit_pay_config.onboarding_status
-   10. Atualiza company_modules.status
-   11. Retorna somente dados seguros
-*/
 async function handleActivateGoFitPay(
   contractorId: string,
   secrets: SecretsValidation
@@ -243,7 +325,6 @@ async function handleActivateGoFitPay(
   const db  = serviceClient();
   const now = new Date().toISOString();
 
-  // ── 1. Carrega dados do wizard ──────────────────────────────────────
   const { data: cfg, error: cfgErr } = await db
     .from("gofit_pay_config")
     .select("*")
@@ -257,15 +338,12 @@ async function handleActivateGoFitPay(
     );
   }
 
-  // ── 2. Valida campos obrigatórios ───────────────────────────────────
   const requiredFields = [
     "cnpj", "razao_social", "tipo_empresa",
     "resp_email", "resp_celular", "resp_nascimento",
     "logradouro", "numero_end", "bairro", "cep",
   ];
-  const missingFields = requiredFields.filter(
-    (f) => !cfg[f as keyof typeof cfg]
-  );
+  const missingFields = requiredFields.filter(f => !cfg[f as keyof typeof cfg]);
   if (missingFields.length > 0) {
     return err(
       `Campos obrigatórios não preenchidos: ${missingFields.join(", ")}. Complete o wizard.`,
@@ -273,7 +351,6 @@ async function handleActivateGoFitPay(
     );
   }
 
-  // ── 3. Idempotência ─────────────────────────────────────────────────
   const { data: existing } = await db
     .from("gofit_pay_accounts")
     .select("id, status, provider_account_id, provider_wallet_id")
@@ -282,7 +359,6 @@ async function handleActivateGoFitPay(
     .maybeSingle();
 
   if (existing?.provider_account_id) {
-    // Subconta já criada — não chamar Asaas novamente
     const moduleId = await getGoFitPayModuleId(db);
     if (moduleId) {
       await updateCompanyModuleStatus(db, contractorId, moduleId, existing.status ?? "in_review");
@@ -301,7 +377,6 @@ async function handleActivateGoFitPay(
     });
   }
 
-  // ── 4. Chama Asaas sandbox ──────────────────────────────────────────
   let asaasAccount: AsaasAccount;
   try {
     const params: CreateSubAccountParams = {
@@ -319,7 +394,6 @@ async function handleActivateGoFitPay(
     };
     asaasAccount = await AsaasService.createSubAccount(params);
   } catch (e) {
-    // Salva estado de falha
     const failedStatus = "activation_failed";
     const moduleId = await getGoFitPayModuleId(db);
     if (moduleId) {
@@ -343,27 +417,20 @@ async function handleActivateGoFitPay(
     return err(message, code, 500);
   }
 
-  // ── 5. Mapeia status Asaas → GoFit ──────────────────────────────────
-  const asaasStatusStr    = asaasAccount.accountStatus?.status ?? "PENDING";
-  const gofitStatus       = mapAsaasAccountStatus(asaasStatusStr);
-  const newOnboarding     = toOnboardingStatus(gofitStatus);
+  const asaasStatusStr = asaasAccount.accountStatus?.status ?? "PENDING";
+  const gofitStatus    = mapAsaasAccountStatus(asaasStatusStr);
+  const newOnboarding  = toOnboardingStatus(gofitStatus);
 
-  // ── 6. Criptografa apiKey imediatamente ─────────────────────────────
   let encryptedKey: string | null = null;
   const hasApiKey = !!asaasAccount.apiKey;
-
   if (asaasAccount.apiKey) {
     try {
       encryptedKey = await encryptSubAccountKey(asaasAccount.apiKey);
     } catch (e) {
-      // Nunca expor erro de criptografia com detalhes
       console.error(`[gofit-pay] Encryption error: ${(e as Error)?.name ?? "Error"}`);
-      // Não falhar a ativação — conta foi criada, apenas chave não pôde ser salva
     }
   }
 
-  // ── 7. Salva gofit_pay_accounts ─────────────────────────────────────
-  // provider_api_key_encrypted: salvo apenas aqui — nunca retornado
   const accountData: Record<string, unknown> = {
     contractor_id:                    contractorId,
     provider:                         "asaas",
@@ -387,7 +454,6 @@ async function handleActivateGoFitPay(
     await db.from("gofit_pay_accounts").insert({ ...accountData, created_at: now });
   }
 
-  // ── 8. Salva gofit_pay_settings ─────────────────────────────────────
   const settingsData: Record<string, unknown> = {
     contractor_id:             contractorId,
     display_name:              cfg.nome_exibicao          ?? "GoFit Pay",
@@ -415,20 +481,16 @@ async function handleActivateGoFitPay(
     await db.from("gofit_pay_settings").insert({ ...settingsData, created_at: now });
   }
 
-  // ── 9. Atualiza gofit_pay_config.onboarding_status ──────────────────
   await db
     .from("gofit_pay_config")
     .update({ onboarding_status: newOnboarding, updated_at: now })
     .eq("contractor_id", contractorId);
 
-  // ── 10. Atualiza company_modules.status ──────────────────────────────
   const moduleId = await getGoFitPayModuleId(db);
   if (moduleId) {
     await updateCompanyModuleStatus(db, contractorId, moduleId, gofitStatus);
   }
 
-  // ── 11. Retorna dados seguros ────────────────────────────────────────
-  // NUNCA incluir: provider_api_key_encrypted, apiKey, ASAAS_API_KEY
   return json({
     success: true,
     data: {
@@ -447,7 +509,6 @@ async function handleActivateGoFitPay(
   });
 }
 
-/* ─── get_activation_status ──────────────────────────────────────────── */
 async function handleGetActivationStatus(contractorId: string): Promise<Response> {
   const db = serviceClient();
 
@@ -485,7 +546,6 @@ async function handleGetActivationStatus(contractorId: string): Promise<Response
   });
 }
 
-/* ─── retry_activation ───────────────────────────────────────────────── */
 async function handleRetryActivation(
   contractorId: string,
   secrets: SecretsValidation
@@ -504,17 +564,10 @@ async function handleRetryActivation(
     .eq("provider", "asaas")
     .maybeSingle();
 
-  // Sem conta → ativação completa
-  if (!existing) {
+  if (!existing || !existing.provider_account_id) {
     return handleActivateGoFitPay(contractorId, secrets);
   }
 
-  // Sem provider_account_id → falhou antes de criar no Asaas
-  if (!existing.provider_account_id) {
-    return handleActivateGoFitPay(contractorId, secrets);
-  }
-
-  // Só permite retry em activation_failed
   if (existing.status !== "activation_failed") {
     return err(
       `Retry só permitido em estado 'activation_failed'. Status atual: '${existing.status}'.`,
@@ -522,7 +575,6 @@ async function handleRetryActivation(
     );
   }
 
-  // Em sandbox: limpa campos do provedor e reativa
   await db
     .from("gofit_pay_accounts")
     .update({
@@ -536,7 +588,6 @@ async function handleRetryActivation(
     })
     .eq("id", existing.id);
 
-  // Reseta onboarding para 'enviado' (dados do wizard ainda válidos)
   await db
     .from("gofit_pay_config")
     .update({ onboarding_status: "enviado", updated_at: now })
@@ -545,35 +596,595 @@ async function handleRetryActivation(
   return handleActivateGoFitPay(contractorId, secrets);
 }
 
-/* ─── create-charge ──────────────────────────────────────────────────── */
-async function handleCreateCharge(
-  _body: Record<string, unknown>,
-  _contractorId: string,
+/* ══════════════════════════════════════════════════════════════════════
+   HANDLERS — Fase 6: Emissão de cobranças Pix/Boleto
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * get_or_create_customer — Garante que o aluno tem customer Asaas na subconta.
+ *
+ * Body: { action, student_id }
+ * Retorna: { customer_id (interno), provider_customer_id }
+ *
+ * Não retorna dados sensíveis da subconta.
+ */
+async function handleGetOrCreateCustomer(
+  body: Record<string, unknown>,
+  contractorId: string,
   secrets: SecretsValidation
 ): Promise<Response> {
   if (!secrets.valid) {
     return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
   }
-  return err("Emissão de cobranças disponível na Fase 5.", "NOT_IMPLEMENTED_PHASE_5", 501);
+
+  const studentId = typeof body.student_id === "string" ? body.student_id : null;
+  if (!studentId) return err("student_id obrigatório.", "MISSING_STUDENT_ID");
+
+  const db = serviceClient();
+
+  // Valida GoFit Pay active + pega chave da subconta
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  // Busca aluno (verifica ownership)
+  const { data: student } = await db
+    .from("students")
+    .select("id, nome_completo, cpf, email, telefone")
+    .eq("id", studentId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (!student) {
+    return err("Aluno não encontrado ou não pertence a esta empresa.", "STUDENT_NOT_FOUND", 404);
+  }
+
+  // Verifica se já existe customer local
+  const { data: existingCustomer } = await db
+    .from("payment_customers")
+    .select("id, provider_customer_id")
+    .eq("contractor_id", contractorId)
+    .eq("student_id", studentId)
+    .eq("provider", "asaas")
+    .maybeSingle();
+
+  if (existingCustomer?.provider_customer_id) {
+    return json({
+      success: true,
+      data: {
+        customer_id:          existingCustomer.id,
+        provider_customer_id: existingCustomer.provider_customer_id,
+        already_existed:      true,
+      },
+    });
+  }
+
+  // Descriptografa chave da subconta — só em memória
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch (e) {
+    console.error(`[gofit-pay] Decrypt error: ${(e as Error)?.name ?? "Error"}`);
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  // Cria customer no Asaas
+  let asaasCustomer: AsaasCustomer;
+  try {
+    asaasCustomer = await AsaasService.upsertCustomer(subAccountApiKey, {
+      name:               String(student.nome_completo),
+      cpfCnpj:            student.cpf    ?? undefined,
+      email:              student.email  ?? undefined,
+      phone:              student.telefone ?? undefined,
+      externalReference:  `gofit:stu:${studentId}`,
+    });
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      const { message } = sanitizeError(e);
+      console.error(`[gofit-pay] upsertCustomer AsaasApiError HTTP ${e.httpStatus} code=${e.code}`);
+      return err(message, "ASAAS_CUSTOMER_ERROR", 502);
+    }
+    throw e;
+  }
+
+  // Salva payment_customer
+  const now = new Date().toISOString();
+  const { data: savedCustomer, error: custErr } = await db
+    .from("payment_customers")
+    .insert({
+      contractor_id:        contractorId,
+      student_id:           studentId,
+      client_id:            studentId,   // alias de compat
+      provider:             "asaas",
+      provider_customer_id: asaasCustomer.id,
+      name:                 String(student.nome_completo),
+      email:                student.email    ?? null,
+      cpf_cnpj:             student.cpf      ?? null,
+      phone:                student.telefone ?? null,
+      synced_at:            now,
+      created_at:           now,
+      updated_at:           now,
+    })
+    .select("id")
+    .single();
+
+  if (custErr) {
+    // Conflito de constraint → recupera registro existente
+    if (custErr.code === "23505") {
+      const { data: recovered } = await db
+        .from("payment_customers")
+        .select("id, provider_customer_id")
+        .eq("contractor_id", contractorId)
+        .eq("student_id", studentId)
+        .eq("provider", "asaas")
+        .maybeSingle();
+      return json({
+        success: true,
+        data: {
+          customer_id:          recovered?.id ?? null,
+          provider_customer_id: recovered?.provider_customer_id ?? asaasCustomer.id,
+          already_existed:      true,
+        },
+      });
+    }
+    console.error(`[gofit-pay] payment_customers insert error: ${custErr.code}`);
+    return err("Falha ao salvar customer.", "CUSTOMER_SAVE_ERROR", 500);
+  }
+
+  return json({
+    success: true,
+    data: {
+      customer_id:          savedCustomer.id,
+      provider_customer_id: asaasCustomer.id,
+      already_existed:      false,
+    },
+  });
 }
 
-/* ─── cancel-charge ──────────────────────────────────────────────────── */
-async function handleCancelCharge(): Promise<Response> {
-  return err("Cancelamento disponível na Fase 6.", "NOT_IMPLEMENTED_PHASE_6", 501);
-}
-
-/* ─── webhook: resolução de contractor ──────────────────────────────── */
 /**
- * Tenta resolver o contractor_id a partir do payload do Asaas.
- * Ordem de tentativa (spec Fase 5):
- *   1. payment.id → payment_charges.provider_charge_id → contractor_id
- *   2. payment.externalReference → payment_charges.external_reference → contractor_id
- *   3. account/subconta → gofit_pay_accounts.provider_account_id → contractor_id
- *   4. Não encontrou → null (evento salvo como resolution_pending)
+ * create_payment_charge — FASE 6
  *
- * Na Fase 6, ao criar cobranças usar externalReference com receivable_id
- * para tornar a resolução determinística.
+ * Cria cobrança Pix ou Boleto para uma receivable existente.
+ *
+ * Body: { action, receivable_id, billing_type }
+ *   billing_type: "PIX" | "BOLETO"
+ *
+ * Fluxo:
+ *   1. Valida billing_type
+ *   2. Carrega receivable (verifica ownership + status)
+ *   3. Idempotência: receivable já tem cobrança?
+ *   4. Verifica GoFit Pay active + descriptografa chave da subconta
+ *   5. Carrega aluno
+ *   6. Garante customer Asaas (get_or_create)
+ *   7. Cria cobrança Asaas (PIX ou BOLETO)
+ *   8. Se PIX, busca QR code
+ *   9. Salva payment_charges
+ *  10. Atualiza receivable.gateway_*
+ *  11. Retorna resposta sanitizada
+ *
+ * SEGURANÇA:
+ *   - contractor_id vem do JWT, nunca do body
+ *   - subAccountApiKey fica apenas em memória (nunca em log/response)
+ *   - pix_qr_code (base64) salvo apenas no banco; retornado para o frontend
+ *   - raw_response_json: sanitizado (sem campos sensíveis)
  */
+async function handleCreatePaymentCharge(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation
+): Promise<Response> {
+  if (!secrets.valid) {
+    return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+  }
+
+  const receivableId = typeof body.receivable_id === "string" ? body.receivable_id : null;
+  const billingType  = typeof body.billing_type  === "string" ? body.billing_type.toUpperCase() : null;
+
+  if (!receivableId) return err("receivable_id obrigatório.", "MISSING_RECEIVABLE_ID");
+  if (!billingType)  return err("billing_type obrigatório.", "MISSING_BILLING_TYPE");
+  if (billingType !== "PIX" && billingType !== "BOLETO") {
+    return err("billing_type inválido. Use PIX ou BOLETO.", "INVALID_BILLING_TYPE");
+  }
+
+  const db = serviceClient();
+
+  // ── 1. Carrega receivable (verifica ownership) ──────────────────────
+  const { data: receivable, error: rcvErr } = await db
+    .from("receivables")
+    .select("id, contractor_id, student_id, student_contract_id, valor, vencimento, descricao, status, asaas_payment_id, gateway_provider")
+    .eq("id", receivableId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (rcvErr || !receivable) {
+    return err("Conta a receber não encontrada ou não pertence a esta empresa.", "RECEIVABLE_NOT_FOUND", 404);
+  }
+
+  // ── 2. Valida status da receivable ───────────────────────────────────
+  const allowedStatuses = ["pendente", "atrasado", "aguardando"];
+  if (!allowedStatuses.includes(receivable.status ?? "")) {
+    return err(
+      `Não é possível gerar cobrança para receivable com status '${receivable.status}'. ` +
+      `Permitido: ${allowedStatuses.join(", ")}.`,
+      "INVALID_RECEIVABLE_STATUS"
+    );
+  }
+
+  // ── 3. Valida valor e vencimento ────────────────────────────────────
+  const amount  = Number(receivable.valor ?? 0);
+  const dueDate = String(receivable.vencimento ?? "");
+  if (!amount || amount <= 0) {
+    return err("Valor da receivable inválido.", "INVALID_AMOUNT");
+  }
+  if (!dueDate || !/^\d{4}-\d{2}-\d{2}/.test(dueDate)) {
+    return err("Vencimento da receivable inválido.", "INVALID_DUE_DATE");
+  }
+  const dueDateFormatted = dueDate.substring(0, 10);
+
+  // ── 4. Idempotência ─────────────────────────────────────────────────
+  if (receivable.asaas_payment_id) {
+    const { data: existingCharge } = await db
+      .from("payment_charges")
+      .select("id, provider_charge_id, billing_type, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste")
+      .eq("receivable_id", receivableId)
+      .eq("provider", "asaas")
+      .maybeSingle();
+
+    if (existingCharge) {
+      console.log(`[gofit-pay] Idempotência: receivable ${receivableId} já tem cobrança ${existingCharge.provider_charge_id}`);
+      return json({
+        success: true,
+        data: {
+          charge_id:            existingCharge.id,
+          provider_charge_id:   existingCharge.provider_charge_id,
+          billing_type:         existingCharge.billing_type,
+          status:               existingCharge.status,
+          amount,
+          due_date:             dueDateFormatted,
+          invoice_url:          existingCharge.invoice_url   ?? null,
+          bank_slip_url:        existingCharge.bank_slip_url ?? null,
+          pix_qr_code:          existingCharge.pix_qr_code   ?? null,
+          pix_copy_paste:       existingCharge.pix_copy_paste ?? null,
+          already_existed:      true,
+          message:              "Cobrança já existente para esta receivable.",
+        },
+      });
+    }
+  }
+
+  // Verifica também na tabela de cobranças (sem asaas_payment_id na receivable)
+  const { data: chargeCheck } = await db
+    .from("payment_charges")
+    .select("id, provider_charge_id, billing_type, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste")
+    .eq("receivable_id", receivableId)
+    .eq("provider", "asaas")
+    .maybeSingle();
+
+  if (chargeCheck) {
+    return json({
+      success: true,
+      data: {
+        charge_id:          chargeCheck.id,
+        provider_charge_id: chargeCheck.provider_charge_id,
+        billing_type:       chargeCheck.billing_type,
+        status:             chargeCheck.status,
+        amount,
+        due_date:           dueDateFormatted,
+        invoice_url:        chargeCheck.invoice_url   ?? null,
+        bank_slip_url:      chargeCheck.bank_slip_url ?? null,
+        pix_qr_code:        chargeCheck.pix_qr_code   ?? null,
+        pix_copy_paste:     chargeCheck.pix_copy_paste ?? null,
+        already_existed:    true,
+        message:            "Cobrança já existente para esta receivable.",
+      },
+    });
+  }
+
+  // ── 5. Valida GoFit Pay active + chave da subconta ───────────────────
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  // ── 6. Carrega aluno ────────────────────────────────────────────────
+  const studentId = receivable.student_id;
+  if (!studentId) {
+    return err("Receivable sem student_id.", "MISSING_STUDENT_ID", 422);
+  }
+
+  const { data: student } = await db
+    .from("students")
+    .select("id, nome_completo, cpf, email, telefone")
+    .eq("id", studentId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (!student) {
+    return err("Aluno não encontrado ou não pertence a esta empresa.", "STUDENT_NOT_FOUND", 404);
+  }
+
+  // ── 7. Descriptografa chave da subconta — só em memória ─────────────
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch (e) {
+    console.error(`[gofit-pay] Decrypt error: ${(e as Error)?.name ?? "Error"}`);
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  // ── 8. Get or create customer Asaas ─────────────────────────────────
+  let providerCustomerId: string;
+
+  const { data: existingCust } = await db
+    .from("payment_customers")
+    .select("id, provider_customer_id")
+    .eq("contractor_id", contractorId)
+    .eq("student_id", studentId)
+    .eq("provider", "asaas")
+    .maybeSingle();
+
+  if (existingCust?.provider_customer_id) {
+    providerCustomerId = existingCust.provider_customer_id;
+    console.log(`[gofit-pay] Customer existente: ${providerCustomerId}`);
+  } else {
+    let asaasCustomer: AsaasCustomer;
+    try {
+      asaasCustomer = await AsaasService.upsertCustomer(subAccountApiKey, {
+        name:              String(student.nome_completo),
+        cpfCnpj:           student.cpf      ?? undefined,
+        email:             student.email    ?? undefined,
+        phone:             student.telefone ?? undefined,
+        externalReference: `gofit:stu:${studentId}`,
+      });
+    } catch (e) {
+      if (e instanceof AsaasApiError) {
+        const { message } = sanitizeError(e);
+        console.error(`[gofit-pay] upsertCustomer HTTP ${e.httpStatus} code=${e.code}`);
+        return err(message, "ASAAS_CUSTOMER_ERROR", 502);
+      }
+      throw e;
+    }
+
+    providerCustomerId = asaasCustomer.id;
+
+    const now = new Date().toISOString();
+    const { error: custInsertErr } = await db
+      .from("payment_customers")
+      .insert({
+        contractor_id:        contractorId,
+        student_id:           studentId,
+        client_id:            studentId,
+        provider:             "asaas",
+        provider_customer_id: asaasCustomer.id,
+        name:                 String(student.nome_completo),
+        email:                student.email    ?? null,
+        cpf_cnpj:             student.cpf      ?? null,
+        phone:                student.telefone ?? null,
+        synced_at:            now,
+        created_at:           now,
+        updated_at:           now,
+      });
+
+    if (custInsertErr && custInsertErr.code !== "23505") {
+      // Não fatal — continua com o customer criado no Asaas
+      console.error(`[gofit-pay] payment_customers insert warn: ${custInsertErr.code}`);
+    }
+  }
+
+  // ── 9. Cria cobrança Asaas (PIX ou BOLETO) ───────────────────────────
+  const externalRef = `gofit:rcv:${receivableId}`;
+
+  let asaasPayment: AsaasPayment;
+  try {
+    asaasPayment = await AsaasService.createPayment(subAccountApiKey, {
+      customer:          providerCustomerId,
+      billingType:       billingType as "PIX" | "BOLETO",
+      amount,
+      dueDate:           dueDateFormatted,
+      description:       receivable.descricao
+                           ? String(receivable.descricao).substring(0, 200)
+                           : `Mensalidade GoFit #${receivableId.substring(0, 8)}`,
+      externalReference: externalRef,
+    });
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      const { message } = sanitizeError(e);
+      console.error(`[gofit-pay] createPayment HTTP ${e.httpStatus} code=${e.code}`);
+      return err(message, "ASAAS_PAYMENT_ERROR", 502);
+    }
+    throw e;
+  }
+
+  // ── 10. Para PIX, busca QR code ──────────────────────────────────────
+  let pixQrCode: AsaasPixQrCode | null = null;
+  if (billingType === "PIX") {
+    try {
+      pixQrCode = await AsaasService.getPixQrCode(subAccountApiKey, asaasPayment.id);
+    } catch (e) {
+      // Não fatal — continua sem QR code; o link da fatura funciona
+      console.error(`[gofit-pay] getPixQrCode warn: ${(e as Error)?.name ?? "Error"}`);
+    }
+  }
+
+  // ── 11. Salva payment_charges ────────────────────────────────────────
+  const now = new Date().toISOString();
+  const { data: savedCharge, error: chargeErr } = await db
+    .from("payment_charges")
+    .insert({
+      contractor_id:      contractorId,
+      student_id:         studentId,
+      student_contract_id: receivable.student_contract_id ?? null,
+      receivable_id:      receivableId,
+      provider:           "asaas",
+      provider_charge_id: asaasPayment.id,
+      billing_type:       billingType,
+      amount,
+      value:              amount,         // alias
+      due_date:           dueDateFormatted,
+      status:             asaasPayment.status,
+      invoice_url:        asaasPayment.invoiceUrl    ?? null,
+      bank_slip_url:      asaasPayment.bankSlipUrl   ?? null,
+      pix_qr_code:        pixQrCode?.encodedImage    ?? null,
+      pix_copy_paste:     pixQrCode?.payload         ?? null,
+      payment_url:        asaasPayment.invoiceUrl    ?? null,
+      external_reference: externalRef,
+      raw_response_json:  sanitizePaymentForStorage(asaasPayment),
+      created_at:         now,
+      updated_at:         now,
+    })
+    .select("id")
+    .single();
+
+  if (chargeErr) {
+    if (chargeErr.code === "23505") {
+      // Corrida de requests — recupera cobrança existente
+      const { data: recovered } = await db
+        .from("payment_charges")
+        .select("id, provider_charge_id, billing_type, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste")
+        .eq("receivable_id", receivableId)
+        .eq("provider", "asaas")
+        .maybeSingle();
+      return json({
+        success: true,
+        data: {
+          charge_id:          recovered?.id ?? null,
+          provider_charge_id: recovered?.provider_charge_id ?? asaasPayment.id,
+          billing_type:       billingType,
+          status:             recovered?.status ?? asaasPayment.status,
+          amount,
+          due_date:           dueDateFormatted,
+          invoice_url:        recovered?.invoice_url   ?? asaasPayment.invoiceUrl   ?? null,
+          bank_slip_url:      recovered?.bank_slip_url ?? asaasPayment.bankSlipUrl  ?? null,
+          pix_qr_code:        recovered?.pix_qr_code   ?? pixQrCode?.encodedImage   ?? null,
+          pix_copy_paste:     recovered?.pix_copy_paste ?? pixQrCode?.payload        ?? null,
+          already_existed:    true,
+          message:            "Cobrança já existente (conflito de concorrência).",
+        },
+      });
+    }
+    const safeMsg = chargeErr.message.substring(0, 100).replace(/\s+/g, " ");
+    console.error(`[gofit-pay] payment_charges insert error: code=${chargeErr.code} ${safeMsg}`);
+    return err("Falha ao salvar cobrança. Cobrança foi criada no Asaas.", "CHARGE_SAVE_ERROR", 500);
+  }
+
+  // ── 12. Atualiza receivable com campos gateway ────────────────────────
+  await db
+    .from("receivables")
+    .update({
+      asaas_payment_id:  asaasPayment.id,
+      asaas_customer_id: providerCustomerId,
+      asaas_payment_url: asaasPayment.invoiceUrl ?? null,
+      gateway_status:    asaasPayment.status,
+      gateway_provider:  "asaas",
+    })
+    .eq("id", receivableId);
+
+  console.log(
+    `[gofit-pay] Cobrança Fase 6 criada: ` +
+    `charge=${savedCharge.id} providerCharge=${asaasPayment.id} ` +
+    `rcv=${receivableId} type=${billingType} value=${amount}`
+  );
+
+  // ── 13. Resposta sanitizada ──────────────────────────────────────────
+  // NUNCA incluir: subAccountApiKey, provider_api_key_encrypted, ASAAS_API_KEY
+  return json({
+    success: true,
+    data: {
+      charge_id:          savedCharge.id,
+      provider_charge_id: asaasPayment.id,
+      billing_type:       billingType,
+      status:             asaasPayment.status,
+      amount,
+      due_date:           dueDateFormatted,
+      invoice_url:        asaasPayment.invoiceUrl    ?? null,
+      bank_slip_url:      asaasPayment.bankSlipUrl   ?? null,
+      pix_qr_code:        pixQrCode?.encodedImage    ?? null,
+      pix_copy_paste:     pixQrCode?.payload         ?? null,
+      already_existed:    false,
+      message:            billingType === "PIX"
+        ? "Cobrança Pix criada com sucesso."
+        : "Cobrança Boleto criada com sucesso.",
+    },
+  });
+}
+
+/**
+ * get_charge — Retorna detalhes de uma cobrança pelo ID interno.
+ * Body: { action, charge_id }
+ */
+async function handleGetCharge(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const chargeId = typeof body.charge_id === "string" ? body.charge_id : null;
+  if (!chargeId) return err("charge_id obrigatório.", "MISSING_CHARGE_ID");
+
+  const db = serviceClient();
+
+  const { data: charge, error } = await db
+    .from("payment_charges")
+    .select("id, contractor_id, student_id, receivable_id, provider, provider_charge_id, billing_type, amount, value, due_date, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste, payment_url, external_reference, paid_at, created_at, updated_at")
+    .eq("id", chargeId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (error || !charge) {
+    return err("Cobrança não encontrada.", "CHARGE_NOT_FOUND", 404);
+  }
+
+  return json({ success: true, data: charge });
+}
+
+/**
+ * list_charges — Lista cobranças do contractor.
+ * Body: { action, student_id?, receivable_id?, status?, limit?, offset? }
+ */
+async function handleListCharges(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const db = serviceClient();
+
+  let query = db
+    .from("payment_charges")
+    .select("id, student_id, receivable_id, provider, provider_charge_id, billing_type, amount, value, due_date, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste, paid_at, created_at, updated_at")
+    .eq("contractor_id", contractorId)
+    .order("created_at", { ascending: false });
+
+  if (typeof body.student_id    === "string") query = query.eq("student_id",    body.student_id);
+  if (typeof body.receivable_id === "string") query = query.eq("receivable_id", body.receivable_id);
+  if (typeof body.status        === "string") query = query.eq("status",        body.status);
+
+  const limit  = typeof body.limit  === "number" ? Math.min(body.limit, 100)  : 50;
+  const offset = typeof body.offset === "number" ? body.offset : 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error(`[gofit-pay] list_charges error: ${error.message}`);
+    return err("Falha ao listar cobranças.", "LIST_CHARGES_ERROR", 500);
+  }
+
+  return json({ success: true, data: data ?? [] });
+}
+
+/* ─── cancel-charge — Fase 7 (stub) ─────────────────────────────────── */
+async function handleCancelCharge(): Promise<Response> {
+  return err("Cancelamento de cobranças disponível na Fase 7.", "NOT_IMPLEMENTED_PHASE_7", 501);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   WEBHOOK
+   ══════════════════════════════════════════════════════════════════════ */
+
 async function resolveContractorFromWebhook(
   db: ReturnType<typeof serviceClient>,
   paymentObj: Record<string, unknown> | null,
@@ -590,7 +1201,7 @@ async function resolveContractorFromWebhook(
     if (charge?.contractor_id) return charge.contractor_id;
   }
 
-  // 2. Tenta por externalReference → payment_charges (preparado para Fase 6)
+  // 2. Tenta por externalReference (Fase 6: "gofit:rcv:{uuid}")
   if (typeof paymentObj?.externalReference === "string" && paymentObj.externalReference) {
     const { data: charge } = await db
       .from("payment_charges")
@@ -600,9 +1211,9 @@ async function resolveContractorFromWebhook(
     if (charge?.contractor_id) return charge.contractor_id;
   }
 
-  // 3. Tenta por provider_account_id da subconta (payload.account.id ou account.id)
+  // 3. Tenta por provider_account_id da subconta
   const accountObj = (
-    payload.account   && typeof payload.account   === "object" ? payload.account   :
+    payload.account    && typeof payload.account    === "object" ? payload.account    :
     payload.subaccount && typeof payload.subaccount === "object" ? payload.subaccount :
     null
   ) as Record<string, unknown> | null;
@@ -616,11 +1227,9 @@ async function resolveContractorFromWebhook(
     if (acct?.contractor_id) return acct.contractor_id;
   }
 
-  // 4. Não foi possível resolver — salvar com contractor_id = null
   return null;
 }
 
-/* ─── webhook-receive ────────────────────────────────────────────────── */
 async function handleWebhookReceive(req: Request): Promise<Response> {
   let tokenValid = false;
   try {
@@ -645,8 +1254,8 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
     return err("Payload inválido.", "INVALID_PAYLOAD", 400);
   }
 
-  const eventType      = typeof payload.event === "string" ? payload.event : "UNKNOWN";
-  const providerEventId = typeof payload.id   === "string" ? payload.id    : null;
+  const eventType       = typeof payload.event === "string" ? payload.event : "UNKNOWN";
+  const providerEventId = typeof payload.id    === "string" ? payload.id    : null;
 
   const paymentObj    = payload.payment && typeof payload.payment === "object"
     ? (payload.payment as Record<string, unknown>) : null;
@@ -654,7 +1263,6 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
 
   const db = serviceClient();
 
-  // Idempotência
   if (providerEventId) {
     const { data: dup } = await db
       .from("gofit_pay_webhook_events")
@@ -667,13 +1275,12 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
     }
   }
 
-  // Resolução do contractor (null se não encontrado)
   const contractorId = await resolveContractorFromWebhook(db, paymentObj, payload);
 
   const { error: insertErr } = await db
     .from("gofit_pay_webhook_events")
     .insert({
-      contractor_id:       contractorId,   // null quando não resolvido
+      contractor_id:       contractorId,
       provider:            "asaas",
       event_type:          eventType,
       provider_event_id:   providerEventId,
@@ -687,12 +1294,9 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
     });
 
   if (insertErr) {
-    // Idempotência via constraint (corrida entre requests)
     if (insertErr.code === "23505") {
       return json({ success: true, data: { duplicate: true } });
     }
-    // Falha real: logar sanitizado e retornar 200 para evitar retry infinito do Asaas,
-    // mas com indicação clara de falha para auditoria
     const safeMsg = insertErr.message.substring(0, 120).replace(/\s+/g, " ");
     console.error(`[gofit-pay-webhook] Insert failed: code=${insertErr.code} hint=${safeMsg}`);
     return json({
@@ -710,25 +1314,24 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
   return json({
     success: true,
     data: {
-      queued:             true,
-      processed:          false,
+      queued:              true,
+      processed:           false,
       contractor_resolved: contractorId !== null,
-      event_type:         eventType,
-      message:            contractorId
+      event_type:          eventType,
+      message: contractorId
         ? "Evento registrado."
-        : "Evento registrado. Contractor não resolvido — será processado posteriormente.",
+        : "Evento registrado. Contractor não resolvido — será processado na Fase 7.",
     },
   });
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
    ROTEADOR PRINCIPAL
-   ═══════════════════════════════════════════════════════════════════════ */
+   ══════════════════════════════════════════════════════════════════════ */
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
-  // Webhook: sem JWT — validação pelo token próprio Asaas
   const url = new URL(req.url);
   if (req.method === "POST" && url.searchParams.get("source") === "webhook") {
     try {
@@ -743,7 +1346,6 @@ serve(async (req) => {
     return err("Método não permitido.", "METHOD_NOT_ALLOWED", 405);
   }
 
-  // ── Body ──────────────────────────────────────────────────────────────
   let body: Record<string, unknown> = {};
   try {
     body = await req.json();
@@ -753,28 +1355,24 @@ serve(async (req) => {
 
   const action = typeof body?.action === "string" ? body.action : null;
 
-  // ping: keepalive sem autenticação pesada
   if (action === "ping") {
-    return json({ success: true, data: { pong: true, phase: 5 } });
+    return json({ success: true, data: { pong: true, phase: 6 } });
   }
 
-  // ── Autenticação ───────────────────────────────────────────────────────
   const identity = await resolveContractor(req);
   if (!identity) {
     return err("Não autenticado ou empresa não encontrada.", "UNAUTHORIZED", 401);
   }
 
-  // ── Secrets ────────────────────────────────────────────────────────────
   const secrets = validateSecrets();
 
-  // ── Roteamento ─────────────────────────────────────────────────────────
   try {
     switch (action) {
       case "health-check":
         return await handleHealthCheck(identity.contractorId, secrets);
 
       case "activate_gofit_pay":
-      case "create-account":           // alias de compatibilidade
+      case "create-account":
         return await handleActivateGoFitPay(identity.contractorId, secrets);
 
       case "get_activation_status":
@@ -783,11 +1381,26 @@ serve(async (req) => {
       case "retry_activation":
         return await handleRetryActivation(identity.contractorId, secrets);
 
-      case "create-charge":
-        return await handleCreateCharge(body, identity.contractorId, secrets);
+      // ── Fase 6 ────────────────────────────────────────────────────────
+      case "create_payment_charge":
+        return await handleCreatePaymentCharge(body, identity.contractorId, secrets);
 
+      case "get_or_create_customer":
+        return await handleGetOrCreateCustomer(body, identity.contractorId, secrets);
+
+      case "get_charge":
+        return await handleGetCharge(body, identity.contractorId);
+
+      case "list_charges":
+        return await handleListCharges(body, identity.contractorId);
+
+      // ── Fase 7 (stub) ─────────────────────────────────────────────────
       case "cancel-charge":
         return await handleCancelCharge();
+
+      // ── Deprecated (Fase 5 stub) ──────────────────────────────────────
+      case "create-charge":
+        return err("Use action 'create_payment_charge' (Fase 6).", "USE_CREATE_PAYMENT_CHARGE", 400);
 
       case "webhook-receive":
         return err("Use ?source=webhook com header asaas-access-token.", "USE_WEBHOOK_ENDPOINT", 400);
@@ -799,6 +1412,9 @@ serve(async (req) => {
         return err(`Ação desconhecida: '${action}'.`, "UNKNOWN_ACTION", 400);
     }
   } catch (e) {
+    if (e instanceof GoFitPayBusinessError) {
+      return err(e.message, e.code, e.httpStatus);
+    }
     if (e instanceof AsaasConfigError) {
       console.error("[gofit-pay] AsaasConfigError:", e.name);
       return err("Configuração de gateway incompleta.", "CONFIG_ERROR", 503);

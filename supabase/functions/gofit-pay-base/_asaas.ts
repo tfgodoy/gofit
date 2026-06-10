@@ -6,21 +6,23 @@
  *   - ASAAS_API_KEY       → chave da plataforma (criar subcontas)
  *   - ASAAS_WEBHOOK_TOKEN → validação de webhooks
  *   - GOFIT_PAY_ENCRYPTION_KEY → chave AES-256-GCM para criptografar subconta keys
+ *   - subAccountApiKey    → chave decriptada da subconta, só em memória, NUNCA logar
  *   - provider_api_key_encrypted → lida do DB e descriptografada aqui; nunca exposta
- *   - Nenhuma chave aparece em console.log, response, toast ou exception pública
  *
  * CRIPTOGRAFIA (AES-256-GCM):
  *   - IV: 12 bytes aleatórios por operação
  *   - Formato: base64(iv[12] || ciphertext+tag)
  *   - Chave: primeiros 32 bytes de GOFIT_PAY_ENCRYPTION_KEY (UTF-8)
  *
- * FASE ATUAL: 5
- *   - createSubAccount: IMPLEMENTADO (sandbox)
- *   - createPayment:    Fase 5 (stub)
- *   - cancelPayment:    Fase 6 (stub)
+ * FASE ATUAL: 6
+ *   - createSubAccount:  IMPLEMENTADO (sandbox) — Fase 5
+ *   - upsertCustomer:    IMPLEMENTADO (sandbox) — Fase 6
+ *   - createPayment:     IMPLEMENTADO (sandbox) — Fase 6
+ *   - getPixQrCode:      IMPLEMENTADO (sandbox) — Fase 6
+ *   - cancelPayment:     Fase 7 (stub)
  */
 
-import { sanitizeError, maskSecret } from "./_security.ts";
+import { sanitizeError } from "./_security.ts";
 
 export type AsaasEnvironment = "sandbox" | "production";
 
@@ -38,12 +40,15 @@ function getAsaasConfig(): { baseUrl: string; apiKey: string; webhookToken: stri
   return { baseUrl, apiKey, webhookToken };
 }
 
+/** Retorna só a base URL — para operações com chave de subconta. */
+function getBaseUrl(): string {
+  const baseUrl = Deno.env.get("ASAAS_BASE_URL");
+  if (!baseUrl) throw new AsaasConfigError("ASAAS_BASE_URL ausente.");
+  return baseUrl;
+}
+
 /* ─── Helpers de mapeamento ──────────────────────────────────────────── */
 
-/**
- * Mapeia tipo_empresa do wizard para companyType esperado pelo Asaas.
- * Referência: https://docs.asaas.com/reference/criar-subconta
- */
 export function toAsaasCompanyType(tipoEmpresa: string): string {
   const map: Record<string, string> = {
     mei:         "MEI",
@@ -59,14 +64,6 @@ export function toAsaasCompanyType(tipoEmpresa: string): string {
   return map[(tipoEmpresa ?? "").toLowerCase()] ?? "LIMITED";
 }
 
-/**
- * Mapeia accountStatus.status do Asaas para status interno GoFit Pay.
- *
- * GoFit status:
- *   in_review        → conta submetida, aguardando análise Asaas
- *   active           → conta aprovada e operacional
- *   activation_failed → conta recusada ou erro na criação
- */
 export function mapAsaasAccountStatus(asaasStatus: string): string {
   const map: Record<string, string> = {
     PENDING:             "in_review",
@@ -83,9 +80,6 @@ export function mapAsaasAccountStatus(asaasStatus: string): string {
   return map[(asaasStatus ?? "").toUpperCase()] ?? "in_review";
 }
 
-/**
- * Mapeia status GoFit Pay para onboarding_status de gofit_pay_config.
- */
 export function toOnboardingStatus(gofitStatus: string): string {
   if (gofitStatus === "active")            return "ativo";
   if (gofitStatus === "in_review")         return "em_analise";
@@ -113,11 +107,6 @@ async function deriveEncryptionKey(usage: "encrypt" | "decrypt"): Promise<Crypto
   );
 }
 
-/**
- * Criptografa a API key da subconta Asaas.
- * Formato: base64(iv[12] || ciphertext+tag)
- * NUNCA logar plainKey. Nunca retornar ao frontend.
- */
 export async function encryptSubAccountKey(plainKey: string): Promise<string> {
   if (!plainKey || plainKey.trim() === "") {
     throw new AsaasConfigError("API key da subconta não pode ser vazia.");
@@ -139,10 +128,6 @@ export async function encryptSubAccountKey(plainKey: string): Promise<string> {
   return btoa(String.fromCharCode(...combined));
 }
 
-/**
- * Descriptografa a API key da subconta.
- * NUNCA expor o resultado em log ou response.
- */
 export async function decryptSubAccountKey(encryptedB64: string): Promise<string> {
   if (!encryptedB64) throw new AsaasConfigError("Chave criptografada ausente.");
 
@@ -178,10 +163,6 @@ export async function decryptSubAccountKey(encryptedB64: string): Promise<string
 
 /* ─── Validação de webhook ────────────────────────────────────────────── */
 
-/**
- * Valida asaas-access-token com comparação constant-time.
- * NUNCA logar o token.
- */
 export function validateWebhookToken(req: Request): boolean {
   const { webhookToken } = getAsaasConfig();
   const headerToken = req.headers.get("asaas-access-token") ?? "";
@@ -210,7 +191,7 @@ async function asaasRequest<T>(
     headers: {
       "access_token": apiKey,
       "Content-Type": "application/json",
-      "User-Agent":   "GoFit/5.0 (+https://fitcoresys.com.br)",
+      "User-Agent":   "GoFit/6.0 (+https://fitcoresys.com.br)",
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -244,27 +225,21 @@ export const AsaasService = {
   toAsaasCompanyType,
   toOnboardingStatus,
 
-  /* ─── Subcontas ──────────────────────────────────────────────────────
-     FASE 5 — Implementado para sandbox
-     Cria subconta Asaas (White Label) com a API key master da plataforma.
-     A subconta recebe seu próprio apiKey → criptografar IMEDIATAMENTE com
-     encryptSubAccountKey() e salvar em provider_api_key_encrypted.
-     NUNCA retornar, logar ou exibir o apiKey.
-  */
+  /* ─── Subcontas (Fase 5) ──────────────────────────────────────────── */
+
   async createSubAccount(params: CreateSubAccountParams): Promise<AsaasAccount> {
     const { baseUrl, apiKey } = getAsaasConfig();
 
-    // Sanitiza campos numéricos
-    const cnpjClean     = params.cnpj.replace(/\D/g, "");
-    const celularClean  = params.resp_celular.replace(/\D/g, "");
-    const cepClean      = params.cep.replace(/\D/g, "");
-    const companyType   = toAsaasCompanyType(params.tipo_empresa);
+    const cnpjClean    = params.cnpj.replace(/\D/g, "");
+    const celularClean = params.resp_celular.replace(/\D/g, "");
+    const cepClean     = params.cep.replace(/\D/g, "");
+    const companyType  = toAsaasCompanyType(params.tipo_empresa);
 
     const requestBody: Record<string, unknown> = {
       name:          params.razao_social,
       email:         params.resp_email,
       cpfCnpj:       cnpjClean,
-      birthDate:     params.resp_nascimento,   // YYYY-MM-DD (nascimento resp. legal)
+      birthDate:     params.resp_nascimento,
       companyType,
       mobilePhone:   celularClean,
       address:       params.logradouro,
@@ -289,32 +264,104 @@ export const AsaasService = {
     return result;
   },
 
-  /* ─── Customers ───────────────────────────────────────────────────── */
+  /* ─── Customers (Fase 6) ──────────────────────────────────────────── */
 
-  /** FASE 5 — Cria/atualiza customer com API key da subconta. */
+  /**
+   * FASE 6 — Cria ou recupera customer no Asaas usando a chave da subconta.
+   *
+   * subAccountApiKey = chave decriptada da subconta (só em memória — NUNCA logar).
+   * Fallback: se CPF já existe no Asaas, busca o customer existente.
+   */
   async upsertCustomer(
-    _encryptedSubAccountKey: string,
-    _params: CreateCustomerParams
+    subAccountApiKey: string,
+    params: CreateCustomerParams
   ): Promise<AsaasCustomer> {
-    throw new AsaasNotImplementedError("upsertCustomer", 5);
+    const baseUrl = getBaseUrl();
+
+    const body: Record<string, unknown> = { name: params.name };
+    if (params.email)            body.email             = params.email;
+    if (params.cpfCnpj)          body.cpfCnpj           = params.cpfCnpj.replace(/\D/g, "");
+    if (params.phone)            body.mobilePhone        = params.phone.replace(/\D/g, "");
+    if (params.externalReference) body.externalReference = params.externalReference;
+
+    try {
+      const customer = await asaasRequest<AsaasCustomer>(
+        subAccountApiKey, baseUrl, "POST", "/customers", body
+      );
+      console.log(`[gofit-pay] Customer criado: id=${customer.id}`);
+      return customer;
+    } catch (e) {
+      // CPF/CNPJ já cadastrado → buscar customer existente
+      if (e instanceof AsaasApiError && params.cpfCnpj) {
+        const cpfClean = params.cpfCnpj.replace(/\D/g, "");
+        try {
+          const list = await asaasRequest<{ data?: AsaasCustomer[] }>(
+            subAccountApiKey, baseUrl, "GET", `/customers?cpfCnpj=${cpfClean}&limit=1`
+          );
+          if (list.data?.[0]?.id) {
+            console.log(`[gofit-pay] Customer existente (cpf match): id=${list.data[0].id}`);
+            return list.data[0];
+          }
+        } catch { /* search fallback falhou — relança erro original */ }
+      }
+      throw e;
+    }
   },
 
-  /* ─── Cobranças ───────────────────────────────────────────────────── */
+  /* ─── Cobranças (Fase 6) ──────────────────────────────────────────── */
 
-  /** FASE 5 — Cria cobrança. */
+  /**
+   * FASE 6 — Cria cobrança Pix ou Boleto usando a chave da subconta.
+   * Não implementa cartão, split, recorrência ou antecipação.
+   */
   async createPayment(
-    _encryptedSubAccountKey: string,
-    _params: CreatePaymentParams
+    subAccountApiKey: string,
+    params: CreatePaymentParams
   ): Promise<AsaasPayment> {
-    throw new AsaasNotImplementedError("createPayment", 5);
+    const baseUrl = getBaseUrl();
+
+    const body: Record<string, unknown> = {
+      customer:    params.customer,
+      billingType: params.billingType,
+      value:       params.amount,
+      dueDate:     params.dueDate,
+    };
+    if (params.description)        body.description       = params.description;
+    if (params.externalReference)  body.externalReference = params.externalReference;
+
+    const result = await asaasRequest<AsaasPayment>(
+      subAccountApiKey, baseUrl, "POST", "/payments", body
+    );
+
+    // Log apenas campos seguros
+    console.log(
+      `[gofit-pay] Cobrança criada: id=${result.id} ` +
+      `type=${result.billingType} status=${result.status} value=${result.value}`
+    );
+
+    return result;
   },
 
-  /** FASE 6 — Cancela cobrança. */
+  /**
+   * FASE 6 — Obtém QR Code Pix de uma cobrança já criada.
+   * Chamado logo após createPayment para billingType = PIX.
+   */
+  async getPixQrCode(
+    subAccountApiKey: string,
+    paymentId: string
+  ): Promise<AsaasPixQrCode> {
+    const baseUrl = getBaseUrl();
+    return asaasRequest<AsaasPixQrCode>(
+      subAccountApiKey, baseUrl, "GET", `/payments/${paymentId}/pixQrCode`
+    );
+  },
+
+  /** FASE 7 — Cancela cobrança. */
   async cancelPayment(
-    _encryptedSubAccountKey: string,
+    _subAccountApiKey: string,
     _providerChargeId: string
   ): Promise<void> {
-    throw new AsaasNotImplementedError("cancelPayment", 6);
+    throw new AsaasNotImplementedError("cancelPayment", 7);
   },
 
 } as const;
@@ -327,7 +374,7 @@ export interface CreateSubAccountParams {
   tipo_empresa:     string;
   resp_email:       string;
   resp_celular:     string;
-  resp_nascimento:  string;   // YYYY-MM-DD
+  resp_nascimento:  string;
   logradouro:       string;
   numero_end:       string;
   complemento?:     string;
@@ -338,16 +385,16 @@ export interface CreateSubAccountParams {
 export interface CreateCustomerParams {
   name:               string;
   email?:             string;
-  cpfCnpj?:          string;
+  cpfCnpj?:           string;
   phone?:             string;
   externalReference?: string;
 }
 
 export interface CreatePaymentParams {
-  customer:           string;
-  billingType:        string;
+  customer:           string;   // Asaas customer ID (cus_xxx)
+  billingType:        "PIX" | "BOLETO";
   amount:             number;
-  dueDate:            string;
+  dueDate:            string;   // YYYY-MM-DD
   description?:       string;
   externalReference?: string;
 }
@@ -361,30 +408,39 @@ export interface AsaasAccount {
   walletId:   string;
   apiKey?:    string;       // presente só na criação — NUNCA logar/retornar
   accountStatus?: {
-    status:         string;   // PENDING | AWAITING_KYC_FORM | APPROVED | DECLINED | ...
+    status:         string;
     observations?:  string | null;
     updatedAt?:     string;
   };
 }
 
 export interface AsaasCustomer {
-  id:       string;
-  name:     string;
-  email:    string | null;
-  cpfCnpj: string | null;
+  id:                 string;
+  name:               string;
+  email?:             string | null;
+  cpfCnpj?:          string | null;
+  mobilePhone?:       string | null;
+  externalReference?: string | null;
 }
 
 export interface AsaasPayment {
-  id:           string;
-  status:       string;
-  billingType:  string;
-  value:        number;
-  netValue:     number;
-  dueDate:      string;
-  invoiceUrl:   string | null;
-  bankSlipUrl:  string | null;
-  pixQrCode?:   string;
-  pixCopyCola?: string;
+  id:                 string;
+  customer:           string;
+  billingType:        string;
+  value:              number;
+  netValue:           number;
+  status:             string;
+  dueDate:            string;
+  invoiceUrl:         string | null;
+  bankSlipUrl:        string | null;
+  externalReference?: string | null;
+  description?:       string | null;
+}
+
+export interface AsaasPixQrCode {
+  encodedImage:    string;   // base64 PNG — não logar
+  payload:         string;   // pix copia-e-cola
+  expirationDate?: string | null;
 }
 
 /* ─── Classes de erro ─────────────────────────────────────────────────── */
