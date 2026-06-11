@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import {
   X, Plus, Trash2, ChevronDown, ChevronUp, Settings, DollarSign,
@@ -254,7 +255,7 @@ function FinanceiroModal({
           {local.possui_valor_adesao && (
             <div>
               <label className={LBL}>Valor de adesão (R$)</label>
-              <input type="number" min={0} step={0.01} value={local.valor_adesao} onChange={e => setLocal(l => ({ ...l, valor_adesao: e.target.value }))} className={INP} placeholder="0,00" />
+              <CurrencyInput value={local.valor_adesao} onChange={v => setLocal(l => ({ ...l, valor_adesao: v }))} className={INP} placeholder="0,00" />
             </div>
           )}
 
@@ -646,11 +647,11 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
               <div className="grid grid-cols-2 gap-5">
                 <div>
                   <label className={LBL}>Valor total (R$) {REQ}</label>
-                  <input type="number" min={0} step={0.01} value={form.valor_total} onChange={e => setForm(f => ({ ...f, valor_total: e.target.value }))} className={INP} placeholder="0,00" />
+                  <CurrencyInput value={form.valor_total} onChange={v => setForm(f => ({ ...f, valor_total: v }))} className={INP} placeholder="0,00" />
                 </div>
                 <div>
                   <label className={LBL}>Valor por mês (R$)</label>
-                  <input type="number" min={0} step={0.01} value={form.valor_por_mes} onChange={e => setForm(f => ({ ...f, valor_por_mes: e.target.value }))} className={INP} placeholder="0,00" />
+                  <CurrencyInput value={form.valor_por_mes} onChange={v => setForm(f => ({ ...f, valor_por_mes: v }))} className={INP} placeholder="0,00" />
                 </div>
               </div>
             </div>

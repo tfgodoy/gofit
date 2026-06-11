@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect, useCallback } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
@@ -7,7 +8,7 @@ import {
   MoreVertical, X, Sparkles, Users, BookOpen, Wand2,
   Trash2, Copy, Eye, Mail, Link2, Printer,
   DollarSign, Coins, CalendarDays, ScrollText, Gift, FlaskConical, FileText, MessageSquare,
-  UploadCloud,
+  UploadCloud, Receipt, Share2, Check, MessageCircle as WhatsAppIcon, ChevronLeft,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,7 +88,7 @@ const NIVEL_LABEL: Record<string, string> = {
 const WORKOUT_STATUS_STYLE: Record<WorkoutStatus, string> = {
   rascunho:   "bg-gray-100 text-gray-500",
   ativo:      "bg-green-100 text-green-700",
-  finalizado: "bg-purple-100 text-purple-700",
+  finalizado: "bg-orange-100 text-orange-700",
 };
 const WORKOUT_STATUS_LABEL: Record<WorkoutStatus, string> = {
   rascunho: "Rascunho", ativo: "Ativo", finalizado: "Finalizado",
@@ -285,7 +286,7 @@ function NovoTreinoModal({ studentName, onClose, onSelect }: {
       icon: <Wand2 className="w-7 h-7 text-gray-500" />,
       label: "Criar um treino com a Inteligência de treinos",
       badge: (
-        <span className="absolute -top-1.5 -right-1.5 bg-purple-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+        <span className="absolute -top-1.5 -right-1.5 bg-orange-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
           IA integrada
         </span>
       ),
@@ -469,6 +470,7 @@ function WorkoutCard({ w, onStatusChange, onDelete, onEdit }: {
   onEdit: (id: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { canEdit, canDelete } = useAuth();
 
   function toggleStatus() {
     const next: WorkoutStatus = w.status === "ativo" ? "finalizado" : "ativo";
@@ -526,25 +528,33 @@ function WorkoutCard({ w, onStatusChange, onDelete, onEdit }: {
           </button>
           {menuOpen && (
             <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-xl min-w-[160px] py-1">
-              <button
-                onClick={() => { setMenuOpen(false); onEdit(w.id); }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Editar
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                <Copy className="w-3.5 h-3.5" /> Duplicar
-              </button>
-              <div className="border-t border-gray-100 my-0.5" />
-              <button
-                onClick={() => { setMenuOpen(false); onDelete(w.id); }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Excluir
-              </button>
+              {canEdit("treinos") && (
+                <button
+                  onClick={() => { setMenuOpen(false); onEdit(w.id); }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Editar
+                </button>
+              )}
+              {canEdit("treinos") && (
+                <button
+                  onClick={() => { setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Duplicar
+                </button>
+              )}
+              {canDelete("treinos") && (
+                <>
+                  <div className="border-t border-gray-100 my-0.5" />
+                  <button
+                    onClick={() => { setMenuOpen(false); onDelete(w.id); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -574,6 +584,7 @@ function AnamneseTab({ studentId, contractorId, studentEmail, studentTelefone, s
   studentTelefone?: string | null;
   studentName?:     string;
 }) {
+  const { canCreate: canCrt, canEdit: canEdt, canDelete: canDel } = useAuth();
   const [respostas,         setRespostas]         = useState<any[]>([]);
   const [loading,           setLoading]           = useState(true);
   const [selecionarModal,   setSelecionarModal]   = useState(false);
@@ -785,14 +796,16 @@ ${parqHtml}
     <div className="space-y-4">
 
       {/* Toolbar */}
-      <div className="flex justify-center">
-        <button
-          onClick={openSelecionarModal}
-          className="inline-flex items-center gap-2 bg-green-500 text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:bg-green-600 transition-colors"
-        >
-          ENVIAR ANAMNESE
-        </button>
-      </div>
+      {canCrt("clientes") && (
+        <div className="flex justify-center">
+          <button
+            onClick={openSelecionarModal}
+            className="inline-flex items-center gap-2 bg-green-500 text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:bg-green-600 transition-colors"
+          >
+            ENVIAR ANAMNESE
+          </button>
+        </div>
+      )}
 
       {/* Lista */}
       {loading ? (
@@ -841,22 +854,26 @@ ${parqHtml}
                       >
                         <Link2 className="w-4 h-4 text-gray-500" />
                       </button>
-                      <button
-                        onClick={() => handleEditAnamnese(r)}
-                        title="Opções de envio"
-                        className="p-1.5 rounded hover:bg-gray-100"
-                      >
-                        <Pencil className="w-4 h-4 text-gray-500" />
-                      </button>
+                      {canEdt("clientes") && (
+                        <button
+                          onClick={() => handleEditAnamnese(r)}
+                          title="Opções de envio"
+                          className="p-1.5 rounded hover:bg-gray-100"
+                        >
+                          <Pencil className="w-4 h-4 text-gray-500" />
+                        </button>
+                      )}
                     </>
                   )}
-                  <button
-                    onClick={() => setDeleteConfirmId(r.id)}
-                    title="Excluir anamnese"
-                    className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canDel("clientes") && (
+                    <button
+                      onClick={() => setDeleteConfirmId(r.id)}
+                      title="Excluir anamnese"
+                      className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1604,6 +1621,7 @@ type Aval = {
 
 function AvaliacoesTab({ studentId, contractorId }: { studentId: string; contractorId: string }) {
   const navigate = useNavigate();
+  const { canCreate: canCrtAv, canEdit: canEdtAv, canDelete: canDelAv } = useAuth();
   const [avais, setAvais]       = useState<Aval[]>([]);
   const [loading, setLoading]   = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -1639,13 +1657,15 @@ function AvaliacoesTab({ studentId, contractorId }: { studentId: string; contrac
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Avaliações Físicas</h2>
-        <button
-          onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/nova`)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          NOVA AVALIAÇÃO
-        </button>
+        {canCrtAv("avaliacoes") && (
+          <button
+            onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/nova`)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            NOVA AVALIAÇÃO
+          </button>
+        )}
       </div>
 
       {avais.length === 0 ? (
@@ -1709,20 +1729,24 @@ function AvaliacoesTab({ studentId, contractorId }: { studentId: string; contrac
                 </div>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                <button
-                  onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/${a.id}`)}
-                  className="p-1.5 rounded hover:bg-gray-100"
-                  title="Editar"
-                >
-                  <Pencil className="w-4 h-4 text-gray-400" />
-                </button>
-                <button
-                  onClick={() => setDeleteId(a.id)}
-                  className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
-                  title="Excluir"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canEdtAv("avaliacoes") && (
+                  <button
+                    onClick={() => navigate(`/app/clientes/${studentId}/avaliacao-fisica/${a.id}`)}
+                    className="p-1.5 rounded hover:bg-gray-100"
+                    title="Editar"
+                  >
+                    <Pencil className="w-4 h-4 text-gray-400" />
+                  </button>
+                )}
+                {canDelAv("avaliacoes") && (
+                  <button
+                    onClick={() => setDeleteId(a.id)}
+                    className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600"
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -2087,6 +2111,7 @@ function VendasTab({ studentId, contractorId, studentNome }: {
   studentId: string; contractorId: string; studentNome: string;
 }) {
   const navigate = useNavigate();
+  const { canCreate: canCrtVd } = useAuth();
   const [vendas,    setVendas]    = useState<any[]>([]);
   const [filtered,  setFiltered]  = useState<any[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -2190,10 +2215,12 @@ function VendasTab({ studentId, contractorId, studentNome }: {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-gray-800">Vendas</h2>
-        <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
-          <Plus className="w-4 h-4" /> NOVA VENDA
-        </button>
+        {canCrtVd("financeiro") && (
+          <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
+            <Plus className="w-4 h-4" /> NOVA VENDA
+          </button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -2247,10 +2274,12 @@ function VendasTab({ studentId, contractorId, studentNome }: {
           <DollarSign className="w-10 h-10 text-gray-200" />
           <p className="text-sm text-gray-400 font-semibold">Nenhuma venda registrada</p>
           <p className="text-xs text-gray-400">Clique em "NOVA VENDA" para vincular este aluno a um plano.</p>
-          <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
-            className="mt-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
-            + NOVA VENDA
-          </button>
+          {canCrtVd("financeiro") && (
+            <button onClick={() => navigate(`/app/clientes/${studentId}/venda`)}
+              className="mt-2 px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors">
+              + NOVA VENDA
+            </button>
+          )}
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-2 bg-white rounded-2xl border border-gray-100">
@@ -2537,7 +2566,7 @@ function ContratoDetalheModal({ sc, contractorId, studentId, studentNome, onClos
                   </span>
                 )}
                 {sc.tipo_venda === "com_recorrencia" && (
-                  <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                  <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
                     GoFit Pay
                   </span>
                 )}
@@ -2809,7 +2838,7 @@ const MOTIVOS_ENCERRAMENTO_DEFAULT = [
 function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
   sc: any; contractorId: string; studentId: string; onClose: () => void; onSaved: () => void;
 }) {
-  const [step, setStep]           = useState<"escolha" | "agora" | "programar">("escolha");
+  const [step, setStep]           = useState<"escolha" | "agora" | "programar" | "pagamento" | "dadosPagamento">("escolha");
   const [motivo, setMotivo]       = useState("");
   const [descricao, setDescricao] = useState("");
   const [dataEnc, setDataEnc]     = useState("");
@@ -2817,11 +2846,24 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
   const [totalAberto, setTotalAberto] = useState<number>(0);
   const [motivos, setMotivos]     = useState<string[]>(MOTIVOS_ENCERRAMENTO_DEFAULT);
   const [saving, setSaving]       = useState(false);
+  // Multa por encerramento
+  const [multaAtivo, setMultaAtivo]     = useState(false);
+  const [multaPctCfg, setMultaPctCfg]   = useState(10);
+  const [gerarMulta, setGerarMulta]     = useState(false);
+  const [multaPct, setMultaPct]         = useState("10.00");
+  // Pagamento da multa
+  const [multaRecId, setMultaRecId]     = useState<string | null>(null);
+  const [metodoPag, setMetodoPag]       = useState("");
+  const [dataPag, setDataPag]           = useState(new Date().toISOString().slice(0, 10));
+  const [valorPag, setValorPag]         = useState("");
+  const [showPctModal, setShowPctModal] = useState(false);
+  const [descontoPct, setDescontoPct]   = useState("0");
+  const [descontoFixo, setDescontoFixo] = useState("");
 
   useEffect(() => {
     async function load() {
-      // Carregar motivos cadastrados + contas em aberto em paralelo
-      const [{ data: motivosData }, { data: contasData }] = await Promise.all([
+      // Carregar motivos, contas em aberto e config de multa em paralelo
+      const [{ data: motivosData }, { data: contasData }, { data: finSettings }] = await Promise.all([
         supabase.from("crm_config")
           .select("nome").eq("contractor_id", contractorId)
           .eq("categoria", "motivo_encerramento").eq("ativo", true)
@@ -2829,17 +2871,29 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
         supabase.from("receivables")
           .select("valor").eq("student_contract_id", sc.id)
           .in("status", ["pendente", "aguardando"]),
+        supabase.from("financial_settings")
+          .select("multa_encerramento_ativo, multa_encerramento_percentual")
+          .eq("contractor_id", contractorId).maybeSingle(),
       ]);
       if (motivosData && motivosData.length > 0) {
         setMotivos(motivosData.map(m => m.nome));
       }
       const total = (contasData ?? []).reduce((sum, r) => sum + Number(r.valor), 0);
       setTotalAberto(total);
+      if (finSettings) {
+        const pct = Number(finSettings.multa_encerramento_percentual ?? 10);
+        setMultaAtivo(finSettings.multa_encerramento_ativo ?? false);
+        setMultaPctCfg(pct);
+        setMultaPct(String(pct));
+        setGerarMulta(finSettings.multa_encerramento_ativo ?? false);
+      }
     }
     load();
   }, [sc.id, contractorId]);
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
+
+  const multaValor = totalAberto > 0 ? totalAberto * (parseFloat(multaPct) || 0) / 100 : 0;
 
   async function handleEncerrar() {
     if (!motivo) { toast.error("Selecione o motivo de encerramento."); return; }
@@ -2867,8 +2921,31 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
     await supabase.from("contract_events").insert({
       contractor_id: contractorId,
       student_contract_id: sc.id,
-      descricao: `Contrato encerrado. Motivo: ${motivo}${descricao.trim() ? ` — ${descricao.trim()}` : ""}`,
+      descricao: `Contrato encerrado. Motivo: ${motivo}${descricao.trim() ? ` — ${descricao.trim()}` : ""}${gerarMulta && multaValor > 0 ? ` | Multa de rescisão gerada: ${multaValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : ""}`,
     });
+
+    // Se gerar multa: criar recebível da multa e ir ao fluxo de pagamento
+    if (gerarMulta && multaValor > 0) {
+      const vencimento = new Date().toISOString().slice(0, 10);
+      const { data: multa } = await supabase.from("receivables").insert({
+        contractor_id: contractorId,
+        student_id: studentId,
+        student_contract_id: sc.id,
+        descricao: "Multa por rescisão antecipada",
+        valor: multaValor,
+        vencimento,
+        status: "pendente",
+        parcela_numero: 1,
+        total_parcelas: 1,
+      }).select("id").maybeSingle();
+      if (multa) {
+        setMultaRecId(multa.id);
+        setValorPag(multaValor.toFixed(2));
+      }
+      setSaving(false);
+      setStep("pagamento");
+      return;
+    }
 
     toast.success("Contrato encerrado.");
     setSaving(false);
@@ -2971,6 +3048,35 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
                 </div>
               )}
             </div>
+
+              {/* Multa por rescisão */}
+              {totalAberto > 0 && opcaoContas === "cancelar" && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={gerarMulta} onChange={e => setGerarMulta(e.target.checked)}
+                      className="accent-orange-500 w-4 h-4" />
+                    <span className="text-sm font-semibold text-orange-800">Gerar multa por rescisão antecipada</span>
+                  </label>
+                  {gerarMulta && (
+                    <div className="pl-7 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-orange-700 w-20">Percentual:</label>
+                        <div className="relative w-28">
+                          <input type="number" min="0" max="100" step="0.5"
+                            value={multaPct} onChange={e => setMultaPct(e.target.value)}
+                            className="w-full border border-orange-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 pr-6" />
+                          <span className="absolute right-2 top-1.5 text-xs text-orange-500 font-bold">%</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-orange-700">
+                        Valor da multa:{" "}
+                        <strong>{multaValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
+                        {" "}({parseFloat(multaPct)||0}% sobre {fmtBRL(totalAberto)} em aberto)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
               <button onClick={onClose} className="text-sm font-semibold text-gray-500 hover:underline">FECHAR</button>
               <button onClick={handleEncerrar} disabled={saving}
@@ -3030,6 +3136,166 @@ function EncerrarModal({ sc, contractorId, studentId, onClose, onSaved }: {
           </>
         )}
 
+        {/* ── Passo 3: Método de pagamento da multa ── */}
+        {step === "pagamento" && (() => {
+          const metodos = [
+            { id: "cartao_credito", label: "Cartão de crédito" },
+            { id: "cartao_debito",  label: "Cartão de débito" },
+            { id: "dinheiro",       label: "Dinheiro" },
+            { id: "pix",            label: "Pix / Depósito" },
+            { id: "boleto",         label: "Boleto" },
+            { id: "outros",         label: "Outros" },
+          ];
+          return (
+            <>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Cobrança da multa</h3>
+                  <p className="text-xs text-gray-400">Selecione o método de pagamento</p>
+                </div>
+                <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="p-6">
+                <p className="text-sm text-gray-500 mb-4">
+                  Multa gerada:{" "}
+                  <strong className="text-orange-600">{multaValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {metodos.map(m => (
+                    <button key={m.id}
+                      onClick={() => { setMetodoPag(m.id); setStep("dadosPagamento"); }}
+                      className="flex items-center justify-center px-3 py-3.5 rounded-xl border-2 border-gray-200 hover:border-primary hover:bg-primary/5 text-sm font-semibold text-gray-700 transition-all">
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+                <button onClick={() => { toast.success("Contrato encerrado. Multa gerada como pendente."); onSaved(); }}
+                  className="text-sm font-semibold text-gray-400 hover:text-gray-600 hover:underline">
+                  RECEBER DEPOIS
+                </button>
+              </div>
+            </>
+          );
+        })()}
+
+        {/* ── Passo 4: Dados do pagamento da multa ── */}
+        {step === "dadosPagamento" && (() => {
+          const pago = parseFloat(valorPag.replace(",", ".")) || multaValor;
+          const desc = parseFloat(descontoPct.replace(",", ".")) || 0;
+          const descFixo = parseFloat(descontoFixo.replace(",", ".")) || 0;
+          const totalFinal = Math.max(0, pago - descFixo - (pago * desc / 100));
+
+          async function handleReceberAgora() {
+            if (!dataPag) { toast.error("Informe a data de recebimento."); return; }
+            setSaving(true);
+            if (multaRecId) {
+              await supabase.from("receivables").update({
+                status: "pago",
+                valor_pago: totalFinal,
+                pago_em: dataPag,
+                updated_at: new Date().toISOString(),
+              }).eq("id", multaRecId);
+              await supabase.from("transactions").insert({
+                contractor_id: contractorId,
+                student_id: studentId,
+                receivable_id: multaRecId,
+                tipo: "entrada",
+                valor: totalFinal,
+                descricao: "Multa por rescisão antecipada",
+                data: dataPag,
+                metodo_pagamento: metodoPag,
+              });
+            }
+            toast.success("Contrato encerrado e multa recebida.");
+            setSaving(false);
+            onSaved();
+          }
+
+          const metodoLabel: Record<string, string> = {
+            cartao_credito: "Cartão de crédito", cartao_debito: "Cartão de débito",
+            dinheiro: "Dinheiro", pix: "Pix / Depósito", boleto: "Boleto", outros: "Outros",
+          };
+
+          return (
+            <>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setStep("pagamento")} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">Dados do recebimento</h3>
+                    <p className="text-xs text-gray-400">{metodoLabel[metodoPag]}</p>
+                  </div>
+                </div>
+                <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Data do recebimento</label>
+                  <div className="relative">
+                    <input type="date" value={dataPag} onChange={e => setDataPag(e.target.value)}
+                      className={inputCls} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Valor a receber</label>
+                  <div className="flex gap-2 items-center">
+                    <CurrencyInput
+                      value={valorPag} onChange={setValorPag}
+                      placeholder={multaValor.toFixed(2)}
+                      className={inputCls} />
+                    <button onClick={() => setShowPctModal(v => !v)}
+                      title="Desconto / Multa"
+                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg border-2 border-gray-200 hover:border-primary text-gray-500 hover:text-primary font-bold text-sm transition-all">
+                      %
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-modal desconto/multa inline */}
+                {showPctModal && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 text-sm">
+                    <p className="font-semibold text-gray-700">Desconto / Multa</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Desconto (%)</label>
+                        <input type="number" min="0" max="100" step="0.5"
+                          value={descontoPct} onChange={e => setDescontoPct(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Desconto (R$)</label>
+                        <CurrencyInput
+                          value={descontoFixo} onChange={setDescontoFixo}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-200 pt-2 space-y-1 text-xs text-gray-500">
+                      <div className="flex justify-between"><span>Valor inicial</span><span>{fmtBRL(pago)}</span></div>
+                      {desc > 0 && <div className="flex justify-between text-green-600"><span>Desconto {desc}%</span><span>−{fmtBRL(pago * desc / 100)}</span></div>}
+                      {descFixo > 0 && <div className="flex justify-between text-green-600"><span>Desconto fixo</span><span>−{fmtBRL(descFixo)}</span></div>}
+                      <div className="flex justify-between font-bold text-gray-700 border-t border-gray-200 pt-1"><span>Total</span><span>{fmtBRL(totalFinal)}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 gap-3">
+                <button onClick={() => { toast.success("Contrato encerrado. Multa gerada como pendente."); onSaved(); }}
+                  className="text-xs font-semibold text-gray-400 hover:text-gray-600 hover:underline whitespace-nowrap">
+                  RECEBER DEPOIS
+                </button>
+                <button onClick={handleReceberAgora} disabled={saving}
+                  className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg disabled:opacity-60 transition-colors">
+                  {saving ? "Salvando..." : "RECEBER AGORA"}
+                </button>
+              </div>
+            </>
+          );
+        })()}
+
       </div>
     </div>
   );
@@ -3051,6 +3317,7 @@ function ContratosTab({ studentId, contractorId, student }: {
   studentId: string; contractorId: string; student: StudentDetail | null;
 }) {
   const navigate = useNavigate();
+  const { canCreate: canCrtCt, canEdit: canEdtCt } = useAuth();
   const [scs, setScs]         = useState<any[]>([]);
   const [autDocs, setAutDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3270,7 +3537,7 @@ function ContratosTab({ studentId, contractorId, student }: {
                         {sStyle.label}
                       </span>
                       {sc.tipo_venda === "com_recorrencia" && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
                           GoFit Pay
                         </span>
                       )}
@@ -3327,14 +3594,14 @@ function ContratosTab({ studentId, contractorId, student }: {
                           Detalhes
                         </button>
                         {/* Suspensão */}
-                        {(isActive || isSuspended) && (
+                        {canEdtCt("financeiro") && (isActive || isSuspended) && (
                           <button onClick={() => { setSuspensaoOpen(sc); setMenuOpenId(null); }}
                             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             Suspensão
                           </button>
                         )}
                         {/* Reativar */}
-                        {canReactivate && (
+                        {canEdtCt("financeiro") && canReactivate && (
                           <button onClick={() => { setAction({ type: "reativar", id: sc.id }); setMenuOpenId(null); }}
                             className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50">
                             Reativar
@@ -3345,12 +3612,16 @@ function ContratosTab({ studentId, contractorId, student }: {
                           className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                           <Printer className="w-3.5 h-3.5 text-gray-400" /> Imprimir contrato
                         </button>
-                        <div className="border-t border-gray-100 my-1" />
-                        {/* Encerrar */}
-                        <button onClick={() => { setEncerrarOpen(sc); setMenuOpenId(null); }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
-                          Encerrar
-                        </button>
+                        {canEdtCt("financeiro") && (
+                          <>
+                            <div className="border-t border-gray-100 my-1" />
+                            {/* Encerrar */}
+                            <button onClick={() => { setEncerrarOpen(sc); setMenuOpenId(null); }}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                              Encerrar
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3599,7 +3870,7 @@ function FinanceiroDetalheModal({ r, studentNome, contractorId, onClose }: {
     pendente:  { label: "Pendente",  bg: "bg-yellow-100", text: "text-yellow-700" },
     pago:      { label: "Recebido",  bg: "bg-green-100",  text: "text-green-700"  },
     atrasado:  { label: "Em atraso", bg: "bg-red-100",    text: "text-red-700"    },
-    aguardando:{ label: "Em andamento", bg: "bg-purple-100", text: "text-purple-700" },
+    aguardando:{ label: "Em andamento", bg: "bg-orange-100", text: "text-orange-700" },
     cancelado: { label: "Cancelado", bg: "bg-gray-100",   text: "text-gray-500"   },
   };
   const st = STATUS_FIN[r.status] ?? { label: r.status, bg: "bg-gray-100", text: "text-gray-500" };
@@ -3786,9 +4057,522 @@ function FinanceiroDetalheModal({ r, studentNome, contractorId, onClose }: {
   );
 }
 
+/* ── RecibosModal ────────────────────────────────────────────── */
+const FORMA_LABEL_REC: Record<string, string> = {
+  pix: "Pix", dinheiro: "Dinheiro", cartao_credito: "Cartão de crédito",
+  cartao_debito: "Cartão de débito", boleto: "Boleto", transferencia: "Transferência",
+};
+const fmtBRL_REC = (v: number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtDate_REC = (s: string) => new Date(s.includes("T") ? s : s + "T12:00:00").toLocaleDateString("pt-BR");
+
+function RecibosModal({ studentId, contractorId, studentNome, currentUserName, onClose }: {
+  studentId: string; contractorId: string; studentNome: string; currentUserName: string; onClose: () => void;
+}) {
+  const [loading,    setLoading]   = useState(true);
+  const [groups,     setGroups]    = useState<any[]>([]);
+  const [selected,   setSelected]  = useState<Set<string>>(new Set());
+  const [contractor, setContractor]= useState<any | null>(null);
+  const [studentCpf, setStudentCpf]= useState<string | null>(null);
+  // Preview
+  const [preview,    setPreview]   = useState(false);
+  const [reciboNum,  setReciboNum] = useState(0);
+  const [showShare,  setShowShare] = useState(false);
+  const [copied,     setCopied]    = useState(false);
+  const [shareToken, setShareToken]= useState<string | null>(null);
+  const [savingLink, setSavingLink]= useState(false);
+
+  useEffect(() => {
+    async function fetchAll() {
+      // 1) recebimentos pagos do aluno
+      const { data: recs } = await supabase
+        .from("receivables")
+        .select("id, descricao, valor, vencimento, valor_pago, pago_em, forma_pagamento, desconto, parcela_numero, total_parcelas, student_contract_id")
+        .eq("contractor_id", contractorId)
+        .eq("student_id", studentId)
+        .eq("status", "pago")
+        .order("vencimento", { ascending: true });
+
+      // 2) contractor
+      const { data: ct } = await supabase.from("contractors")
+        .select("razao_social, nome_fantasia, cnpj, fone, logradouro, numero, bairro, cidade, uf")
+        .eq("id", contractorId).maybeSingle();
+      setContractor(ct ?? null);
+
+      // 3) student CPF
+      const { data: st } = await supabase.from("students")
+        .select("cpf").eq("id", studentId).maybeSingle();
+      setStudentCpf(st?.cpf ?? null);
+
+      // 4) agrupar por student_contract_id
+      const scIds = [...new Set((recs ?? []).map((r: any) => r.student_contract_id).filter(Boolean))];
+      let scMap: Record<string, any> = {};
+      if (scIds.length > 0) {
+        const { data: scs } = await supabase.from("student_contracts")
+          .select("id, contrato_id, data_inicio, data_fim").in("id", scIds);
+        const contratoIds = [...new Set((scs ?? []).map((s: any) => s.contrato_id).filter(Boolean))];
+        let ctMap: Record<string, any> = {};
+        if (contratoIds.length > 0) {
+          const { data: cts } = await supabase.from("contratos")
+            .select("id, descricao").in("id", contratoIds);
+          (cts ?? []).forEach((c: any) => { ctMap[c.id] = c; });
+        }
+        (scs ?? []).forEach((sc: any) => {
+          scMap[sc.id] = { ...sc, contrato: ctMap[sc.contrato_id] ?? null };
+        });
+      }
+
+      // Monta grupos
+      const groupMap: Record<string, any> = {};
+      (recs ?? []).forEach((r: any) => {
+        const key = r.student_contract_id ?? "__avulso__";
+        if (!groupMap[key]) {
+          const sc = scMap[key];
+          const nome = sc?.contrato?.descricao ?? "Cobranças avulsas";
+          const ini  = sc?.data_inicio ? fmtDate_REC(sc.data_inicio) : null;
+          const fim  = sc?.data_fim    ? fmtDate_REC(sc.data_fim)    : null;
+          groupMap[key] = {
+            scId:    key,
+            label:   nome,
+            periodo: ini && fim ? `${ini} → ${fim}` : ini ? `a partir de ${ini}` : null,
+            items:   [],
+          };
+        }
+        groupMap[key].items.push(r);
+      });
+
+      const sortedGroups = Object.values(groupMap).sort((a, b) => {
+        // avulso vai por último
+        if (a.scId === "__avulso__") return 1;
+        if (b.scId === "__avulso__") return -1;
+        return 0;
+      });
+
+      setGroups(sortedGroups);
+      setLoading(false);
+    }
+    fetchAll();
+  }, [studentId, contractorId]);
+
+  function toggleItem(id: string) {
+    setSelected(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  function toggleGroup(group: any) {
+    const allIds = group.items.map((i: any) => i.id) as string[];
+    const allSelected = allIds.every(id => selected.has(id));
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (allSelected) { allIds.forEach(id => n.delete(id)); }
+      else              { allIds.forEach(id => n.add(id)); }
+      return n;
+    });
+  }
+
+  // Helpers de formatação
+  const fmtCpf = (c: string | null) => {
+    if (!c) return null;
+    const d = c.replace(/\D/g, "");
+    if (d.length !== 11) return c;
+    return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+  };
+  const fmtCnpj = (c: string | null) => {
+    if (!c) return null;
+    const d = c.replace(/\D/g, "");
+    if (d.length !== 14) return c;
+    return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+  };
+  const fmtFone = (f: string | null) => {
+    if (!f) return null;
+    const d = f.replace(/\D/g, "");
+    if (d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return f;
+  };
+
+  const endereco = contractor
+    ? [contractor.logradouro, contractor.numero, contractor.bairro, `${contractor.cidade} (${contractor.uf})`].filter(Boolean).join(", ")
+    : "";
+  const nomeLoja = contractor?.nome_fantasia || contractor?.razao_social || "FIT CORE STUDIO";
+
+  const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const hoje = new Date();
+  const dataExtensa = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+
+  // Grupos com itens selecionados
+  const selectedGroups = groups
+    .map((g: any) => ({ ...g, selItems: g.items.filter((i: any) => selected.has(i.id)) }))
+    .filter((g: any) => g.selItems.length > 0);
+
+  const totalSelecionado = selectedGroups
+    .flatMap((g: any) => g.selItems)
+    .reduce((s: number, i: any) => s + Number(i.valor_pago ?? i.valor), 0);
+
+  function handleAbrirPreview() {
+    if (selected.size === 0) { toast.error("Selecione ao menos uma cobrança."); return; }
+    setReciboNum(Math.floor(Math.random() * 900_000_000) + 100_000_000);
+    setShareToken(null); // reset token anterior
+    setPreview(true);
+  }
+
+  function buildHtml() {
+    const gruposSections = selectedGroups.map((group: any) => {
+      const rows = group.selItems.map((i: any, idx: number) => `
+        <tr>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${i.parcela_numero ?? idx+1}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${i.descricao}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;white-space:nowrap">${fmtDate_REC(i.vencimento)}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;white-space:nowrap">${i.pago_em ? fmtDate_REC(i.pago_em) : "—"}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">${fmtBRL_REC(Number(i.valor_pago ?? i.valor))}</td>
+        </tr>
+      `).join("");
+      const groupTotal = group.selItems.reduce((s: number, i: any) => s + Number(i.valor_pago ?? i.valor), 0);
+      return `
+        <p style="font-weight:bold;font-size:13px;margin:14px 0 4px">${group.label}</p>
+        ${group.periodo ? `<p style="font-size:11px;color:#666;margin-bottom:10px">Período: ${group.periodo}</p>` : ""}
+        <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd;font-size:11px;color:#555;width:36px">#</th>
+              <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd;font-size:11px;color:#555">Descrição</th>
+              <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd;font-size:11px;color:#555">Vencimento</th>
+              <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd;font-size:11px;color:#555">Recebido em</th>
+              <th style="padding:5px 8px;text-align:right;border-bottom:2px solid #ddd;font-size:11px;color:#555">Valor pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr style="background:#f9f9f9;font-weight:bold">
+              <td colspan="4" style="padding:5px 8px">Subtotal</td>
+              <td style="padding:5px 8px;text-align:right;color:#1a7a1a">${fmtBRL_REC(groupTotal)}</td>
+            </tr>
+          </tbody>
+        </table>`;
+    }).join('<hr style="border:none;border-top:1px dashed #ccc;margin:14px 0"/>');
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Recibo nº ${reciboNum}</title>
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:Arial,sans-serif; font-size:12px; color:#111; }
+</style></head><body>
+<h1 style="text-align:center;font-size:18px;font-weight:bold;margin-bottom:4px">Recibo ${nomeLoja.toUpperCase()}</h1>
+<p style="text-align:center;font-size:11px;color:#666;margin-bottom:16px">Recibo nº ${reciboNum}</p>
+<p style="margin-bottom:14px;line-height:1.6">
+  <strong>Recebi de</strong>: ${studentNome}${studentCpf ? `, CPF: ${fmtCpf(studentCpf)}` : ""},
+  a quantia de <strong>${fmtBRL_REC(totalSelecionado)}</strong>,
+  referente aos pagamentos abaixo:
+</p>
+${gruposSections}
+<hr style="border:none;border-top:1px dashed #bbb;margin:16px 0"/>
+<p style="text-align:right;font-weight:bold;font-size:13px">Total recebido: ${fmtBRL_REC(totalSelecionado)}</p>
+<hr style="border:none;border-top:1px dashed #bbb;margin:16px 0"/>
+${endereco ? `<p style="font-size:11px;color:#555;margin-top:6px">${endereco}</p>` : ""}
+${contractor?.razao_social ? `<p style="font-size:11px;color:#555">${contractor.razao_social}</p>` : ""}
+${contractor?.cnpj ? `<p style="font-size:11px;color:#555">${fmtCnpj(contractor.cnpj)}</p>` : ""}
+${contractor?.fone ? `<p style="font-size:11px;color:#555">${fmtFone(contractor.fone)}</p>` : ""}
+<div style="margin-top:48px;display:flex">
+  <div style="width:50%;margin-left:auto;text-align:center">
+    <div style="border-top:1px solid #333;margin-bottom:4px"></div>
+    <p style="font-weight:bold;font-size:12px">${currentUserName}</p>
+    <p style="font-size:11px;color:#666">${dataExtensa}</p>
+  </div>
+</div>
+</body></html>`;
+  }
+
+  function handleImprimir() {
+    const w = window.open("", "_blank", "width=800,height=700");
+    if (!w) { toast.error("Pop-up bloqueado. Permita pop-ups para imprimir."); return; }
+    w.document.write(buildHtml());
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
+  }
+
+  const shareLink = shareToken
+    ? `${window.location.origin}/recibo/${shareToken}`
+    : null;
+
+  async function handleAbrirCompartilhar() {
+    if (shareToken) { setShowShare(true); return; } // já gerou, reutiliza
+    setSavingLink(true);
+    const payload = {
+      nomeLoja,
+      studentNome,
+      studentCpf,
+      reciboNum,
+      dataExtensa,
+      currentUserName,
+      totalSelecionado,
+      selectedGroups,
+      endereco,
+      razaoSocial: contractor?.razao_social ?? null,
+      cnpj:        contractor?.cnpj ? fmtCnpj(contractor.cnpj) : null,
+      fone:        contractor?.fone ? fmtFone(contractor.fone) : null,
+    };
+    const { data, error } = await supabase
+      .from("public_receipts")
+      .insert({ receipt_data: payload })
+      .select("token")
+      .maybeSingle();
+    setSavingLink(false);
+    if (error || !data) { toast.error("Erro ao gerar link."); return; }
+    setShareToken(data.token);
+    setShowShare(true);
+  }
+
+  async function handleCopyLink() {
+    if (!shareLink) return;
+    await navigator.clipboard.writeText(shareLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Link copiado!");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }}>
+
+        {/* ── TELA 1: Seleção ── */}
+        {!preview && <>
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+            <Receipt className="w-5 h-5 text-primary" />
+            <div>
+              <h3 className="text-base font-bold text-gray-900">Gerar Recibos</h3>
+              <p className="text-xs text-gray-400">Selecione as cobranças pagas para incluir no recibo</p>
+            </div>
+            <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {loading ? (
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : groups.length === 0 ? (
+              <div className="flex flex-col items-center py-12 gap-2 text-gray-400">
+                <DollarSign className="w-10 h-10 text-gray-200" />
+                <p className="text-sm">Nenhum pagamento recebido encontrado.</p>
+              </div>
+            ) : groups.map((group: any) => {
+              const allIds = group.items.map((i: any) => i.id) as string[];
+              const selCount = allIds.filter((id: string) => selected.has(id)).length;
+              const allSel   = selCount === allIds.length;
+              const partial  = selCount > 0 && !allSel;
+              const groupTotal = group.items
+                .filter((i: any) => selected.has(i.id))
+                .reduce((s: number, i: any) => s + Number(i.valor_pago ?? i.valor), 0);
+              return (
+                <div key={group.scId} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <input type="checkbox" checked={allSel}
+                      ref={el => { if (el) el.indeterminate = partial; }}
+                      onChange={() => toggleGroup(group)}
+                      className="w-4 h-4 rounded accent-primary cursor-pointer" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{group.label}</p>
+                      {group.periodo && <p className="text-xs text-gray-400">{group.periodo}</p>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs text-gray-400">{selCount}/{allIds.length} selecionado{selCount !== 1 ? "s" : ""}</p>
+                      {groupTotal > 0 && <p className="text-xs font-bold text-green-600">{fmtBRL_REC(groupTotal)}</p>}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {group.items.map((item: any) => (
+                      <label key={item.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${selected.has(item.id) ? "bg-primary/5" : ""}`}>
+                        <input type="checkbox" checked={selected.has(item.id)}
+                          onChange={() => toggleItem(item.id)}
+                          className="w-4 h-4 rounded accent-primary cursor-pointer flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-700 truncate">{item.descricao}</p>
+                          <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+                            <span>Venc. {fmtDate_REC(item.vencimento)}</span>
+                            {item.pago_em && <span className="text-green-600">• Recebido em {fmtDate_REC(item.pago_em)}</span>}
+                            {item.forma_pagamento && <span>• {FORMA_LABEL_REC[item.forma_pagamento] ?? item.forma_pagamento}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-green-600">{fmtBRL_REC(Number(item.valor_pago ?? item.valor))}</p>
+                          {item.total_parcelas && <p className="text-xs text-gray-400">{item.parcela_numero}/{item.total_parcelas}</p>}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+            <div>
+              {selected.size > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500">{selected.size} cobrança{selected.size !== 1 ? "s" : ""} selecionada{selected.size !== 1 ? "s" : ""}</p>
+                  <p className="text-sm font-bold text-green-600">{fmtBRL_REC(totalSelecionado)}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={onClose} className="text-sm font-bold text-gray-400 hover:text-gray-600">CANCELAR</button>
+              <button onClick={handleAbrirPreview} disabled={selected.size === 0}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <Receipt className="w-4 h-4" /> GERAR RECIBO
+              </button>
+            </div>
+          </div>
+        </>}
+
+        {/* ── TELA 2: Preview do recibo ── */}
+        {preview && <>
+          {/* Header */}
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+            <Receipt className="w-4 h-4 text-primary" />
+            <span className="text-sm font-bold text-gray-900">Recibo</span>
+            <button onClick={onClose} className="ml-auto p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+          </div>
+
+          {/* Corpo do recibo */}
+          <div className="flex-1 overflow-y-auto px-10 py-8">
+            <div className="font-sans text-sm text-gray-900 space-y-3">
+              <h2 className="text-center text-lg font-bold mb-1">Recibo {nomeLoja.toUpperCase()}</h2>
+              <p className="text-center text-xs text-gray-400 mb-4">Recibo nº {reciboNum}</p>
+
+              <p className="leading-relaxed">
+                <strong>Recebi de</strong>: {studentNome}
+                {studentCpf ? `, CPF: ${fmtCpf(studentCpf)}` : ""}, a quantia de{" "}
+                <strong>{fmtBRL_REC(totalSelecionado)}</strong>, referente aos pagamentos abaixo:
+              </p>
+
+              {/* Grupos */}
+              {selectedGroups.map((group: any, gi: number) => (
+                <div key={group.scId}>
+                  {gi > 0 && <hr className="border-dashed border-gray-200 my-3" />}
+                  <p className="font-bold text-gray-900">{group.label}</p>
+                  {group.periodo && <p className="text-xs text-gray-400 mb-2">{group.periodo}</p>}
+                  <table className="w-full text-xs mt-2">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-gray-400">
+                        <th className="text-left py-1.5 w-7">#</th>
+                        <th className="text-left py-1.5">Descrição</th>
+                        <th className="text-left py-1.5 whitespace-nowrap">Vencimento</th>
+                        <th className="text-left py-1.5 whitespace-nowrap">Recebido em</th>
+                        <th className="text-right py-1.5 whitespace-nowrap">Valor pago</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {group.selItems.map((item: any, idx: number) => (
+                        <tr key={item.id}>
+                          <td className="py-1.5 text-gray-500">{item.parcela_numero ?? idx+1}</td>
+                          <td className="py-1.5 text-gray-700">{item.descricao}</td>
+                          <td className="py-1.5 text-gray-500 whitespace-nowrap">{fmtDate_REC(item.vencimento)}</td>
+                          <td className="py-1.5 text-gray-500 whitespace-nowrap">{item.pago_em ? fmtDate_REC(item.pago_em) : "—"}</td>
+                          <td className="py-1.5 text-right font-semibold text-green-600 whitespace-nowrap">{fmtBRL_REC(Number(item.valor_pago ?? item.valor))}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-50">
+                        <td colSpan={4} className="py-1.5 px-1 font-bold text-gray-700">Subtotal</td>
+                        <td className="py-1.5 text-right font-bold text-green-600">
+                          {fmtBRL_REC(group.selItems.reduce((s: number, i: any) => s + Number(i.valor_pago ?? i.valor), 0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+
+              {/* Total geral (se > 1 grupo) */}
+              {selectedGroups.length > 1 && (
+                <div className="text-right pt-1 border-t border-gray-200">
+                  <span className="text-sm font-bold text-gray-900">Total recebido: </span>
+                  <span className="text-sm font-bold text-green-600">{fmtBRL_REC(totalSelecionado)}</span>
+                </div>
+              )}
+
+              {/* Assinatura */}
+              <div className="grid grid-cols-2 gap-8 mt-6">
+                <div />
+                <div className="text-center">
+                  <div className="border-t border-gray-600 mb-1" />
+                  <p className="font-bold text-sm">{currentUserName}</p>
+                  <p className="text-xs text-gray-500">{dataExtensa}</p>
+                </div>
+              </div>
+
+              {/* Rodapé empresa */}
+              <div className="mt-4 pt-4 border-t border-dashed border-gray-200 text-xs text-gray-500 space-y-0.5">
+                {endereco && <p>{endereco}</p>}
+                {contractor?.razao_social && <p>{contractor.razao_social}</p>}
+                {contractor?.cnpj && <p>{fmtCnpj(contractor.cnpj)}</p>}
+                {contractor?.fone && <p>{fmtFone(contractor.fone)}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
+            <button onClick={() => setPreview(false)} className="text-sm font-bold text-gray-400 hover:text-gray-600 hover:underline">FECHAR</button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleAbrirCompartilhar} disabled={savingLink}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60 transition-colors">
+                {savingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                COMPARTILHAR
+              </button>
+              <button onClick={handleImprimir}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors">
+                <Printer className="w-4 h-4" /> IMPRIMIR
+              </button>
+            </div>
+          </div>
+        </>}
+      </div>
+
+      {/* Sub-modal Compartilhar */}
+      {showShare && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowShare(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <button onClick={() => setShowShare(false)} className="absolute top-4 right-4 p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Share2 className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Link gerado!</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-5">Escolha uma das opções abaixo para envio do link.</p>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <button onClick={() => window.open(`mailto:?subject=${encodeURIComponent(`Recibo nº ${reciboNum}`)}&body=${encodeURIComponent(`Segue o recibo:\n${shareLink ?? ""}`)}`, "_blank")}
+                className="flex items-center justify-center gap-2 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-primary hover:text-primary transition-colors">
+                <Mail className="w-4 h-4" /> E-MAIL
+              </button>
+              <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Recibo nº ${reciboNum}:\n${shareLink ?? ""}`)}`, "_blank")}
+                className="flex items-center justify-center gap-2 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-green-500 hover:text-green-600 transition-colors">
+                <WhatsAppIcon className="w-4 h-4" /> WHATSAPP
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-2">Ou copie o link para enviar</p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={shareLink ?? ""}
+                className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-500 bg-gray-50 truncate focus:outline-none" />
+              <button onClick={handleCopyLink}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${copied ? "bg-green-100 text-green-700" : "bg-primary text-white hover:bg-primary/90"}`}>
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? "COPIADO" : "COPIAR LINK"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── FinanceiroTab ────────────────────────────────────────────── */
-function FinanceiroTab({ studentId, contractorId, studentNome }: {
-  studentId: string; contractorId: string; studentNome: string;
+function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }: {
+  studentId: string; contractorId: string; studentNome: string; currentUserName: string;
 }) {
   const [recs,        setRecs]        = useState<any[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -3796,6 +4580,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
   const [detalheRec,  setDetalheRec]  = useState<any | null>(null);
   const [cancelarRec, setCancelarRec] = useState<any | null>(null);
   const [cancelando,  setCancelando]  = useState(false);
+  const [showRecibos, setShowRecibos] = useState(false);
 
   // Fluxo de pagamento em 2 etapas
   const [payModal,    setPayModal]    = useState<any | null>(null);   // step 1
@@ -3935,7 +4720,14 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
 
   return (
     <div>
-      <h2 className="text-base font-bold text-gray-800 mb-4">Financeiro</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-bold text-gray-800">Financeiro</h2>
+        <button
+          onClick={() => setShowRecibos(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-primary hover:text-primary transition-colors">
+          <Receipt className="w-4 h-4" /> Recibos
+        </button>
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -4039,6 +4831,17 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
       {/* Backdrop menu */}
       {menuRecId && <div className="fixed inset-0 z-20" onClick={() => setMenuRecId(null)} />}
 
+      {/* Modal Recibos */}
+      {showRecibos && (
+        <RecibosModal
+          studentId={studentId}
+          contractorId={contractorId}
+          studentNome={studentNome}
+          currentUserName={currentUserName}
+          onClose={() => setShowRecibos(false)}
+        />
+      )}
+
       {/* Modal Detalhes */}
       {detalheRec && (
         <FinanceiroDetalheModal r={detalheRec} studentNome={studentNome} contractorId={contractorId} onClose={() => setDetalheRec(null)} />
@@ -4077,7 +4880,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor recebido</label>
-              <input type="number" step="0.01" value={payVal} onChange={e => setPayVal(e.target.value)}
+              <CurrencyInput value={payVal} onChange={setPayVal}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20" />
             </div>
             <div>
@@ -4152,7 +4955,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome }: {
 
 export default function ClienteDashboardPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, canCreate, canEdit, canDelete } = useAuth();
   const [student,    setStudent]    = useState<StudentDetail | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [activeTab,  setActiveTab]  = useState<Tab>("Resumo");
@@ -4293,12 +5096,14 @@ export default function ClienteDashboardPage() {
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  to={`/app/clientes/${student.id}/cadastro`}
-                  className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5" /> CADASTRO
-                </Link>
+                {canEdit("clientes") && (
+                  <Link
+                    to={`/app/clientes/${student.id}/cadastro`}
+                    className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> CADASTRO
+                  </Link>
+                )}
                 {phone ? (
                   <button
                     onClick={() => window.open(`https://wa.me/55${phone}`, "_blank")}
@@ -4382,6 +5187,7 @@ export default function ClienteDashboardPage() {
               studentId={student.id}
               contractorId={user!.contractorId!}
               studentNome={student.nome_completo}
+              currentUserName={user!.name}
             />
           ) : activeTab !== "Resumo" ? (
             <ComingSoon tab={activeTab} />
@@ -4476,15 +5282,17 @@ export default function ClienteDashboardPage() {
                 <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                   <CardHeader
                     title="Exames"
-                    icon={<FlaskConical className="w-3.5 h-3.5 text-purple-500" />}
-                    iconBg="bg-purple-50"
+                    icon={<FlaskConical className="w-3.5 h-3.5 text-orange-500" />}
+                    iconBg="bg-orange-50"
                   >
-                    <button
-                      onClick={() => setExameModalData({})}
-                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                    {canCreate("clientes") && (
+                      <button
+                        onClick={() => setExameModalData({})}
+                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </CardHeader>
                   {exames.length === 0 ? (
                     <EmptyCard message="Nenhum resultado encontrado" />
@@ -4492,8 +5300,8 @@ export default function ClienteDashboardPage() {
                     <div className="divide-y divide-gray-50">
                       {exames.map((ex: any) => (
                         <div key={ex.id} className="px-4 py-3 flex items-center gap-3 group">
-                          <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                            <FlaskConical className="w-4 h-4 text-purple-400" />
+                          <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+                            <FlaskConical className="w-4 h-4 text-orange-400" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-800 truncate">
@@ -4510,12 +5318,16 @@ export default function ClienteDashboardPage() {
                                 <Download className="w-3.5 h-3.5" />
                               </a>
                             )}
-                            <button onClick={() => setExameModalData(ex)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setDeleteExameConfirm(ex.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit("clientes") && (
+                              <button onClick={() => setExameModalData(ex)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDelete("clientes") && (
+                              <button onClick={() => setDeleteExameConfirm(ex.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -4583,12 +5395,14 @@ export default function ClienteDashboardPage() {
                     icon={<FileText className="w-3.5 h-3.5 text-blue-500" />}
                     iconBg="bg-blue-50"
                   >
-                    <button
-                      onClick={() => setDocModalData({})}
-                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                    {canCreate("clientes") && (
+                      <button
+                        onClick={() => setDocModalData({})}
+                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </CardHeader>
                   {documentos.length === 0 ? (
                     <EmptyCard message="Nenhum resultado encontrado" />
@@ -4611,12 +5425,16 @@ export default function ClienteDashboardPage() {
                                 <Download className="w-3.5 h-3.5" />
                               </a>
                             )}
-                            <button onClick={() => setDocModalData(doc)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setDeleteDocConfirm(doc.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit("clientes") && (
+                              <button onClick={() => setDocModalData(doc)} className="p-1 rounded text-gray-400 hover:text-primary hover:bg-gray-50 transition-colors" title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDelete("clientes") && (
+                              <button onClick={() => setDeleteDocConfirm(doc.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -4631,12 +5449,14 @@ export default function ClienteDashboardPage() {
                     icon={<MessageSquare className="w-3.5 h-3.5 text-blue-500" />}
                     iconBg="bg-blue-50"
                   >
-                    <Link
-                      to={`/app/clientes/${student.id}/cadastro`}
-                      className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Link>
+                    {canEdit("clientes") && (
+                      <Link
+                        to={`/app/clientes/${student.id}/cadastro`}
+                        className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
+                    )}
                   </CardHeader>
                   <div className="px-5 py-4">
                     {student.observacoes ? (

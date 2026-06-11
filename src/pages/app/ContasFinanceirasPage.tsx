@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Search, ChevronLeft, ChevronRight, X, Pencil, Power, Landmark } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, ChevronLeft, ChevronRight, X, Pencil, Landmark, MoreVertical, FileText, TrendingUp, Trash2, Loader2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -393,16 +394,213 @@ function ContaModal({
   );
 }
 
+/* ── Extrato da Conta ────────────────────────────────────────────────── */
+function ExtratoModal({
+  conta,
+  onClose,
+  contractorId,
+}: {
+  conta: ContaFinanceira;
+  onClose: () => void;
+  contractorId: string;
+}) {
+  interface Movimento {
+    id: string;
+    tipo: "entrada" | "saida";
+    descricao: string;
+    valor: number;
+    data: string;
+    forma_pagamento: string | null;
+  }
+
+  const [movimentos, setMovimentos] = useState<Movimento[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState<"todos" | "entrada" | "saida">("todos");
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [{ data: rec }, { data: pay }] = await Promise.all([
+        supabase
+          .from("receivables")
+          .select("id, descricao, valor, pago_em, forma_recebimento, modo")
+          .eq("contractor_id", contractorId)
+          .eq("conta_financeira_id", conta.id)
+          .eq("status", "pago")
+          .not("pago_em", "is", null),
+        supabase
+          .from("payables")
+          .select("id, descricao, valor_pago, valor, pago_em, forma_pagamento")
+          .eq("contractor_id", contractorId)
+          .eq("conta_financeira_id", conta.id)
+          .eq("status", "pago")
+          .not("pago_em", "is", null),
+      ]);
+
+      const entradas: Movimento[] = (rec ?? []).map((r: any) => ({
+        id: r.id,
+        tipo: "entrada" as const,
+        descricao: r.descricao ?? "Recebimento",
+        valor: r.valor ?? 0,
+        data: r.pago_em,
+        forma_pagamento: r.forma_recebimento,
+      }));
+
+      const saidas: Movimento[] = (pay ?? []).map((p: any) => ({
+        id: p.id,
+        tipo: "saida" as const,
+        descricao: p.descricao ?? "Pagamento",
+        valor: p.valor_pago ?? p.valor ?? 0,
+        data: p.pago_em,
+        forma_pagamento: p.forma_pagamento,
+      }));
+
+      const all = [...entradas, ...saidas].sort(
+        (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()
+      );
+      setMovimentos(all);
+      setLoading(false);
+    }
+    load();
+  }, [conta.id, contractorId]);
+
+  const filtered = movimentos.filter(m => filtro === "todos" || m.tipo === filtro);
+
+  const totalEntradas = movimentos.filter(m => m.tipo === "entrada").reduce((s, m) => s + m.valor, 0);
+  const totalSaidas   = movimentos.filter(m => m.tipo === "saida").reduce((s, m) => s + m.valor, 0);
+  const saldo         = totalEntradas - totalSaidas;
+
+  function fmt(v: number) {
+    return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+  function fmtData(s: string) {
+    return new Date(s + "T12:00:00").toLocaleDateString("pt-BR");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            <div>
+              <p className="text-base font-bold text-gray-900">Extrato</p>
+              <p className="text-xs text-gray-400">{conta.descricao}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-4 px-6 py-4 border-b border-gray-100">
+          <div className="text-center">
+            <p className="text-xs text-gray-400 mb-0.5">Total entradas</p>
+            <p className="text-base font-bold text-green-600">{fmt(totalEntradas)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-400 mb-0.5">Total saídas</p>
+            <p className="text-base font-bold text-red-500">{fmt(totalSaidas)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-gray-400 mb-0.5">Saldo líquido</p>
+            <p className={`text-base font-bold ${saldo >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(saldo)}</p>
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-1 px-6 pt-3">
+          {(["todos", "entrada", "saida"] as const).map(f => (
+            <button key={f} onClick={() => setFiltro(f)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${filtro === f ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+              {f === "todos" ? "Todos" : f === "entrada" ? "Entradas" : "Saídas"}
+            </button>
+          ))}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <FileText className="w-10 h-10 text-gray-200" />
+              <p className="text-sm text-gray-400">Nenhuma movimentação registrada nesta conta.</p>
+            </div>
+          ) : (
+            filtered.map(m => (
+              <div key={m.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${m.tipo === "entrada" ? "bg-green-100" : "bg-red-100"}`}>
+                    {m.tipo === "entrada"
+                      ? <ArrowUpCircle className="w-4 h-4 text-green-600" />
+                      : <ArrowDownCircle className="w-4 h-4 text-red-500" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 leading-tight">{m.descricao}</p>
+                    <p className="text-xs text-gray-400">
+                      {fmtData(m.data)}{m.forma_pagamento ? ` • ${m.forma_pagamento}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <p className={`text-sm font-bold ${m.tipo === "entrada" ? "text-green-600" : "text-red-500"}`}>
+                  {m.tipo === "entrada" ? "+" : "-"}{fmt(m.valor)}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400 text-center">
+          {filtered.length} movimentação{filtered.length !== 1 ? "ões" : ""} exibida{filtered.length !== 1 ? "s" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Page ────────────────────────────────────────────────────────────── */
 export default function ContasFinanceirasPage() {
-  const { user } = useAuth();
+  const { user }   = useAuth();
+  const navigate   = useNavigate();
   const [all, setAll]             = useState<ContaFinanceira[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState("");
   const [page, setPage]           = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState<ContaFinanceira | null>(null);
-  const [toggleId, setToggleId]   = useState<string | null>(null);
+  const [menuOpenId,    setMenuOpenId]   = useState<string | null>(null);
+  const [menuPos,       setMenuPos]      = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const [removeTarget,  setRemoveTarget] = useState<ContaFinanceira | null>(null);
+  const [removing,      setRemoving]     = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  async function handleRemover() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    const { error } = await supabase.from("contas_financeiras").update({ ativo: false }).eq("id", removeTarget.id);
+    setRemoving(false);
+    if (error) { toast.error("Erro ao remover conta."); return; }
+    toast.success("Conta removida.");
+    setRemoveTarget(null);
+    load();
+  }
 
   async function load() {
     if (!user?.contractorId) return;
@@ -426,15 +624,6 @@ export default function ContasFinanceirasPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  async function handleToggleAtivo(r: ContaFinanceira) {
-    const { error } = await supabase
-      .from("contas_financeiras").update({ ativo: !r.ativo }).eq("id", r.id);
-    if (error) { toast.error("Erro ao atualizar status."); return; }
-    toast.success(r.ativo ? "Conta desativada." : "Conta reativada.");
-    setToggleId(null);
-    load();
-  }
 
   return (
     <>
@@ -526,24 +715,16 @@ export default function ContasFinanceirasPage() {
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-1 justify-end">
+                              <div className="flex justify-end">
                                 <button
-                                  onClick={() => setEditing(r)}
-                                  title="Editar"
-                                  className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                  onClick={e => {
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                    setMenuOpenId(prev => prev === r.id ? null : r.id);
+                                  }}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                                 >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setToggleId(r.id)}
-                                  title={r.ativo ? "Desativar" : "Reativar"}
-                                  className={`p-1.5 rounded-lg transition-colors ${
-                                    r.ativo
-                                      ? "text-gray-400 hover:text-red-500 hover:bg-red-50"
-                                      : "text-gray-400 hover:text-green-600 hover:bg-green-50"
-                                  }`}
-                                >
-                                  <Power className="w-4 h-4" />
+                                  <MoreVertical className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -574,6 +755,61 @@ export default function ContasFinanceirasPage() {
         </div>
       </AppLayout>
 
+      {/* Dropdown 3-pontinhos — fixed fora do overflow da tabela */}
+      {menuOpenId && (
+        <>
+          {/* Overlay invisível para fechar ao clicar fora */}
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpenId(null)} />
+          <div
+            ref={menuRef}
+            className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-2xl w-52 py-1 overflow-hidden"
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
+            <button
+              onClick={() => {
+                const r = all.find(c => c.id === menuOpenId);
+                if (r) setEditing(r);
+                setMenuOpenId(null);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+            >
+              <Pencil className="w-4 h-4 text-gray-400" />
+              Editar
+            </button>
+            <button
+              onClick={() => {
+                navigate(`/app/financeiro/contas-financeiras/${menuOpenId}/extrato`);
+                setMenuOpenId(null);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+            >
+              <FileText className="w-4 h-4 text-gray-400" />
+              Extrato
+            </button>
+            <button
+              disabled
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-300 flex items-center gap-2.5 cursor-not-allowed"
+            >
+              <TrendingUp className="w-4 h-4 text-gray-200" />
+              Antecipar recebíveis
+              <span className="ml-auto text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">em breve</span>
+            </button>
+            <div className="border-t border-gray-100 my-1" />
+            <button
+              onClick={() => {
+                const r = all.find(c => c.id === menuOpenId);
+                if (r) setRemoveTarget(r);
+                setMenuOpenId(null);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2.5"
+            >
+              <Trash2 className="w-4 h-4" />
+              Remover
+            </button>
+          </div>
+        </>
+      )}
+
       {/* Modal cadastro/edição */}
       {(showModal || editing) && (
         <ContaModal
@@ -583,32 +819,39 @@ export default function ContasFinanceirasPage() {
         />
       )}
 
-      {/* Confirm toggle ativo */}
-      {toggleId && (
+      {/* Confirm Remover */}
+      {removeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-2">
-              {all.find(r => r.id === toggleId)?.ativo ? "Desativar conta?" : "Reativar conta?"}
-            </h3>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Remover conta?</h3>
+                <p className="text-sm text-gray-500">{removeTarget.descricao}</p>
+              </div>
+            </div>
             <p className="text-sm text-gray-500 mb-6">
-              {all.find(r => r.id === toggleId)?.ativo
-                ? "A conta ficará inativa mas não será excluída."
-                : "A conta voltará a aparecer como ativa."}
+              A conta será desativada e não aparecerá mais nas opções de pagamento/recebimento.
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setToggleId(null)} className="text-primary font-semibold text-sm hover:underline px-2">
+              <button onClick={() => setRemoveTarget(null)} className="text-primary font-semibold text-sm hover:underline px-2">
                 CANCELAR
               </button>
               <button
-                onClick={() => { const r = all.find(c => c.id === toggleId); if (r) handleToggleAtivo(r); }}
-                className="bg-primary text-white font-semibold text-sm px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                onClick={handleRemover}
+                disabled={removing}
+                className="bg-red-500 text-white font-semibold text-sm px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-60 transition-colors flex items-center gap-2"
               >
-                CONFIRMAR
+                {removing && <Loader2 className="w-4 h-4 animate-spin" />}
+                REMOVER
               </button>
             </div>
           </div>
         </div>
       )}
+
     </>
   );
 }

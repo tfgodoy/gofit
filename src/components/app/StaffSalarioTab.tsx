@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,7 +36,7 @@ const MOTIVOS = [
 const MOTIVO_BADGE: Record<string, string> = {
   admissao: "bg-blue-100 text-blue-700",
   reajuste: "bg-green-100 text-green-700",
-  promocao: "bg-purple-100 text-purple-700",
+  promocao: "bg-orange-100 text-orange-700",
   correcao: "bg-orange-100 text-orange-700",
 };
 
@@ -127,11 +128,11 @@ function FormPanel({ title, form, onChange, onSave, onCancel, isPending }: FormP
         </div>
         <div>
           <label className={LBL}>Valor (R$) *</label>
-          <input
+          <CurrencyInput
             className={INP}
             placeholder="0,00"
             value={form.valor}
-            onChange={e => onChange("valor", maskCurrency(e.target.value))}
+            onChange={v => onChange("valor", v)}
           />
         </div>
       </div>

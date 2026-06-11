@@ -747,7 +747,7 @@ export default function TreinoFormPage() {
                         {isBiSet ? (
                           <div className="flex-shrink-0 w-6 flex items-stretch mr-1">
                             <div
-                              className={`w-full bg-purple-600 flex items-center justify-center ${
+                              className={`w-full bg-orange-600 flex items-center justify-center ${
                                 isFirstInGroup ? "rounded-t" : ""
                               } ${isLastInGroup ? "rounded-b" : ""}`}
                               style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}

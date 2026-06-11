@@ -611,7 +611,7 @@ export default function VendaWizardPage() {
         parcelas: numParcelas,
         vencimento: vencBase,
       });
-      setFase("concluido");
+      navigate(`/app/clientes/${studentId}/dashboard`);
     } finally {
       setSaving(false);
     }

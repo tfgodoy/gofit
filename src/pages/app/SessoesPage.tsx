@@ -243,7 +243,7 @@ function ExerciseRow({ ex, idx, total, exercises, onUpdate, onRemove, onMoveUp, 
       <button
         onClick={() => onUpdate({ tipo: nextTipo(ex.tipo) })}
         title={`Tipo: ${TIPO_LABEL[ex.tipo]}. Clique para alterar.`}
-        className="flex-shrink-0 w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center hover:bg-purple-700 transition-colors"
+        className="flex-shrink-0 w-7 h-7 rounded-full bg-orange-600 flex items-center justify-center hover:bg-orange-700 transition-colors"
       >
         <RefreshCcw className="w-3.5 h-3.5 text-white" />
       </button>

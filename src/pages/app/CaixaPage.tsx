@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import {
   Wallet, ChevronLeft, ChevronRight, Plus, Minus,
@@ -67,6 +68,7 @@ export default function CaixaPage() {
   const [showAbrirModal, setShowAbrirModal]   = useState(false);
   const [showFecharModal, setShowFecharModal] = useState(false);
   const [showLancarSaida, setShowLancarSaida] = useState(false);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
   // Abrir caixa form
   const [abrirForm, setAbrirForm] = useState({ saldo_inicial: "0,00", observacoes: "" });
@@ -305,25 +307,83 @@ export default function CaixaPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 text-xs text-gray-500 font-semibold">
-                          <th className="text-left px-6 py-3">Abertura</th>
-                          <th className="text-left px-4 py-3">Fechamento</th>
-                          <th className="text-right px-4 py-3">Saldo inicial</th>
-                          <th className="text-right px-4 py-3">Entradas</th>
-                          <th className="text-right px-4 py-3">Saídas</th>
-                          <th className="text-right px-4 py-3">Saldo final</th>
+                          <th className="w-8 px-3 py-3" />
+                          <th className="text-left px-3 py-3">Abertura</th>
+                          <th className="text-left px-3 py-3">Fechamento</th>
+                          <th className="text-right px-3 py-3">Saldo inicial</th>
+                          <th className="text-right px-3 py-3">Entradas</th>
+                          <th className="text-right px-3 py-3">Saídas</th>
+                          <th className="text-right px-3 py-3">Saldo final</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {paginatedHistory.map(s => (
-                          <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-3 text-gray-700">{fmtDateTime(s.opened_at)}</td>
-                            <td className="px-4 py-3 text-gray-600">{s.closed_at ? fmtDateTime(s.closed_at) : "—"}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">{fmtMoeda(s.saldo_inicial)}</td>
-                            <td className="px-4 py-3 text-right text-green-600 font-medium">{fmtMoeda(s.total_entradas)}</td>
-                            <td className="px-4 py-3 text-right text-red-500 font-medium">{fmtMoeda(s.total_saidas)}</td>
-                            <td className="px-4 py-3 text-right font-bold text-gray-900">{fmtMoeda(s.saldo_final ?? 0)}</td>
-                          </tr>
-                        ))}
+                      <tbody>
+                        {paginatedHistory.map(s => {
+                          const sessionTxs = movements.filter(t => t.cash_session_id === s.id);
+                          const isExpanded = expandedSession === s.id;
+                          return (
+                            <>
+                              <tr
+                                key={s.id}
+                                onClick={() => setExpandedSession(isExpanded ? null : s.id)}
+                                className="border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
+                              >
+                                <td className="px-3 py-3 text-gray-400">
+                                  <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                </td>
+                                <td className="px-3 py-3 text-gray-700">{fmtDateTime(s.opened_at)}</td>
+                                <td className="px-3 py-3 text-gray-600">{s.closed_at ? fmtDateTime(s.closed_at) : "—"}</td>
+                                <td className="px-3 py-3 text-right text-gray-700">{fmtMoeda(s.saldo_inicial)}</td>
+                                <td className="px-3 py-3 text-right text-green-600 font-medium">{fmtMoeda(s.total_entradas)}</td>
+                                <td className="px-3 py-3 text-right text-red-500 font-medium">{fmtMoeda(s.total_saidas)}</td>
+                                <td className="px-3 py-3 text-right font-bold text-gray-900">{fmtMoeda(s.saldo_final ?? 0)}</td>
+                              </tr>
+
+                              {/* Expansão: movimentações da sessão */}
+                              {isExpanded && (
+                                <tr key={`${s.id}-detail`} className="bg-gray-50 border-b border-gray-100">
+                                  <td colSpan={7} className="px-8 py-3">
+                                    {sessionTxs.length === 0 ? (
+                                      <p className="text-xs text-gray-400 italic py-1">
+                                        Nenhuma movimentação registrada nesta sessão.
+                                      </p>
+                                    ) : (
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="text-gray-400 font-semibold border-b border-gray-200">
+                                            <th className="text-left py-1.5">Descrição</th>
+                                            <th className="text-left py-1.5">Cliente</th>
+                                            <th className="text-left py-1.5">Data</th>
+                                            <th className="text-left py-1.5">Forma</th>
+                                            <th className="text-left py-1.5">Categoria</th>
+                                            <th className="text-right py-1.5">Valor</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                          {sessionTxs.map(t => (
+                                            <tr key={t.id}>
+                                              <td className="py-1.5 text-gray-700 font-medium">{t.descricao || "—"}</td>
+                                              <td className="py-1.5 text-gray-500">{t.student_nome || "—"}</td>
+                                              <td className="py-1.5 text-gray-500 whitespace-nowrap">
+                                                {t.data ? new Date(t.data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+                                              </td>
+                                              <td className="py-1.5 text-gray-500">
+                                                {t.forma_pagamento ? (FORMAS_LABEL[t.forma_pagamento] ?? t.forma_pagamento) : "—"}
+                                              </td>
+                                              <td className="py-1.5 text-gray-400">{t.categoria || "—"}</td>
+                                              <td className={`py-1.5 text-right font-semibold whitespace-nowrap ${t.tipo === "entrada" ? "text-green-600" : "text-red-500"}`}>
+                                                {t.tipo === "entrada" ? "+" : "−"}{fmtMoeda(t.valor)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })}
                       </tbody>
                     </table>
                     {totalPages > 1 && (
@@ -443,7 +503,7 @@ export default function CaixaPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Valor (R$) *</label>
-                  <input className={INP} placeholder="0,00" value={saidaForm.valor} onChange={e => setSaidaForm(f => ({ ...f, valor: e.target.value }))} />
+                  <CurrencyInput className={INP} placeholder="0,00" value={saidaForm.valor} onChange={v => setSaidaForm(f => ({ ...f, valor: v }))} />
                 </div>
                 <div className="relative">
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Forma de pagamento</label>

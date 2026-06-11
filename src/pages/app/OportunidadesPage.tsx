@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, Loader2, ChevronRight, ChevronLeft,
@@ -187,7 +188,7 @@ function OppModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor estimado (R$)</label>
-              <input type="number" step="0.01" value={form.valor_estimado} onChange={e => set("valor_estimado", e.target.value)} placeholder="0,00" className={inputClass} />
+              <CurrencyInput value={form.valor_estimado} onChange={v => set("valor_estimado", v)} placeholder="0,00" className={inputClass} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Data prevista de fechamento</label>

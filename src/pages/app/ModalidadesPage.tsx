@@ -178,12 +178,12 @@ export default function ModalidadesPage() {
                                   </span>
                                 )}
                                 {m.utiliza_gonutri && (
-                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
                                     GoNutri
                                   </span>
                                 )}
                                 {m.permite_agendamento_publico && (
-                                  <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                  <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
                                     <Globe className="w-2.5 h-2.5" /> Agendamento público
                                   </span>
                                 )}
@@ -214,7 +214,7 @@ export default function ModalidadesPage() {
                                   </button>
                                   <button
                                     onClick={() => handleToggleAgendamento(m)}
-                                    className="w-full text-left px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 flex items-center gap-2"
+                                    className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 flex items-center gap-2"
                                   >
                                     <Globe className="w-3.5 h-3.5" />
                                     {m.permite_agendamento_publico ? "Desabilitar agendamento" : "Habilitar agendamento público"}

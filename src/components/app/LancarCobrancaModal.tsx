@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect, useRef } from "react";
 import { X, Search, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -175,7 +176,7 @@ export default function LancarCobrancaModal({ onClose, onSaved }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Valor (R$) *</label>
-              <input className={INP} placeholder="0,00" value={form.valor} onChange={e => set("valor", e.target.value)} />
+              <CurrencyInput className={INP} placeholder="0,00" value={form.valor} onChange={v => set("valor", v)} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Vencimento *</label>

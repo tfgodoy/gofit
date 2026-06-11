@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DollarSign, Save, Loader2, Info } from "lucide-react";
+import { DollarSign, Save, Loader2, Info, FileX2 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -50,11 +50,13 @@ export default function ParametrosFinanceirosPage() {
   const [saving, setSaving]     = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
 
-  const [juros,       setJuros]       = useState(String(DEFAULTS.juros_mensal));
-  const [multa,       setMulta]       = useState(String(DEFAULTS.multa_atraso));
-  const [tolerancia,  setTolerancia]  = useState(String(DEFAULTS.dias_tolerancia));
-  const [notificacao, setNotificacao] = useState(String(DEFAULTS.dias_notificacao_antes));
-  const [formas,      setFormas]      = useState<string[]>(DEFAULTS.formas_pagamento);
+  const [juros,                    setJuros]                    = useState(String(DEFAULTS.juros_mensal));
+  const [multa,                    setMulta]                    = useState(String(DEFAULTS.multa_atraso));
+  const [tolerancia,               setTolerancia]               = useState(String(DEFAULTS.dias_tolerancia));
+  const [notificacao,              setNotificacao]              = useState(String(DEFAULTS.dias_notificacao_antes));
+  const [formas,                   setFormas]                   = useState<string[]>(DEFAULTS.formas_pagamento);
+  const [multaEncerramentoAtivo,   setMultaEncerramentoAtivo]   = useState(false);
+  const [multaEncerramentoPct,     setMultaEncerramentoPct]     = useState("10.00");
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -72,6 +74,8 @@ export default function ParametrosFinanceirosPage() {
           setTolerancia(String(d.dias_tolerancia ?? DEFAULTS.dias_tolerancia));
           setNotificacao(String(d.dias_notificacao_antes ?? DEFAULTS.dias_notificacao_antes));
           setFormas(d.formas_pagamento ?? DEFAULTS.formas_pagamento);
+          setMultaEncerramentoAtivo(d.multa_encerramento_ativo ?? false);
+          setMultaEncerramentoPct(String(d.multa_encerramento_percentual ?? 10));
         }
         setLoading(false);
       });
@@ -96,14 +100,19 @@ export default function ParametrosFinanceirosPage() {
     if (formas.length === 0) { toast.error("Selecione ao menos uma forma de pagamento"); return; }
 
     setSaving(true);
+    const mpv = parseFloat(multaEncerramentoPct.replace(",", "."));
+    if (isNaN(mpv) || mpv < 0 || mpv > 100) { toast.error("Percentual de multa por encerramento inválido (0–100)"); return; }
+
     const payload = {
-      contractor_id:          user.contractorId!,
-      juros_mensal:           jv,
-      multa_atraso:           mv,
-      dias_tolerancia:        tv,
-      dias_notificacao_antes: nv,
-      formas_pagamento:       formas,
-      updated_at:             new Date().toISOString(),
+      contractor_id:                  user.contractorId!,
+      juros_mensal:                   jv,
+      multa_atraso:                   mv,
+      dias_tolerancia:                tv,
+      dias_notificacao_antes:         nv,
+      formas_pagamento:               formas,
+      multa_encerramento_ativo:       multaEncerramentoAtivo,
+      multa_encerramento_percentual:  mpv,
+      updated_at:                     new Date().toISOString(),
     };
 
     let error: unknown;
@@ -294,6 +303,65 @@ export default function ParametrosFinanceirosPage() {
             </div>
           </Section>
 
+          {/* Multa por encerramento */}
+          <Section
+            title="Multa por Encerramento de Contrato"
+            description="Aplicada quando um contrato é encerrado antes do prazo"
+          >
+            <div className="space-y-4">
+              {/* Toggle */}
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Habilitar multa por encerramento</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Quando ativo, o sistema sugerirá cobrar multa ao encerrar um contrato</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMultaEncerramentoAtivo(v => !v)}
+                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${multaEncerramentoAtivo ? "bg-primary" : "bg-gray-200"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${multaEncerramentoAtivo ? "translate-x-5" : "translate-x-0"}`} />
+                </button>
+              </div>
+
+              {/* Percentual — só visível quando ativo */}
+              {multaEncerramentoAtivo && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="grid grid-cols-2 gap-6 items-end">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">
+                        Percentual da multa (%)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={multaEncerramentoPct}
+                          onChange={e => setMultaEncerramentoPct(e.target.value)}
+                          className={inputClass}
+                        />
+                        <span className="absolute right-3 top-2 text-sm text-gray-400 font-semibold">%</span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Calculado sobre o valor total das parcelas em aberto
+                      </p>
+                    </div>
+                    <div className="pb-1">
+                      <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+                        <FileX2 className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-yellow-700">
+                          Exemplo: plano com 6 parcelas abertas de R$244,65 = R$1.467,90 × {multaEncerramentoPct}% = <strong>R${(1467.90 * (parseFloat(multaEncerramentoPct)||0) / 100).toFixed(2).replace(".",",")}</strong> de multa
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Section>
+
           {/* Preview */}
           <Section
             title="Resumo das Configurações"
@@ -306,6 +374,7 @@ export default function ParametrosFinanceirosPage() {
                 { label: "Tolerância",             value: `${tolerancia} dia${Number(tolerancia) !== 1 ? "s" : ""}` },
                 { label: "Notificação prévia",     value: `${notificacao} dia${Number(notificacao) !== 1 ? "s" : ""}` },
                 { label: "Formas aceitas",         value: formas.map(f => FORMAS_DISPONIVEIS.find(fd => fd.key === f)?.label).filter(Boolean).join(", ") || "—" },
+                { label: "Multa por encerramento", value: multaEncerramentoAtivo ? `${multaEncerramentoPct}%` : "Desativada" },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <span className="text-gray-500">{label}</span>

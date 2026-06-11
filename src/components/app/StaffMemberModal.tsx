@@ -1,3 +1,4 @@
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import {
   X, Eye, EyeOff, Loader2, Plus, Trash2, ChevronDown,
@@ -246,6 +247,26 @@ const EMPTY: FormState = {
   horarios_ativo: false, horarios_periodos: [newPeriodo()],
   observacoes: "",
 };
+
+// ── Seção inline de senha (dentro da aba Sistema) ───────────────────────────
+
+function InlinePwdSection({ onOpenModal }: { onOpenModal: () => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-gray-700 font-medium">Senha de acesso ao sistema</p>
+        <p className="text-xs text-gray-400 mt-0.5">Redefina a senha caso o colaborador esqueça</p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenModal}
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary/10 text-primary text-sm font-semibold rounded-lg hover:bg-primary/20 transition-colors"
+      >
+        <KeyRound className="w-4 h-4" /> Redefinir senha
+      </button>
+    </div>
+  );
+}
 
 // ── Componente principal ─────────────────────────────────────────────────────
 
@@ -812,11 +833,11 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       {!isEdit ? (
                         <div>
                           <label className={LBL}>Salário inicial (R$)</label>
-                          <input
+                          <CurrencyInput
                             className={INP}
                             placeholder="0,00"
                             value={form.salario_inicial}
-                            onChange={e => set("salario_inicial", maskCurrency(e.target.value))}
+                            onChange={v => set("salario_inicial", v)}
                           />
                           <p className="text-xs text-gray-400 mt-1">Cria o primeiro registro no histórico salarial.</p>
                         </div>
@@ -828,11 +849,11 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       )}
                       <div>
                         <label className={LBL}>Vale transporte (R$/mês)</label>
-                        <input
+                        <CurrencyInput
                           className={INP}
                           placeholder="0,00"
                           value={form.valor_passagem}
-                          onChange={e => set("valor_passagem", maskCurrency(e.target.value))}
+                          onChange={v => set("valor_passagem", v)}
                         />
                       </div>
                     </div>
@@ -964,6 +985,13 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       </div>
                     )}
                   </SectionBlock>
+
+                  {/* Redefinir senha — só no modo edição */}
+                  {isEdit && (
+                    <SectionBlock title="Redefinir senha de acesso">
+                      <InlinePwdSection onOpenModal={() => setShowChangePwd(true)} />
+                    </SectionBlock>
+                  )}
 
                   <SectionBlock title="Observações">
                     <textarea

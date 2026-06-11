@@ -43,7 +43,7 @@ const REPORTS: ReportCard[] = [
   { label: "Treinos",        modalKey: "treinos",       Icon: Dumbbell,   iconColor: "text-red-300",    iconBg: "bg-red-50",    textColor: "text-red-500",    borderColor: "border-red-400"    },
   { label: "Cross training", modalKey: "crosstraining", Icon: Zap,        iconColor: "text-gray-300",   iconBg: "bg-gray-50",   textColor: "text-gray-500",   borderColor: "border-gray-300"   },
   { label: "Financeiro",     modalKey: "financeiro",    Icon: DollarSign, iconColor: "text-green-300",  iconBg: "bg-green-50",  textColor: "text-green-500",  borderColor: "border-green-400"  },
-  { label: "Agenda",         modalKey: "agenda",        Icon: Calendar,   iconColor: "text-purple-300", iconBg: "bg-purple-50", textColor: "text-purple-500", borderColor: "border-purple-400" },
+  { label: "Agenda",         modalKey: "agenda",        Icon: Calendar,   iconColor: "text-orange-300", iconBg: "bg-orange-50", textColor: "text-orange-500", borderColor: "border-orange-400" },
   { label: "Geral",          modalKey: "geral",         Icon: BarChart2,  iconColor: "text-slate-300",  iconBg: "bg-slate-50",  textColor: "text-slate-400",  borderColor: "border-slate-300"  },
   { label: "CRM",            modalKey: "crm",           Icon: Filter,     iconColor: "text-orange-300", iconBg: "bg-orange-50", textColor: "text-orange-500", borderColor: "border-orange-400" },
 ];
@@ -156,7 +156,7 @@ const MODALS: Record<string, ModalConfig> = {
   agenda: {
     title: "Relatórios de agenda", columns: 1,
     sections: [
-      { title: "Descrição", headerBg: "bg-purple-600",
+      { title: "Descrição", headerBg: "bg-orange-600",
         items: [
           { label: "Check-in pelo app"          },
           { label: "Faltantes check-in"         },

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import AuthGuard from "@/components/auth/AuthGuard";
 
 import LandingPage            from "@/pages/LandingPage";
@@ -56,7 +56,10 @@ import FitcorePayPage           from "@/pages/app/FitcorePayPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
 import VendaWizardPage          from "@/pages/app/VendaWizardPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
+import FornecedoresPage        from "@/pages/app/FornecedoresPage";
+import ConciliarExtratoPage    from "@/pages/app/ConciliarExtratoPage";
 import ContasFinanceirasPage   from "@/pages/app/ContasFinanceirasPage";
+import ExtratoContaPage        from "@/pages/app/ExtratoContaPage";
 import CentroFinanceiroPage        from "@/pages/app/CentroFinanceiroPage";
 import CategoriasFinanceirasPage   from "@/pages/app/CategoriasFinanceirasPage";
 import TemplatesContratosPage      from "@/pages/app/TemplatesContratosPage";
@@ -68,7 +71,16 @@ import OcupacaoPage            from "@/pages/app/OcupacaoPage";
 import ConvitePage                  from "@/pages/public/ConvitePage";
 import AnamnesePublicPage           from "@/pages/public/AnamnesePublicPage";
 import BookingPage                  from "@/pages/public/BookingPage";
+import PublicReciboPage             from "@/pages/public/PublicReciboPage";
 import ConfigAgendamentoPublicoPage from "@/pages/app/ConfigAgendamentoPublicoPage";
+import LojaModulosPage             from "@/pages/app/LojaModulosPage";
+import GoFitPayLandingPage        from "@/pages/app/gofit-pay/GoFitPayLandingPage";
+import GoFitPayAtivarPage         from "@/pages/app/gofit-pay/GoFitPayAtivarPage";
+import GoFitPayPage               from "@/pages/app/gofit-pay/GoFitPayPage";
+import GoFitPayCobrancasPage      from "@/pages/app/gofit-pay/GoFitPayCobrancasPage";
+import GoFitPayInadimplenciaPage  from "@/pages/app/gofit-pay/GoFitPayInadimplenciaPage";
+import GoFitPayRelatoriosPage     from "@/pages/app/gofit-pay/GoFitPayRelatoriosPage";
+import GoFitPayProducaoPage       from "@/pages/app/gofit-pay/GoFitPayProducaoPage";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +88,24 @@ const staffRoles = ["contractor","teacher","receptionist","sales","nutritionist"
 
 function AppGuard({ children }: { children: React.ReactNode }) {
   return <AuthGuard allowedRoles={[...staffRoles]}>{children}</AuthGuard>;
+}
+
+// Protege rota por módulo: redireciona para /app/dashboard se staff não tiver canView
+function ModuleGuard({ module, children }: { module: string; children: React.ReactNode }) {
+  const { user, canView } = useAuth();
+  if (user?.isStaff && !canView(module)) {
+    return <Navigate to="/app/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+// Bloqueia staff de acessar rotas admin (administrativo, configurações)
+function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.isStaff && user.role !== "admin") {
+    return <Navigate to="/app/dashboard" replace />;
+  }
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -92,6 +122,7 @@ export default function App() {
             <Route path="/convite/:token"   element={<ConvitePage />} />
             <Route path="/anamnese/:token"  element={<AnamnesePublicPage />} />
             <Route path="/booking/:contractorId" element={<BookingPage />} />
+            <Route path="/recibo/:token"    element={<PublicReciboPage />} />
 
             {/* Owner */}
             <Route path="/owner/dashboard" element={
@@ -100,87 +131,102 @@ export default function App() {
 
             {/* App — empresa contratante */}
             <Route path="/app/dashboard"                   element={<AppGuard><ContractorDashboard /></AppGuard>} />
-            <Route path="/app/clientes"                    element={<AppGuard><AlunosPage /></AppGuard>} />
-            <Route path="/app/clientes/novo"               element={<AppGuard><AlunoFormPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/cadastro"       element={<AppGuard><AlunoFormPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ClienteDashboardPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><AvaliacaoFisicaFormPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/matricula"             element={<AppGuard><MatriculaPage /></AppGuard>} />
-            <Route path="/app/clientes/:id/venda"                element={<AppGuard><VendaWizardPage /></AppGuard>} />
-            <Route path="/app/dashboards/gerencial"   element={<AppGuard><DashboardGerencialPage /></AppGuard>} />
-            <Route path="/app/dashboards/crm"        element={<AppGuard><DashboardCRMPage /></AppGuard>} />
-            <Route path="/app/dashboards/clientes"   element={<AppGuard><DashboardClientesPage /></AppGuard>} />
-            <Route path="/app/dashboards/financeiro"  element={<AppGuard><DashboardFinanceiroPage /></AppGuard>} />
-            <Route path="/app/dashboards/operacional" element={<AppGuard><DashboardOperacionalPage /></AppGuard>} />
-            <Route path="/app/dashboards/agenda"     element={<AppGuard><DashboardAgendaPage /></AppGuard>} />
-            <Route path="/app/dashboards/*"          element={<AppGuard><PlaceholderPage title="Dashboard em desenvolvimento" /></AppGuard>} />
-            <Route path="/app/crm/leads"         element={<AppGuard><LeadsPage /></AppGuard>} />
-            <Route path="/app/crm/leads/:id"     element={<AppGuard><LeadPerfilPage /></AppGuard>} />
-            <Route path="/app/crm/oportunidades" element={<AppGuard><OportunidadesPage /></AppGuard>} />
-            <Route path="/app/crm/atividades"    element={<AppGuard><AtividadesPage /></AppGuard>} />
-            <Route path="/app/crm/automacoes"    element={<AppGuard><CampanhasPage /></AppGuard>} />
-            <Route path="/app/crm/clube"         element={<AppGuard><ClubeRecompensasPage /></AppGuard>} />
-            <Route path="/app/crm/*"             element={<AppGuard><PlaceholderPage title="CRM" /></AppGuard>} />
-            <Route path="/app/agenda/agenda"   element={<AppGuard><AgendaPage /></AppGuard>} />
-            <Route path="/app/agenda/grades"   element={<AppGuard><GradesPage /></AppGuard>} />
-            <Route path="/app/agenda/ocupacao" element={<AppGuard><OcupacaoPage /></AppGuard>} />
-            <Route path="/app/agenda/*"        element={<AppGuard><PlaceholderPage title="Agenda" /></AppGuard>} />
-            <Route path="/app/financeiro/caixa"              element={<AppGuard><CaixaPage /></AppGuard>} />
-            <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ContasReceberPage /></AppGuard>} />
-            <Route path="/app/financeiro/contas-a-pagar"    element={<AppGuard><ContasPagarPage /></AppGuard>} />
-            <Route path="/app/financeiro/dre"               element={<AppGuard><DrePage /></AppGuard>} />
-            <Route path="/app/financeiro/comissao"          element={<AppGuard><ComissoesPage /></AppGuard>} />
-            <Route path="/app/financeiro/vendas"            element={<AppGuard><VendasPage /></AppGuard>} />
-            <Route path="/app/financeiro/nfs-e"             element={<AppGuard><NfsePage /></AppGuard>} />
-            <Route path="/app/financeiro/pay"               element={<AppGuard><FitcorePayPage /></AppGuard>} />
-            <Route path="/app/financeiro/contas-financeiras" element={<AppGuard><ContasFinanceirasPage /></AppGuard>} />
-            <Route path="/app/financeiro/*"      element={<AppGuard><PlaceholderPage title="Financeiro" /></AppGuard>} />
-            <Route path="/app/estoque/*"         element={<AppGuard><PlaceholderPage title="Estoque" /></AppGuard>} />
-            <Route path="/app/treinos/treinos"       element={<AppGuard><TreinosPage /></AppGuard>} />
-            <Route path="/app/treinos/treinos/novo" element={<AppGuard><TreinoFormPage /></AppGuard>} />
-            <Route path="/app/treinos/treinos/:id"  element={<AppGuard><TreinoFormPage /></AppGuard>} />
-            <Route path="/app/treinos/exercicios" element={<AppGuard><ExerciciosPage /></AppGuard>} />
-            <Route path="/app/treinos/grupos"    element={<AppGuard><GruposExerciciosPage /></AppGuard>} />
-            <Route path="/app/treinos/sessoes"   element={<AppGuard><SessoesPage /></AppGuard>} />
-            <Route path="/app/treinos/*"         element={<AppGuard><PlaceholderPage title="Treino" /></AppGuard>} />
-            <Route path="/app/wod"               element={<AppGuard><WodPage /></AppGuard>} />
-            <Route path="/app/wod/novo"          element={<AppGuard><WodFormPage /></AppGuard>} />
-            <Route path="/app/wod/:id"           element={<AppGuard><WodFormPage /></AppGuard>} />
-            <Route path="/app/relatorios"        element={<AppGuard><RelatoriosPage /></AppGuard>} />
-            <Route path="/app/relatorios/*"      element={<AppGuard><PlaceholderPage title="Relatórios" /></AppGuard>} />
-            <Route path="/app/administrativo/equipe"              element={<AppGuard><EquipePage /></AppGuard>} />
-            <Route path="/app/administrativo/contratos"           element={<AppGuard><ContratosPage /></AppGuard>} />
-            <Route path="/app/administrativo/contratos/novo"      element={<AppGuard><ContratoFormPage /></AppGuard>} />
-            <Route path="/app/administrativo/contratos/:id/editar" element={<AppGuard><ContratoFormPage /></AppGuard>} />
-            <Route path="/app/administrativo/permissoes"          element={<AppGuard><PermissoesPage /></AppGuard>} />
-            <Route path="/app/administrativo/templates"           element={<AppGuard><TemplatesContratosPage /></AppGuard>} />
-            <Route path="/app/administrativo/*"          element={<AppGuard><PlaceholderPage title="Administrativo" /></AppGuard>} />
-            <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><ModalidadesPage /></AppGuard>} />
-            <Route path="/app/configuracoes/agendamento-publico"         element={<AppGuard><ConfigAgendamentoPublicoPage /></AppGuard>} />
-            <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AnamneseBibliotecaPage /></AppGuard>} />
-            <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AnamneseModelosPage /></AppGuard>} />
-            <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AnamneseModeloEditPage /></AppGuard>} />
-            <Route path="/app/configuracoes/graduacoes"    element={<AppGuard><GraduacoesPage /></AppGuard>} />
-            <Route path="/app/configuracoes/financeiro"          element={<AppGuard><ParametrosFinanceirosPage /></AppGuard>} />
-            <Route path="/app/configuracoes/centros-custo"          element={<AppGuard><CentroFinanceiroPage tipo="custo" /></AppGuard>} />
-            <Route path="/app/configuracoes/centros-receita"        element={<AppGuard><CentroFinanceiroPage tipo="receita" /></AppGuard>} />
-            <Route path="/app/configuracoes/categorias-financeiras" element={<AppGuard><CategoriasFinanceirasPage /></AppGuard>} />
-            <Route path="/app/configuracoes/unidades"        element={<AppGuard><UnidadesPage /></AppGuard>} />
-            <Route path="/app/configuracoes/integracoes"    element={<AppGuard><IntegracoesHubPage /></AppGuard>} />
+            <Route path="/app/clientes"                    element={<AppGuard><ModuleGuard module="clientes"><AlunosPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/novo"               element={<AppGuard><ModuleGuard module="clientes"><AlunoFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/cadastro"       element={<AppGuard><ModuleGuard module="clientes"><AlunoFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/dashboard"      element={<AppGuard><ModuleGuard module="clientes"><ClienteDashboardPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/avaliacao-fisica/nova"  element={<AppGuard><ModuleGuard module="clientes"><AvaliacaoFisicaFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/avaliacao-fisica/:avalId" element={<AppGuard><ModuleGuard module="clientes"><AvaliacaoFisicaFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/matricula"             element={<AppGuard><ModuleGuard module="clientes"><MatriculaPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/clientes/:id/venda"                element={<AppGuard><ModuleGuard module="financeiro"><VendaWizardPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/gerencial"   element={<AppGuard><ModuleGuard module="dashboards"><DashboardGerencialPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/crm"        element={<AppGuard><ModuleGuard module="dashboards"><DashboardCRMPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/clientes"   element={<AppGuard><ModuleGuard module="dashboards"><DashboardClientesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/financeiro"  element={<AppGuard><ModuleGuard module="dashboards"><DashboardFinanceiroPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/operacional" element={<AppGuard><ModuleGuard module="dashboards"><DashboardOperacionalPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/agenda"     element={<AppGuard><ModuleGuard module="dashboards"><DashboardAgendaPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/dashboards/*"          element={<AppGuard><ModuleGuard module="dashboards"><PlaceholderPage title="Dashboard em desenvolvimento" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/leads"         element={<AppGuard><ModuleGuard module="crm"><LeadsPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/leads/:id"     element={<AppGuard><ModuleGuard module="crm"><LeadPerfilPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/oportunidades" element={<AppGuard><ModuleGuard module="crm"><OportunidadesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/atividades"    element={<AppGuard><ModuleGuard module="crm"><AtividadesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/automacoes"    element={<AppGuard><ModuleGuard module="crm"><CampanhasPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/clube"         element={<AppGuard><ModuleGuard module="crm"><ClubeRecompensasPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/crm/*"             element={<AppGuard><ModuleGuard module="crm"><PlaceholderPage title="CRM" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/agenda/agenda"   element={<AppGuard><ModuleGuard module="agenda"><AgendaPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/agenda/grades"   element={<AppGuard><ModuleGuard module="agenda"><GradesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/agenda/ocupacao" element={<AppGuard><ModuleGuard module="agenda"><OcupacaoPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/agenda/*"        element={<AppGuard><ModuleGuard module="agenda"><PlaceholderPage title="Agenda" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/caixa"              element={<AppGuard><ModuleGuard module="financeiro"><CaixaPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/contas-a-receber"  element={<AppGuard><ModuleGuard module="financeiro"><ContasReceberPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/contas-a-pagar"      element={<AppGuard><ModuleGuard module="financeiro"><ContasPagarPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/conciliar-extrato"  element={<AppGuard><ModuleGuard module="financeiro"><ConciliarExtratoPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/dre"               element={<AppGuard><ModuleGuard module="financeiro"><DrePage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/comissao"          element={<AppGuard><ModuleGuard module="financeiro"><ComissoesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/vendas"            element={<AppGuard><ModuleGuard module="financeiro"><VendasPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/nfs-e"             element={<AppGuard><ModuleGuard module="financeiro"><NfsePage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/pay"               element={<AppGuard><ModuleGuard module="financeiro"><FitcorePayPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/contas-financeiras" element={<AppGuard><ModuleGuard module="financeiro"><ContasFinanceirasPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/contas-financeiras/:contaId/extrato" element={<AppGuard><ModuleGuard module="financeiro"><ExtratoContaPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/financeiro/*"      element={<AppGuard><ModuleGuard module="financeiro"><PlaceholderPage title="Financeiro" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/estoque/*"         element={<AppGuard><ModuleGuard module="estoque"><PlaceholderPage title="Estoque" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/treinos"       element={<AppGuard><ModuleGuard module="treinos"><TreinosPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/treinos/novo" element={<AppGuard><ModuleGuard module="treinos"><TreinoFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/treinos/:id"  element={<AppGuard><ModuleGuard module="treinos"><TreinoFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/exercicios" element={<AppGuard><ModuleGuard module="treinos"><ExerciciosPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/grupos"    element={<AppGuard><ModuleGuard module="treinos"><GruposExerciciosPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/sessoes"   element={<AppGuard><ModuleGuard module="treinos"><SessoesPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/treinos/*"         element={<AppGuard><ModuleGuard module="treinos"><PlaceholderPage title="Treino" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/wod"               element={<AppGuard><ModuleGuard module="wod"><WodPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/wod/novo"          element={<AppGuard><ModuleGuard module="wod"><WodFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/wod/:id"           element={<AppGuard><ModuleGuard module="wod"><WodFormPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/relatorios"        element={<AppGuard><ModuleGuard module="relatorios"><RelatoriosPage /></ModuleGuard></AppGuard>} />
+            <Route path="/app/relatorios/*"      element={<AppGuard><ModuleGuard module="relatorios"><PlaceholderPage title="Relatórios" /></ModuleGuard></AppGuard>} />
+            <Route path="/app/administrativo/equipe"              element={<AppGuard><AdminOnlyGuard><EquipePage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/contratos"           element={<AppGuard><AdminOnlyGuard><ContratosPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/contratos/novo"      element={<AppGuard><AdminOnlyGuard><ContratoFormPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/contratos/:id/editar" element={<AppGuard><AdminOnlyGuard><ContratoFormPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/permissoes"          element={<AppGuard><AdminOnlyGuard><PermissoesPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/templates"           element={<AppGuard><AdminOnlyGuard><TemplatesContratosPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/administrativo/*"          element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Administrativo" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/modalidades"                  element={<AppGuard><AdminOnlyGuard><ModalidadesPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/agendamento-publico"         element={<AppGuard><AdminOnlyGuard><ConfigAgendamentoPublicoPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/biblioteca"         element={<AppGuard><AdminOnlyGuard><AnamneseBibliotecaPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/modelos"             element={<AppGuard><AdminOnlyGuard><AnamneseModelosPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/anamnese/modelos/:id/editar"  element={<AppGuard><AdminOnlyGuard><AnamneseModeloEditPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/graduacoes"    element={<AppGuard><AdminOnlyGuard><GraduacoesPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/financeiro"          element={<AppGuard><AdminOnlyGuard><ParametrosFinanceirosPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/centros-custo"          element={<AppGuard><AdminOnlyGuard><CentroFinanceiroPage tipo="custo" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/centros-receita"        element={<AppGuard><AdminOnlyGuard><CentroFinanceiroPage tipo="receita" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/categorias-despesa" element={<AppGuard><AdminOnlyGuard><CategoriasFinanceirasPage tipo="despesa" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/categorias-receita" element={<AppGuard><AdminOnlyGuard><CategoriasFinanceirasPage tipo="receita" /></AdminOnlyGuard></AppGuard>} />
+            {/* legacy redirect */}
+            <Route path="/app/configuracoes/categorias-financeiras" element={<Navigate to="/app/configuracoes/categorias-despesa" replace />} />
+            <Route path="/app/configuracoes/fornecedores"     element={<AppGuard><AdminOnlyGuard><FornecedoresPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/unidades"        element={<AppGuard><AdminOnlyGuard><UnidadesPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/integracoes"    element={<AppGuard><AdminOnlyGuard><IntegracoesHubPage /></AdminOnlyGuard></AppGuard>} />
             {/* CRM Config */}
-            <Route path="/app/configuracoes/crm/atividades/tipos-atividade"  element={<AppGuard><CrmConfigListPage titulo="Tipos de atividades"  descricao="Categorias de atividades do CRM (ex: Ligação, WhatsApp, Email, Reunião)" categoria="tipo_atividade" /></AppGuard>} />
-            <Route path="/app/configuracoes/crm/oportunidades/como-conheceu"   element={<AppGuard><CrmConfigListPage titulo="Como conheceu"        descricao="Como o lead descobriu a academia (ex: Instagram, Indicação, Google)" categoria="como_conheceu" /></AppGuard>} />
-            <Route path="/app/configuracoes/crm/oportunidades/tipos-visita"    element={<AppGuard><CrmConfigListPage titulo="Tipos de visitas"     descricao="Modalidades de visita em oportunidades (ex: Presencial, Online)" categoria="tipo_visita_oportunidade" /></AppGuard>} />
-            <Route path="/app/configuracoes/crm/oportunidades/niveis-interesse"element={<AppGuard><CrmConfigListPage titulo="Níveis de interesse"  descricao="Grau de interesse do lead em oportunidades (ex: Alto, Médio, Baixo)" categoria="nivel_interesse_oportunidade" comCor /></AppGuard>} />
-            <Route path="/app/configuracoes/crm/oportunidades/motivos-perda"   element={<AppGuard><CrmConfigListPage titulo="Motivos de Perda"     descricao="Razões pelo qual oportunidades são perdidas (ex: Preço, Concorrência)" categoria="motivo_perda" /></AppGuard>} />
-            <Route path="/app/configuracoes/contratos/motivos-encerramento"   element={<AppGuard><CrmConfigListPage titulo="Motivos de Encerramento" descricao="Motivos disponíveis ao encerrar um contrato de aluno" categoria="motivo_encerramento" /></AppGuard>} />
-            <Route path="/app/configuracoes/crm/oportunidades/funis-etapas"    element={<AppGuard><ConfigCrmFunisPage /></AppGuard>} />
-            <Route path="/app/configuracoes/*"   element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
-            <Route path="/app/empresa"           element={<AppGuard><PlaceholderPage title="Configurações" /></AppGuard>} />
-            <Route path="/app/recursos"          element={<AppGuard><PlaceholderPage title="Recursos do Sistema" /></AppGuard>} />
-            <Route path="/app/loja"              element={<AppGuard><PlaceholderPage title="Loja" /></AppGuard>} />
-            <Route path="/app/ajuda/*"           element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
+            <Route path="/app/configuracoes/crm/atividades/tipos-atividade"  element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Tipos de atividades"  descricao="Categorias de atividades do CRM (ex: Ligação, WhatsApp, Email, Reunião)" categoria="tipo_atividade" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/como-conheceu"   element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Como conheceu"        descricao="Como o lead descobriu a academia (ex: Instagram, Indicação, Google)" categoria="como_conheceu" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/tipos-visita"    element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Tipos de visitas"     descricao="Modalidades de visita em oportunidades (ex: Presencial, Online)" categoria="tipo_visita_oportunidade" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/niveis-interesse"element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Níveis de interesse"  descricao="Grau de interesse do lead em oportunidades (ex: Alto, Médio, Baixo)" categoria="nivel_interesse_oportunidade" comCor /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/motivos-perda"   element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Motivos de Perda"     descricao="Razões pelo qual oportunidades são perdidas (ex: Preço, Concorrência)" categoria="motivo_perda" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/contratos/motivos-encerramento"   element={<AppGuard><AdminOnlyGuard><CrmConfigListPage titulo="Motivos de Encerramento" descricao="Motivos disponíveis ao encerrar um contrato de aluno" categoria="motivo_encerramento" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/crm/oportunidades/funis-etapas"    element={<AppGuard><AdminOnlyGuard><ConfigCrmFunisPage /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/configuracoes/*"   element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/empresa"           element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Configurações" /></AdminOnlyGuard></AppGuard>} />
+            <Route path="/app/recursos"          element={<AppGuard><AdminOnlyGuard><PlaceholderPage title="Recursos do Sistema" /></AdminOnlyGuard></AppGuard>} />
+            {/* Loja de Módulos — Fase 2 */}
+            <Route path="/app/loja"                    element={<AppGuard><LojaModulosPage /></AppGuard>} />
+            {/* GoFit Pay — Fase 3 */}
+            <Route path="/app/loja/gofit-pay"          element={<AppGuard><GoFitPayLandingPage /></AppGuard>} />
+            <Route path="/app/loja/gofit-pay/ativar"   element={<AppGuard><GoFitPayAtivarPage /></AppGuard>} />
+            <Route path="/app/gofit-pay"               element={<AppGuard><GoFitPayPage /></AppGuard>} />
+            <Route path="/app/gofit-pay/cobrancas"      element={<AppGuard><GoFitPayCobrancasPage /></AppGuard>} />
+            <Route path="/app/gofit-pay/inadimplencia" element={<AppGuard><GoFitPayInadimplenciaPage /></AppGuard>} />
+            <Route path="/app/gofit-pay/relatorios"    element={<AppGuard><GoFitPayRelatoriosPage    /></AppGuard>} />
+            <Route path="/app/gofit-pay/producao"      element={<AppGuard><GoFitPayProducaoPage      /></AppGuard>} />
+            <Route path="/app/ajuda/*"                 element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
