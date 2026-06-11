@@ -13,12 +13,13 @@ import {
   CreditCard, Clock, CheckCircle2, AlertCircle,
   TrendingUp, Wallet, Users, ArrowUpRight,
   RefreshCcw, Loader2, Settings, ChevronRight,
-  QrCode, FileText, XCircle, RotateCcw, AlertTriangle,
+  QrCode, FileText, XCircle, RotateCcw, AlertTriangle, Percent,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { GoFitPayService } from "@/services/gofit-pay";
+import GoFitPayFeesModal from "./GoFitPayFeesModal";
 
 /* ─── Status config ──────────────────────────────────────────────── */
 // Status de exibição do dashboard (combina onboarding_status + module_status)
@@ -69,6 +70,7 @@ export default function GoFitPayPage() {
   const [moduleStatus,     setModuleStatus]     = useState<string>("pending");
   const [loading,          setLoading]          = useState(true);
   const [retrying,         setRetrying]         = useState(false);
+  const [showFees,         setShowFees]         = useState(false);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -133,6 +135,7 @@ export default function GoFitPayPage() {
 
   return (
     <AppLayout>
+      {showFees && <GoFitPayFeesModal onClose={() => setShowFees(false)} />}
       <div className="flex flex-col min-h-full bg-gray-50">
 
         {/* Header */}
@@ -154,6 +157,13 @@ export default function GoFitPayPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Taxas */}
+              <button
+                onClick={() => setShowFees(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-colors"
+              >
+                <Percent className="w-3 h-3" /> Visualizar taxas
+              </button>
               {/* Wizard incompleto → Continuar ativação */}
               {!isAtivo && effectiveStatus === "rascunho" && (
                 <button onClick={() => navigate("/app/loja/gofit-pay/ativar")}
@@ -306,7 +316,7 @@ export default function GoFitPayPage() {
                 </div>
               </div>
 
-              {/* Acesso rápido a cobranças (só quando ativo) */}
+              {/* Acesso rápido */}
               {isAtivo && (
                 <div className="mt-6 mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
@@ -321,6 +331,20 @@ export default function GoFitPayPage() {
                       <p className="text-xs text-gray-400 mt-0.5">Gerar Pix ou Boleto para contas a receber</p>
                     </div>
                     <ArrowUpRight className="w-4 h-4 text-primary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </button>
+
+                  <button
+                    onClick={() => setShowFees(true)}
+                    className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-sm p-5 text-left transition-all group"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 group-hover:bg-gray-200 transition-colors">
+                      <Percent className="w-5 h-5 text-gray-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-gray-900">Taxas do GoFit Pay</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Visualize as taxas por forma de pagamento</p>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-gray-400 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </button>
                 </div>
               )}

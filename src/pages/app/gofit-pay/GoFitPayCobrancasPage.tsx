@@ -16,13 +16,14 @@ import {
   CheckCircle2, AlertCircle, ChevronRight, Copy, ExternalLink, X,
   Zap, Eye, RefreshCw, RotateCcw, Webhook, User, Receipt,
   Clock, AlertTriangle, ChevronDown, ChevronUp, Ban,
-  Layers, Search, ChevronLeft, ListChecks, Package,
+  Layers, Search, ChevronLeft, ListChecks, Package, Percent,
 } from "lucide-react";
 import AppLayout          from "@/components/app/AppLayout";
 import { supabase }       from "@/integrations/supabase/client";
 import { useAuth }        from "@/contexts/AuthContext";
 import { GoFitPayService } from "@/services/gofit-pay";
 import type { CreateChargePayload, PaymentCharge, WebhookEvent } from "@/services/gofit-pay/types";
+import GoFitPayFeesModal  from "./GoFitPayFeesModal";
 
 /* ─── Tipos locais ─────────────────────────────────────────────────── */
 
@@ -1483,6 +1484,7 @@ export default function GoFitPayCobrancasPage() {
   const [selectedCharge, setSelectedCharge] = useState<ChargeRow | null>(null);
   const [showEmitir,     setShowEmitir]   = useState(false);
   const [showRecurring,  setShowRecurring] = useState(false);
+  const [showFees,       setShowFees]      = useState(false);
   const [globalError,    setGlobalError]  = useState<string | null>(null);
 
   const loadCharges = useCallback(async () => {
@@ -1639,6 +1641,12 @@ export default function GoFitPayCobrancasPage() {
                 <RefreshCcw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} /> Atualizar
               </button>
               <button
+                onClick={() => setShowFees(true)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <Percent className="w-3 h-3" /> Taxas
+              </button>
+              <button
                 onClick={() => setShowRecurring(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors"
               >
@@ -1789,6 +1797,9 @@ export default function GoFitPayCobrancasPage() {
             onCreated={loadCharges}
           />
         )}
+
+        {/* Modal de taxas (Fase 11) */}
+        {showFees && <GoFitPayFeesModal onClose={() => setShowFees(false)} />}
       </div>
     </AppLayout>
   );

@@ -668,7 +668,41 @@ export const GoFitPayService = {
     }>;
   },
 
+  /**
+   * FASE 11 — Retorna taxas ativas do GoFit Pay.
+   * Taxas específicas da empresa têm prioridade sobre globais.
+   */
+  async getFees(): Promise<EdgeFunctionResponse<{
+    fees: GoFitPayFee[];
+    source: "contractor" | "global";
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "get_fees" },
+    });
+    if (error) {
+      console.error("[GoFitPayService] getFees error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ fees: GoFitPayFee[]; source: "contractor" | "global" }>;
+  },
+
 } as const;
+
+/* ─── Tipos Fase 11 ─────────────────────────────────────────────── */
+export interface GoFitPayFee {
+  id:              string;
+  contractor_id:   string | null;
+  billing_type:    "PIX" | "BOLETO" | "CREDIT_CARD";
+  label:           string;
+  fixed_fee:       number;
+  percentage_fee:  number;
+  installment_min: number | null;
+  installment_max: number | null;
+  settlement_days: number;
+  description:     string | null;
+  is_demo:         boolean;
+  sort_order:      number;
+}
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */
 export class GoFitPayNotImplementedError extends Error {

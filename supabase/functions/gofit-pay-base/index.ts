@@ -736,6 +736,36 @@ async function handleCreatePaymentCharge(
 const RECURRING_ALLOWED_STATUSES = ["pendente", "atrasado", "aguardando"] as const;
 const MAX_RECURRING_BATCH = 20;
 
+/* ── Fase 11: taxas GoFit Pay ─────────────────────────────────────── */
+async function handleGetFees(contractorId: string): Promise<Response> {
+  const db = serviceClient();
+
+  const FEE_FIELDS = "id,contractor_id,billing_type,label,fixed_fee,percentage_fee,installment_min,installment_max,settlement_days,description,is_demo,sort_order";
+
+  // Taxas específicas da empresa têm prioridade sobre as globais
+  const { data: specific } = await db
+    .from("gofit_pay_fees")
+    .select(FEE_FIELDS)
+    .eq("contractor_id", contractorId)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (specific && specific.length > 0) {
+    console.log(`[gofit-pay] get_fees: contractor-specific fees count=${specific.length}`);
+    return json({ success: true, data: { fees: specific, source: "contractor" } });
+  }
+
+  const { data: globalFees } = await db
+    .from("gofit_pay_fees")
+    .select(FEE_FIELDS)
+    .is("contractor_id", null)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  console.log(`[gofit-pay] get_fees: global fees count=${globalFees?.length ?? 0}`);
+  return json({ success: true, data: { fees: globalFees ?? [], source: "global" } });
+}
+
 async function handlePreviewRecurringCharges(
   body: Record<string, unknown>,
   contractorId: string
@@ -1728,6 +1758,9 @@ serve(async (req) => {
 
       case "process_pending_webhooks":
         return await handleProcessPendingWebhooks(body, identity.contractorId);
+
+      case "get_fees":
+        return await handleGetFees(identity.contractorId);
 
       case "preview_recurring_charges":
         return await handlePreviewRecurringCharges(body, identity.contractorId);
