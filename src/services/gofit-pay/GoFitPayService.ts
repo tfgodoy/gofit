@@ -783,6 +783,36 @@ export const GoFitPayService = {
     return data as EdgeFunctionResponse<{ fees: GoFitPayFee[]; source: "contractor" | "global" }>;
   },
 
+  /**
+   * FASE 14 — Retorna status do ambiente (sandbox/produção) para a empresa.
+   * Não expõe valores de secrets — apenas flags booleanas de presença.
+   */
+  async getEnvironmentStatus(): Promise<EdgeFunctionResponse<EnvironmentStatus>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "get_environment_status" },
+    });
+    if (error) {
+      console.error("[GoFitPayService] getEnvironmentStatus error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<EnvironmentStatus>;
+  },
+
+  /**
+   * FASE 14 — Valida pré-requisitos para ativar produção controlada.
+   * Retorna checklist completo; não revela valores de API keys.
+   */
+  async validateProductionReadiness(): Promise<EdgeFunctionResponse<ProductionReadiness>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "validate_production_readiness" },
+    });
+    if (error) {
+      console.error("[GoFitPayService] validateProductionReadiness error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<ProductionReadiness>;
+  },
+
 } as const;
 
 /* ─── Tipos Fase 12 ─────────────────────────────────────────────── */
@@ -901,6 +931,45 @@ export interface ReportDiscrepancy {
   provider_charge_id: string | null;
   descricao:          string;
   acao_sugerida:      string;
+}
+
+/* ─── Tipos Fase 14 ─────────────────────────────────────────────── */
+export interface EnvironmentStatus {
+  current_environment:   "sandbox" | "production";
+  global_env_secret:     string;
+  sandbox_active:        boolean;
+  is_sandbox:            boolean;
+  is_production:         boolean;
+  production_enabled:    boolean;
+  allowed_for_real_charges: boolean;
+  production_approved_at: string | null;
+  production_notes:      string | null;
+  module_active:         boolean;
+  account_status:        string | null;
+  account_environment:   string;
+  webhook_configured:    boolean;
+  base_url_matches_env:  boolean;
+  secrets_present: {
+    api_key:        boolean;
+    webhook_token:  boolean;
+    encryption_key: boolean;
+  };
+}
+
+export interface ProductionReadinessCheck {
+  item:    string;
+  status:  "ok" | "warn" | "fail" | "pending";
+  detail:  string;
+}
+
+export interface ProductionReadiness {
+  ready_for_production: boolean;
+  critical_failures:    number;
+  warnings:             number;
+  passed:               number;
+  current_environment:  string;
+  summary:              string;
+  checks:               ProductionReadinessCheck[];
 }
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */

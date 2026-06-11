@@ -32,6 +32,8 @@ export type { OverdueItem, CollectionSummary } from "./GoFitPayService";
 export type { GoFitPayFee } from "./GoFitPayService";
 // Fase 13
 export type { ReportFilters, ReportSummary, BillingTypeStat, ReportCharge, ReportDiscrepancy } from "./GoFitPayService";
+// Fase 14
+export type { EnvironmentStatus, ProductionReadinessCheck, ProductionReadiness } from "./GoFitPayService";
 export {
   CHARGE_STATUS_LABEL,
   CHARGE_STATUS_COLOR,

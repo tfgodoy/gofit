@@ -22,6 +22,7 @@ import { GoFitPayService } from "@/services/gofit-pay";
 import type {
   ReportSummary, BillingTypeStat, ReportCharge, ReportDiscrepancy, ReportFilters,
 } from "@/services/gofit-pay";
+import { GoFitPayEnvironmentBadge } from "@/components/gofit-pay/GoFitPayEnvironmentBadge";
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function fmt(n: number) {
@@ -123,6 +124,7 @@ export default function GoFitPayRelatoriosPage() {
   const [discrepancies, setDiscrepancies] = useState<ReportDiscrepancy[]>([]);
   const [loading,       setLoading]       = useState(false);
   const [error,         setError]         = useState<string | null>(null);
+  const [activeEnv,     setActiveEnv]     = useState<"sandbox" | "production" | null>(null);
 
   /* ── UI state ─── */
   const [activeTab,     setActiveTab]     = useState<"cobranças" | "divergencias">("cobranças");
@@ -159,6 +161,12 @@ export default function GoFitPayRelatoriosPage() {
   }, [user?.contractorId, dateFrom, dateTo, filterBt, filterFinSt, filterGwSt, filterStudent, filterBaixa]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    GoFitPayService.getEnvironmentStatus().then(r => {
+      if (r.success && r.data) setActiveEnv(r.data.current_environment);
+    });
+  }, []);
 
   /* ── CSV Export ─── */
   function exportCSV() {
@@ -210,7 +218,10 @@ export default function GoFitPayRelatoriosPage() {
                 <BarChart3 className="w-4.5 h-4.5 text-primary" />
               </div>
               <div>
-                <h1 className="text-base font-black text-gray-900">Relatórios</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-black text-gray-900">Relatórios</h1>
+                  <GoFitPayEnvironmentBadge environment={activeEnv} />
+                </div>
                 <p className="text-xs text-gray-400">Recebimentos, cobranças e conciliação GoFit Pay</p>
               </div>
             </div>

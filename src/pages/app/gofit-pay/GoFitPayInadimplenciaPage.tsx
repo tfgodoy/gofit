@@ -24,6 +24,7 @@ import {
 import AppLayout from "@/components/app/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { GoFitPayService, type OverdueItem, type CollectionSummary } from "@/services/gofit-pay";
+import { GoFitPayEnvironmentBadge } from "@/components/gofit-pay/GoFitPayEnvironmentBadge";
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 function fmt(n: number) {
@@ -247,6 +248,7 @@ export default function GoFitPayInadimplenciaPage() {
   const [items,    setItems]    = useState<OverdueItem[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [syncing,  setSyncing]  = useState<string | null>(null);
+  const [activeEnv, setActiveEnv] = useState<"sandbox" | "production" | null>(null);
 
   // Filters (client-side over loaded data)
   const [search,      setSearch]      = useState("");
@@ -269,6 +271,12 @@ export default function GoFitPayInadimplenciaPage() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    GoFitPayService.getEnvironmentStatus().then(r => {
+      if (r.success && r.data) setActiveEnv(r.data.current_environment);
+    });
+  }, []);
 
   // Client-side filtering
   const filtered = items.filter(item => {
@@ -341,6 +349,7 @@ export default function GoFitPayInadimplenciaPage() {
               <span className="text-xs text-gray-400">GoFit Pay</span>
               <ChevronRight className="w-3 h-3 text-gray-300" />
               <span className="text-xs font-semibold text-gray-700">Inadimplência</span>
+              <GoFitPayEnvironmentBadge environment={activeEnv} />
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => navigate("/app/gofit-pay/relatorios")}

@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { GoFitPayService } from "@/services/gofit-pay";
 import GoFitPayFeesModal from "./GoFitPayFeesModal";
+import { GoFitPayEnvironmentBadge } from "@/components/gofit-pay/GoFitPayEnvironmentBadge";
 
 /* ─── Status config ──────────────────────────────────────────────── */
 // Status de exibição do dashboard (combina onboarding_status + module_status)
@@ -71,6 +72,7 @@ export default function GoFitPayPage() {
   const [loading,          setLoading]          = useState(true);
   const [retrying,         setRetrying]         = useState(false);
   const [showFees,         setShowFees]         = useState(false);
+  const [activeEnv,        setActiveEnv]        = useState<"sandbox" | "production" | null>(null);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -106,6 +108,10 @@ export default function GoFitPayPage() {
     }
 
     setLoading(false);
+
+    GoFitPayService.getEnvironmentStatus().then(r => {
+      if (r.success && r.data) setActiveEnv(r.data.current_environment);
+    });
   }
 
   // moduleStatus tem precedência para states pós-Asaas
@@ -154,6 +160,7 @@ export default function GoFitPayPage() {
                 <StatusIcon className="w-3 h-3" />
                 {statusInfo.label}
               </span>
+              <GoFitPayEnvironmentBadge environment={activeEnv} />
             </div>
 
             <div className="flex items-center gap-2">

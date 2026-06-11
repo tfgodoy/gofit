@@ -24,6 +24,7 @@ import { useAuth }        from "@/contexts/AuthContext";
 import { GoFitPayService } from "@/services/gofit-pay";
 import type { CreateChargePayload, PaymentCharge, WebhookEvent } from "@/services/gofit-pay/types";
 import GoFitPayFeesModal  from "./GoFitPayFeesModal";
+import { GoFitPayEnvironmentBadge } from "@/components/gofit-pay/GoFitPayEnvironmentBadge";
 
 /* ─── Tipos locais ─────────────────────────────────────────────────── */
 
@@ -1486,6 +1487,7 @@ export default function GoFitPayCobrancasPage() {
   const [showRecurring,  setShowRecurring] = useState(false);
   const [showFees,       setShowFees]      = useState(false);
   const [globalError,    setGlobalError]  = useState<string | null>(null);
+  const [activeEnv,      setActiveEnv]    = useState<"sandbox" | "production" | null>(null);
 
   const loadCharges = useCallback(async () => {
     if (!user?.contractorId) return;
@@ -1555,6 +1557,12 @@ export default function GoFitPayCobrancasPage() {
   }, [user?.contractorId]);
 
   useEffect(() => { loadCharges(); }, [loadCharges]);
+
+  useEffect(() => {
+    GoFitPayService.getEnvironmentStatus().then(r => {
+      if (r.success && r.data) setActiveEnv(r.data.current_environment);
+    });
+  }, []);
 
   // Atualiza charge no state após sync
   function handleSynced(chargeId: string, updated: Partial<ChargeRow>) {
@@ -1678,7 +1686,10 @@ export default function GoFitPayCobrancasPage() {
 
           {/* Título */}
           <div className="mb-5">
-            <h1 className="text-xl font-black text-gray-900">Cobranças GoFit Pay</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-black text-gray-900">Cobranças GoFit Pay</h1>
+              <GoFitPayEnvironmentBadge environment={activeEnv} size="md" />
+            </div>
             <p className="text-sm text-gray-400 mt-0.5">Operação, auditoria e recorrência de cobranças GoFit Pay.</p>
           </div>
 

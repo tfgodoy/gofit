@@ -677,6 +677,7 @@ async function handleCreatePaymentCharge(
   }
 
   const now = new Date().toISOString();
+  const { env: chargeEnv } = await resolveEnvironment(db, contractorId);
   const { data: savedCharge, error: chargeErr } = await db.from("payment_charges").insert({
     contractor_id: contractorId, student_id: studentId,
     student_contract_id: receivable.student_contract_id ?? null,
@@ -689,6 +690,7 @@ async function handleCreatePaymentCharge(
     pix_copy_paste: pixQrCode?.payload ?? null,
     payment_url: asaasPayment.invoiceUrl ?? null,
     external_reference: externalRef,
+    provider_environment: chargeEnv,
     raw_response_json: sanitizePaymentForStorage(asaasPayment),
     created_at: now, updated_at: now,
   }).select("id").single();
@@ -1092,6 +1094,12 @@ async function handleCreateRecurringCharges(
   const today = new Date().toISOString().substring(0, 10);
   const now   = new Date().toISOString();
 
+  // Resolve ambiente — produção só se contractor estiver explicitamente autorizado
+  const { env: batchEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+  if (batchEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
+    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
+  }
+
   // Cache de customers criados neste lote para evitar chamadas redundantes ao Asaas
   const customerCache: Record<string, string> = {};
 
@@ -1262,6 +1270,7 @@ async function handleCreateRecurringCharges(
       pix_copy_paste: pixQrCode?.payload ?? null,
       payment_url: asaasPayment.invoiceUrl ?? null,
       external_reference: externalRef,
+      provider_environment: batchEnv,
       raw_response_json: sanitizePaymentForStorage(asaasPayment),
       created_at: now, updated_at: now,
     }).select("id").single();
@@ -1880,6 +1889,182 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
   });
 }
 
+// ─── Fase 14: helpers de ambiente ────────────────────────────────────────────
+
+/** Resolve o ambiente efetivo para a empresa: sandbox ou production.
+ *  Production só é ativado se TODAS as condições forem verdadeiras:
+ *    1. ASAAS_ENV=production (secret global)
+ *    2. gofit_pay_settings.production_enabled=true
+ *    3. gofit_pay_settings.allowed_for_real_charges=true
+ *  Se qualquer condição falhar, retorna sandbox.
+ */
+async function resolveEnvironment(
+  db: ReturnType<typeof serviceClient>,
+  contractorId: string
+): Promise<{ env: "sandbox" | "production"; productionEnabled: boolean; allowedRealCharges: boolean }> {
+  const globalEnv = Deno.env.get("ASAAS_ENV") ?? "sandbox";
+
+  const { data: settings } = await db.from("gofit_pay_settings")
+    .select("production_enabled, allowed_for_real_charges")
+    .eq("contractor_id", contractorId).maybeSingle();
+
+  const productionEnabled  = settings?.production_enabled   === true;
+  const allowedRealCharges = settings?.allowed_for_real_charges === true;
+
+  const env: "sandbox" | "production" =
+    (globalEnv === "production" && productionEnabled && allowedRealCharges)
+      ? "production"
+      : "sandbox";
+
+  return { env, productionEnabled, allowedRealCharges };
+}
+
+// ─── Fase 14: get_environment_status ─────────────────────────────────────────
+
+async function handleGetEnvironmentStatus(contractorId: string): Promise<Response> {
+  const db         = serviceClient();
+  const globalEnv  = Deno.env.get("ASAAS_ENV")        ?? "sandbox";
+  const baseUrl    = Deno.env.get("ASAAS_BASE_URL")    ?? "";
+
+  const hasApiKey    = !!Deno.env.get("ASAAS_API_KEY");
+  const hasWhToken   = !!Deno.env.get("ASAAS_WEBHOOK_TOKEN");
+  const hasEncKey    = !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY");
+
+  const urlMatchesEnv =
+    (globalEnv === "production" && baseUrl.includes("api.asaas.com") && !baseUrl.includes("sandbox")) ||
+    (globalEnv === "sandbox"    && baseUrl.includes("sandbox.asaas.com"));
+
+  const moduleId = await getGoFitPayModuleId(db);
+  let moduleActive = false;
+  if (moduleId) {
+    const { data: cm } = await db.from("company_modules")
+      .select("status").eq("contractor_id", contractorId).eq("module_id", moduleId).maybeSingle();
+    moduleActive = cm?.status === "active";
+  }
+
+  const { data: account } = await db.from("gofit_pay_accounts")
+    .select("id, status, provider_environment")
+    .eq("contractor_id", contractorId).eq("provider", "asaas").maybeSingle();
+
+  const { data: settings } = await db.from("gofit_pay_settings")
+    .select("environment, production_enabled, allowed_for_real_charges, production_approved_at, production_notes")
+    .eq("contractor_id", contractorId).maybeSingle();
+
+  const { env, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+
+  console.log(`[gofit-pay] get_environment_status: contractor=${contractorId} env=${env} prod_enabled=${productionEnabled}`);
+
+  return json({
+    success: true,
+    data: {
+      current_environment:       env,
+      global_env_secret:         globalEnv,
+      sandbox_active:            env === "sandbox",
+      is_sandbox:                env === "sandbox",
+      is_production:             env === "production",
+      production_enabled:        productionEnabled,
+      allowed_for_real_charges:  allowedRealCharges,
+      production_approved_at:    settings?.production_approved_at ?? null,
+      production_notes:          settings?.production_notes ?? null,
+      module_active:             moduleActive,
+      account_status:            account?.status ?? null,
+      account_environment:       account?.provider_environment ?? "sandbox",
+      webhook_configured:        hasWhToken,
+      base_url_matches_env:      urlMatchesEnv,
+      secrets_present: {
+        api_key:        hasApiKey,
+        webhook_token:  hasWhToken,
+        encryption_key: hasEncKey,
+      },
+    },
+  });
+}
+
+// ─── Fase 14: validate_production_readiness ───────────────────────────────────
+
+async function handleValidateProductionReadiness(
+  contractorId: string,
+  secrets: SecretsValidation
+): Promise<Response> {
+  const db        = serviceClient();
+  const globalEnv = Deno.env.get("ASAAS_ENV")     ?? "sandbox";
+  const baseUrl   = Deno.env.get("ASAAS_BASE_URL") ?? "";
+
+  type CheckStatus = "ok" | "warn" | "fail" | "pending";
+  const checks: Array<{ item: string; status: CheckStatus; detail: string }> = [];
+
+  const push = (item: string, status: CheckStatus, detail: string) =>
+    checks.push({ item, status, detail });
+
+  push("ASAAS_ENV configurado",   !!globalEnv ? "ok"  : "fail", globalEnv ? `ASAAS_ENV=${globalEnv}`          : "ASAAS_ENV ausente");
+  push("ASAAS_BASE_URL válida",   !!baseUrl   ? "ok"  : "fail", baseUrl   ? "URL configurada (valor ocultado)" : "ASAAS_BASE_URL ausente");
+  push("ASAAS_API_KEY configurada",  secrets.valid || !!Deno.env.get("ASAAS_API_KEY") ? "ok" : "fail",
+    !!Deno.env.get("ASAAS_API_KEY")       ? "Presente (valor ocultado)" : "ASAAS_API_KEY ausente");
+  push("ASAAS_WEBHOOK_TOKEN configurado", !!Deno.env.get("ASAAS_WEBHOOK_TOKEN") ? "ok"  : "fail",
+    !!Deno.env.get("ASAAS_WEBHOOK_TOKEN") ? "Presente (valor ocultado)" : "ASAAS_WEBHOOK_TOKEN ausente");
+  push("GOFIT_PAY_ENCRYPTION_KEY configurada", !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY") ? "ok" : "fail",
+    !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY") ? "Presente (valor ocultado)" : "GOFIT_PAY_ENCRYPTION_KEY ausente");
+
+  const { data: account } = await db.from("gofit_pay_accounts")
+    .select("id, status, provider_environment").eq("contractor_id", contractorId).eq("provider", "asaas").maybeSingle();
+  push("Conta Asaas ativa", account?.status === "active" ? "ok" : "warn",
+    account ? `Status: ${account.status} | Ambiente: ${account.provider_environment ?? "sandbox"}` : "Conta não encontrada");
+
+  const { data: settings } = await db.from("gofit_pay_settings")
+    .select("environment, production_enabled, allowed_for_real_charges, production_approved_at, production_notes")
+    .eq("contractor_id", contractorId).maybeSingle();
+
+  const prodEnabled  = settings?.production_enabled      === true;
+  const allowedReal  = settings?.allowed_for_real_charges === true;
+  const approvedAt   = settings?.production_approved_at ?? null;
+
+  push("Contractor aprovado para produção", prodEnabled ? "ok" : "warn",
+    prodEnabled ? `Aprovado em ${approvedAt ?? "data não registrada"}` : "Produção não habilitada — padrão sandbox (seguro)");
+  push("Cobranças reais permitidas", allowedReal ? "ok" : "warn",
+    allowedReal ? "allowed_for_real_charges=true" : "Cobranças reais bloqueadas (padrão seguro)");
+
+  const envIsProduction = (settings?.environment ?? globalEnv) === "production";
+  push("Ambiente configurado para produção", envIsProduction ? "ok" : "warn",
+    envIsProduction ? "environment=production" : "environment=sandbox (padrão seguro)");
+
+  const baseUrlOk = baseUrl.includes("api.asaas.com") && !baseUrl.includes("sandbox");
+  push("URL base Asaas é production", baseUrlOk ? "ok" : "warn",
+    baseUrlOk ? "api.asaas.com" : "Ainda apontando para sandbox.asaas.com");
+
+  // Webhook URL (informativo — sem revelar token)
+  const supabaseUrl   = Deno.env.get("SUPABASE_URL") ?? "https://<project>.supabase.co";
+  const webhookUrl    = `${supabaseUrl}/functions/v1/gofit-pay-base?source=webhook`;
+  push("URL webhook para configurar no Asaas", "pending",
+    `Configure: ${webhookUrl} (token via secret ASAAS_WEBHOOK_TOKEN)`);
+
+  push("Modo sandbox sempre disponível", "ok", "Sandbox continua ativo para testes mesmo em produção habilitada");
+
+  const critical = checks.filter(c => c.status === "fail");
+  const warnings = checks.filter(c => c.status === "warn");
+  const passed   = checks.filter(c => c.status === "ok");
+
+  const readyForProduction = critical.length === 0 && prodEnabled && allowedReal && envIsProduction;
+
+  console.log(`[gofit-pay] validate_production_readiness: contractor=${contractorId} ready=${readyForProduction} critical=${critical.length} warn=${warnings.length}`);
+
+  return json({
+    success: true,
+    data: {
+      ready_for_production: readyForProduction,
+      critical_failures:    critical.length,
+      warnings:             warnings.length,
+      passed:               passed.length,
+      current_environment:  settings?.environment ?? globalEnv,
+      summary: readyForProduction
+        ? "Produção pronta. Validar cobrança real piloto antes de liberar para todos."
+        : (critical.length > 0
+          ? `${critical.length} falha(s) crítica(s) impedem produção.`
+          : "Sandbox ativo. Produção bloqueada por padrão (seguro)."),
+      checks,
+    },
+  });
+}
+
 // ─── Fase 13: get_reports ─────────────────────────────────────────────────────
 
 async function handleGetReports(
@@ -2226,6 +2411,12 @@ serve(async (req) => {
 
       case "get_reports":
         return await handleGetReports(body, identity.contractorId);
+
+      case "get_environment_status":
+        return await handleGetEnvironmentStatus(identity.contractorId);
+
+      case "validate_production_readiness":
+        return await handleValidateProductionReadiness(identity.contractorId, secrets);
 
       case "cancel_charge":
       case "cancel-charge":
