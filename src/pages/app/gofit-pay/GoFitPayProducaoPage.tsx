@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, RefreshCcw, Loader2, Shield, FlaskConical,
   CheckCircle2, XCircle, AlertTriangle, Clock, Info,
-  Zap, RotateCcw, ChevronRight, AlertOctagon,
+  Zap, RotateCcw, ChevronRight, AlertOctagon, Link2, Eye, EyeOff,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -96,6 +96,15 @@ export default function GoFitPayProducaoPage() {
   const [pilotNotes,       setPilotNotes]       = useState("Go-live controlado — empresa piloto Fase 15");
   const [rollbackReason,   setRollbackReason]   = useState("Rollback operacional após validação piloto");
 
+  /* ── Vincular conta production ─── */
+  const [showLinkForm,     setShowLinkForm]     = useState(false);
+  const [linkAccountId,    setLinkAccountId]    = useState("");
+  const [linkWalletId,     setLinkWalletId]     = useState("");
+  const [linkApiKey,       setLinkApiKey]       = useState("");
+  const [showApiKey,       setShowApiKey]       = useState(false);
+  const [linking,          setLinking]          = useState(false);
+  const [linkMsg,          setLinkMsg]          = useState<{ ok: boolean; text: string } | null>(null);
+
   const load = useCallback(async () => {
     if (!user?.contractorId) return;
     setLoading(true);
@@ -142,6 +151,27 @@ export default function GoFitPayProducaoPage() {
       load();
     } else {
       setActionMsg({ ok: false, text: res.error ?? "Erro ao executar rollback." });
+    }
+  }
+
+  /* ── Vincular conta ─── */
+  async function handleLinkAccount() {
+    if (!linkAccountId.trim() || !linkApiKey.trim()) return;
+    setLinking(true);
+    setLinkMsg(null);
+    const res = await GoFitPayService.linkProductionAccount({
+      provider_account_id: linkAccountId.trim(),
+      api_key:             linkApiKey.trim(),
+      provider_wallet_id:  linkWalletId.trim() || undefined,
+    });
+    setLinking(false);
+    setLinkApiKey(""); // limpa chave da memória após uso
+    if (res.success) {
+      setLinkMsg({ ok: true, text: res.data?.message ?? "Conta vinculada com sucesso." });
+      setShowLinkForm(false);
+      load();
+    } else {
+      setLinkMsg({ ok: false, text: res.error ?? "Erro ao vincular conta." });
     }
   }
 
@@ -351,6 +381,114 @@ export default function GoFitPayProducaoPage() {
                   </div>
                 </section>
               )}
+
+              {/* Vincular Conta de Produção */}
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    Conta Asaas Production
+                  </h2>
+                  <button
+                    onClick={() => { setShowLinkForm(f => !f); setLinkMsg(null); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-colors"
+                  >
+                    <Link2 className="w-3 h-3" />
+                    {showLinkForm ? "Fechar" : "Vincular Conta"}
+                  </button>
+                </div>
+
+                {linkMsg && (
+                  <div className={`flex items-start gap-3 p-4 rounded-xl border mb-3 ${
+                    linkMsg.ok
+                      ? "bg-green-50 border-green-200 text-green-700"
+                      : "bg-red-50 border-red-200 text-red-700"
+                  }`}>
+                    {linkMsg.ok
+                      ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      : <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    }
+                    <p className="text-sm font-medium">{linkMsg.text}</p>
+                  </div>
+                )}
+
+                {showLinkForm && (
+                  <div className="bg-white rounded-2xl border border-amber-200 p-5 space-y-4">
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-amber-700">
+                        A chave de API é enviada via HTTPS ao servidor e criptografada imediatamente.
+                        Ela nunca é armazenada em texto puro, não aparece em logs e não retorna em nenhuma resposta.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                          ID da Subconta Asaas (production) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={linkAccountId}
+                          onChange={e => setLinkAccountId(e.target.value)}
+                          placeholder="cus_abc123..."
+                          className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                          Chave de API da Subconta (production) <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showApiKey ? "text" : "password"}
+                            value={linkApiKey}
+                            onChange={e => setLinkApiKey(e.target.value)}
+                            placeholder="$aact_..."
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-amber-300 font-mono"
+                            autoComplete="off"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(v => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                          Wallet ID (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={linkWalletId}
+                          onChange={e => setLinkWalletId(e.target.value)}
+                          placeholder="wallet_..."
+                          className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleLinkAccount}
+                      disabled={!linkAccountId.trim() || !linkApiKey.trim() || linking}
+                      className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
+                        linkAccountId.trim() && linkApiKey.trim() && !linking
+                          ? "bg-amber-600 hover:bg-amber-700 text-white"
+                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      }`}
+                    >
+                      {linking
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Vinculando...</>
+                        : <><Link2 className="w-4 h-4" /> Vincular e Verificar Conta de Produção</>
+                      }
+                    </button>
+                  </div>
+                )}
+              </section>
 
               {/* Gerenciamento do Piloto */}
               <section>

@@ -843,6 +843,21 @@ export const GoFitPayService = {
     return data as EdgeFunctionResponse<RollbackResult>;
   },
 
+  async linkProductionAccount(params: {
+    provider_account_id: string;
+    api_key: string;
+    provider_wallet_id?: string;
+  }): Promise<EdgeFunctionResponse<LinkProductionAccountResult>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "link_production_account", ...params },
+    });
+    if (error) {
+      console.error("[GoFitPayService] linkProductionAccount error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<LinkProductionAccountResult>;
+  },
+
 } as const;
 
 /* ─── Tipos Fase 12 ─────────────────────────────────────────────── */
@@ -1002,7 +1017,7 @@ export interface ProductionReadiness {
   checks:               ProductionReadinessCheck[];
 }
 
-/* ─── Tipos Fase 15 ─────────────────────────────────────────────── */
+/* ─── Tipos Fase 15 / 15.1 ──────────────────────────────────────── */
 export interface PilotResult {
   production_enabled:       boolean;
   allowed_for_real_charges: boolean;
@@ -1016,6 +1031,15 @@ export interface RollbackResult {
   rolled_back_at:           string;
   reason:                   string;
   message:                  string;
+}
+
+export interface LinkProductionAccountResult {
+  provider_environment: string;
+  provider_account_id:  string;
+  status:               string;
+  linked_at:            string;
+  verified:             boolean;
+  message:              string;
 }
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */

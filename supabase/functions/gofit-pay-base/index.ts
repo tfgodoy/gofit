@@ -152,7 +152,8 @@ async function updateCompanyModuleStatus(
 
 async function assertGoFitPayActive(
   db: ReturnType<typeof serviceClient>,
-  contractorId: string
+  contractorId: string,
+  env: "sandbox" | "production" = "sandbox"
 ): Promise<{ account_id: string; provider_api_key_encrypted: string; provider_account_id: string }> {
   const moduleId = await getGoFitPayModuleId(db);
   if (moduleId) {
@@ -171,6 +172,7 @@ async function assertGoFitPayActive(
     .select("id, status, provider_account_id, provider_api_key_encrypted")
     .eq("contractor_id", contractorId)
     .eq("provider", "asaas")
+    .eq("provider_environment", env)
     .maybeSingle();
   if (error || !account) {
     throw new GoFitPayBusinessError("Conta GoFit Pay não encontrada. Ative o módulo primeiro.", "ACCOUNT_NOT_FOUND", 404);
@@ -464,9 +466,10 @@ async function handleGetOrCreateCustomer(
   if (!studentId) return err("student_id obrigatório.", "MISSING_STUDENT_ID");
 
   const db = serviceClient();
+  const { env: custEnv } = await resolveEnvironment(db, contractorId);
   let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
   try {
-    subAccInfo = await assertGoFitPayActive(db, contractorId);
+    subAccInfo = await assertGoFitPayActive(db, contractorId, custEnv);
   } catch (e) {
     if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
     throw e;
@@ -587,9 +590,14 @@ async function handleCreatePaymentCharge(
     return json({ success: true, data: { charge_id: chargeCheck.id, provider_charge_id: chargeCheck.provider_charge_id, billing_type: chargeCheck.billing_type, status: chargeCheck.status, amount, due_date: dueDateFormatted, invoice_url: chargeCheck.invoice_url ?? null, bank_slip_url: chargeCheck.bank_slip_url ?? null, pix_qr_code: chargeCheck.pix_qr_code ?? null, pix_copy_paste: chargeCheck.pix_copy_paste ?? null, already_existed: true, message: "Cobrança já existente para esta receivable." } });
   }
 
+  const { env: chargeEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+  if (chargeEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
+    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
+  }
+
   let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
   try {
-    subAccInfo = await assertGoFitPayActive(db, contractorId);
+    subAccInfo = await assertGoFitPayActive(db, contractorId, chargeEnv);
   } catch (e) {
     if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
     throw e;
@@ -677,10 +685,6 @@ async function handleCreatePaymentCharge(
   }
 
   const now = new Date().toISOString();
-  const { env: chargeEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
-  if (chargeEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
-    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
-  }
   const { data: savedCharge, error: chargeErr } = await db.from("payment_charges").insert({
     contractor_id: contractorId, student_id: studentId,
     student_contract_id: receivable.student_contract_id ?? null,
@@ -1077,10 +1081,16 @@ async function handleCreateRecurringCharges(
 
   const db = serviceClient();
 
+  // Resolve ambiente — produção só se contractor estiver explicitamente autorizado
+  const { env: batchEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+  if (batchEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
+    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
+  }
+
   // Valida GoFit Pay ativo e obtém chave encriptada uma vez (fora do loop)
   let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
   try {
-    subAccInfo = await assertGoFitPayActive(db, contractorId);
+    subAccInfo = await assertGoFitPayActive(db, contractorId, batchEnv);
   } catch (e) {
     if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
     throw e;
@@ -1096,12 +1106,6 @@ async function handleCreateRecurringCharges(
 
   const today = new Date().toISOString().substring(0, 10);
   const now   = new Date().toISOString();
-
-  // Resolve ambiente — produção só se contractor estiver explicitamente autorizado
-  const { env: batchEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
-  if (batchEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
-    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
-  }
 
   // Cache de customers criados neste lote para evitar chamadas redundantes ao Asaas
   const customerCache: Record<string, string> = {};
@@ -1384,7 +1388,7 @@ async function handleSyncChargeStatus(
 
   const { data: charge, error: chgErr } = await db
     .from("payment_charges")
-    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status, pix_qr_code, pix_copy_paste")
+    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status, pix_qr_code, pix_copy_paste, provider_environment")
     .eq("id", chargeId)
     .eq("contractor_id", contractorId)
     .maybeSingle();
@@ -1392,9 +1396,11 @@ async function handleSyncChargeStatus(
   if (chgErr || !charge) return err("Cobrança não encontrada.", "CHARGE_NOT_FOUND", 404);
   if (!charge.provider_charge_id) return err("Cobrança sem provider_charge_id.", "NO_PROVIDER_ID", 422);
 
+  const syncEnv = ((charge.provider_environment ?? "sandbox") as "sandbox" | "production");
+
   let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
   try {
-    subAccInfo = await assertGoFitPayActive(db, contractorId);
+    subAccInfo = await assertGoFitPayActive(db, contractorId, syncEnv);
   } catch (e) {
     if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
     throw e;
@@ -1612,7 +1618,7 @@ async function handleCancelCharge(
   // Busca cobrança — verificação de ownership embutida via .eq("contractor_id", ...)
   const { data: charge, error: chgErr } = await db
     .from("payment_charges")
-    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status")
+    .select("id, contractor_id, receivable_id, provider_charge_id, billing_type, amount, status, provider_environment")
     .eq("id", chargeId)
     .eq("contractor_id", contractorId)
     .maybeSingle();
@@ -1670,9 +1676,10 @@ async function handleCancelCharge(
   }
 
   // Verifica GoFit Pay ativo + obtém chave da subconta
+  const cancelEnv = ((charge.provider_environment ?? "sandbox") as "sandbox" | "production");
   let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
   try {
-    subAccInfo = await assertGoFitPayActive(db, contractorId);
+    subAccInfo = await assertGoFitPayActive(db, contractorId, cancelEnv);
   } catch (e) {
     if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
     throw e;
@@ -1838,18 +1845,19 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
   const { data: insertedEvent, error: insertErr } = await db
     .from("gofit_pay_webhook_events")
     .insert({
-      contractor_id:       contractorId,
-      provider:            "asaas",
-      event_type:          eventType,
-      provider_event_id:   providerEventId,
-      provider_payment_id: providerPayId,
-      asaas_payment_id:    providerPayId,
-      payload_json:        sanitizeWebhookPayload(payload),
-      raw_payload:         sanitizeWebhookPayload(payload),
-      processed:           false,
-      processing_attempts: 0,
-      source_ip:           req.headers.get("x-forwarded-for") ?? null,
-      received_at:         new Date().toISOString(),
+      contractor_id:        contractorId,
+      provider:             "asaas",
+      provider_environment: (Deno.env.get("ASAAS_ENV") ?? "sandbox") as "sandbox" | "production",
+      event_type:           eventType,
+      provider_event_id:    providerEventId,
+      provider_payment_id:  providerPayId,
+      asaas_payment_id:     providerPayId,
+      payload_json:         sanitizeWebhookPayload(payload),
+      raw_payload:          sanitizeWebhookPayload(payload),
+      processed:            false,
+      processing_attempts:  0,
+      source_ip:            req.headers.get("x-forwarded-for") ?? null,
+      received_at:          new Date().toISOString(),
     })
     .select("id")
     .single();
@@ -2008,10 +2016,18 @@ async function handleValidateProductionReadiness(
   push("GOFIT_PAY_ENCRYPTION_KEY configurada", !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY") ? "ok" : "fail",
     !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY") ? "Presente (valor ocultado)" : "GOFIT_PAY_ENCRYPTION_KEY ausente");
 
-  const { data: account } = await db.from("gofit_pay_accounts")
-    .select("id, status, provider_environment").eq("contractor_id", contractorId).eq("provider", "asaas").maybeSingle();
-  push("Conta Asaas ativa", account?.status === "active" ? "ok" : "warn",
-    account ? `Status: ${account.status} | Ambiente: ${account.provider_environment ?? "sandbox"}` : "Conta não encontrada");
+  const { data: sandboxAccount } = await db.from("gofit_pay_accounts")
+    .select("id, status").eq("contractor_id", contractorId).eq("provider", "asaas").eq("provider_environment", "sandbox").maybeSingle();
+  push("Conta Asaas sandbox ativa", sandboxAccount?.status === "active" ? "ok" : "warn",
+    sandboxAccount ? `Status: ${sandboxAccount.status}` : "Conta sandbox não encontrada");
+
+  const { data: prodAccount } = await db.from("gofit_pay_accounts")
+    .select("id, status, production_linked_at, production_verified_at")
+    .eq("contractor_id", contractorId).eq("provider", "asaas").eq("provider_environment", "production").maybeSingle();
+  push("Conta Asaas production vinculada", prodAccount ? (prodAccount.status === "active" ? "ok" : "warn") : "fail",
+    prodAccount
+      ? `Status: ${prodAccount.status} | Vinculada em: ${prodAccount.production_linked_at ?? "não registrado"}`
+      : "Conta production não encontrada — use action link_production_account");
 
   const { data: settings } = await db.from("gofit_pay_settings")
     .select("environment, production_enabled, allowed_for_real_charges, production_approved_at, production_notes")
@@ -2046,7 +2062,7 @@ async function handleValidateProductionReadiness(
   const warnings = checks.filter(c => c.status === "warn");
   const passed   = checks.filter(c => c.status === "ok");
 
-  const readyForProduction = critical.length === 0 && prodEnabled && allowedReal && envIsProduction;
+  const readyForProduction = critical.length === 0 && prodEnabled && allowedReal && envIsProduction && !!prodAccount && prodAccount.status === "active";
 
   console.log(`[gofit-pay] validate_production_readiness: contractor=${contractorId} ready=${readyForProduction} critical=${critical.length} warn=${warnings.length}`);
 
@@ -2165,6 +2181,94 @@ async function handleDisableProductionPilot(
       rolled_back_at:           now,
       reason,
       message: "Rollback executado. Novas cobranças reais bloqueadas. Histórico preservado.",
+    },
+  });
+}
+
+// ─── Fase 15.1: link_production_account ──────────────────────────────────────
+
+async function handleLinkProductionAccount(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const providerAccountId = typeof body.provider_account_id === "string" ? body.provider_account_id.trim() : null;
+  const providerWalletId  = typeof body.provider_wallet_id  === "string" ? body.provider_wallet_id.trim()  : null;
+  const rawApiKey         = typeof body.api_key             === "string" ? body.api_key.trim()             : null;
+
+  if (!providerAccountId) return err("provider_account_id obrigatório.", "MISSING_ACCOUNT_ID");
+  if (!rawApiKey)         return err("api_key obrigatório.", "MISSING_API_KEY");
+
+  const db  = serviceClient();
+  const now = new Date().toISOString();
+
+  // Verifica key contra Asaas production (best-effort — não bloqueia se timeout)
+  const ASAAS_PROD_URL = "https://api.asaas.com/v3";
+  let verifiedAt: string | null = null;
+  try {
+    const verifyRes = await fetch(`${ASAAS_PROD_URL}/myAccount`, {
+      method:  "GET",
+      headers: { "access_token": rawApiKey, "User-Agent": "GoFit/1.0" },
+      signal:  AbortSignal.timeout(8000),
+    });
+    if (verifyRes.ok) {
+      verifiedAt = now;
+    } else {
+      const errBody = await verifyRes.text().catch(() => "");
+      console.warn(`[gofit-pay] link_production_account: Asaas verify returned ${verifyRes.status}: ${errBody.substring(0, 120)}`);
+      return err(
+        "Chave de API inválida ou sem acesso à conta de produção Asaas. Verifique e tente novamente.",
+        "INVALID_PRODUCTION_KEY",
+        422
+      );
+    }
+  } catch (e) {
+    // timeout ou network error — armazena sem verificação
+    console.warn(`[gofit-pay] link_production_account: Asaas verify network error (stored without verification): ${(e as Error)?.name ?? "Error"}`);
+  }
+
+  // Encrypta a chave imediatamente — rawApiKey descartado após esta linha
+  let encryptedKey: string;
+  try {
+    encryptedKey = await encryptSubAccountKey(rawApiKey);
+  } catch (e) {
+    console.error(`[gofit-pay] link_production_account: encrypt error: ${(e as Error)?.name ?? "Error"}`);
+    return err("Falha ao criptografar chave. Verifique GOFIT_PAY_ENCRYPTION_KEY.", "ENCRYPT_ERROR", 503);
+  }
+
+  const { error: upsertErr } = await db.from("gofit_pay_accounts").upsert(
+    {
+      contractor_id:            contractorId,
+      provider:                 "asaas",
+      provider_environment:     "production",
+      provider_account_id:      providerAccountId,
+      provider_wallet_id:       providerWalletId ?? null,
+      provider_api_key_encrypted: encryptedKey,
+      status:                   "active",
+      production_linked_at:     now,
+      production_verified_at:   verifiedAt,
+      updated_at:               now,
+    },
+    { onConflict: "contractor_id,provider,provider_environment" }
+  );
+
+  if (upsertErr) {
+    console.error(`[gofit-pay] link_production_account DB error: ${upsertErr.message}`);
+    return err("Erro ao salvar conta de produção.", "DB_ERROR", 500);
+  }
+
+  console.log(`[gofit-pay] PRODUCTION ACCOUNT LINKED: contractor=${contractorId} account=${providerAccountId} verified=${!!verifiedAt}`);
+
+  return json({
+    success: true,
+    data: {
+      provider_environment:   "production",
+      provider_account_id:    providerAccountId,
+      status:                 "active",
+      linked_at:              now,
+      verified:               !!verifiedAt,
+      message:                verifiedAt
+        ? "Conta de produção vinculada e verificada com sucesso."
+        : "Conta de produção vinculada (verificação com Asaas não foi possível — chave salva).",
     },
   });
 }
@@ -2527,6 +2631,9 @@ serve(async (req) => {
 
       case "disable_production_pilot":
         return await handleDisableProductionPilot(body, identity.contractorId);
+
+      case "link_production_account":
+        return await handleLinkProductionAccount(body, identity.contractorId);
 
       case "cancel_charge":
       case "cancel-charge":
