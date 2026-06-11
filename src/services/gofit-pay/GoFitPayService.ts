@@ -544,6 +544,130 @@ export const GoFitPayService = {
     }>;
   },
 
+  /* ─── Fase 10 — Recorrência controlada ──────────────────────────── */
+
+  /**
+   * FASE 10 — Preview das receivables elegíveis para cobrança recorrente.
+   * Não cria cobranças — apenas lista e classifica elegibilidade.
+   */
+  async previewRecurringCharges(opts: {
+    student_id?:          string;
+    student_contract_id?: string;
+    billing_type:         string;
+    limit?:               number;
+  }): Promise<EdgeFunctionResponse<{
+    total:          number;
+    eligible_count: number;
+    billing_type:   string;
+    items: Array<{
+      receivable_id:          string;
+      student_id:             string | null;
+      student_nome:           string | null;
+      student_contract_id:    string | null;
+      descricao:              string | null;
+      valor:                  number;
+      vencimento:             string;
+      vencimento_ajustado:    string;
+      vencimento_era_passado: boolean;
+      status:                 string;
+      eligible:               boolean;
+      reason:                 string | null;
+      existing_charge_id:     string | null;
+      existing_charge_status: string | null;
+    }>;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: {
+        action:              "preview_recurring_charges",
+        billing_type:        opts.billing_type,
+        student_id:          opts.student_id          ?? null,
+        student_contract_id: opts.student_contract_id ?? null,
+        limit:               opts.limit               ?? 20,
+      },
+    });
+    if (error) {
+      console.error("[GoFitPayService] previewRecurringCharges error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      total:          number;
+      eligible_count: number;
+      billing_type:   string;
+      items: Array<{
+        receivable_id:          string;
+        student_id:             string | null;
+        student_nome:           string | null;
+        student_contract_id:    string | null;
+        descricao:              string | null;
+        valor:                  number;
+        vencimento:             string;
+        vencimento_ajustado:    string;
+        vencimento_era_passado: boolean;
+        status:                 string;
+        eligible:               boolean;
+        reason:                 string | null;
+        existing_charge_id:     string | null;
+        existing_charge_status: string | null;
+      }>;
+    }>;
+  },
+
+  /**
+   * FASE 10 — Cria cobranças em lote para receivables selecionadas.
+   * Contém idempotência, validação de ownership e status por receivable.
+   */
+  async createRecurringCharges(opts: {
+    receivable_ids: string[];
+    billing_type:   string;
+  }): Promise<EdgeFunctionResponse<{
+    summary: {
+      requested:     number;
+      created:       number;
+      already_exists: number;
+      skipped:       number;
+      failed:        number;
+    };
+    billing_type: string;
+    items: Array<{
+      receivable_id:      string;
+      status:             "created" | "already_exists" | "skipped" | "failed";
+      provider_charge_id: string | null;
+      charge_id:          string | null;
+      billing_type:       string | null;
+      reason:             string | null;
+    }>;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: {
+        action:         "create_recurring_charges",
+        receivable_ids: opts.receivable_ids,
+        billing_type:   opts.billing_type,
+      },
+    });
+    if (error) {
+      console.error("[GoFitPayService] createRecurringCharges error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      summary: {
+        requested:     number;
+        created:       number;
+        already_exists: number;
+        skipped:       number;
+        failed:        number;
+      };
+      billing_type: string;
+      items: Array<{
+        receivable_id:      string;
+        status:             "created" | "already_exists" | "skipped" | "failed";
+        provider_charge_id: string | null;
+        charge_id:          string | null;
+        billing_type:       string | null;
+        reason:             string | null;
+      }>;
+    }>;
+  },
+
 } as const;
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */

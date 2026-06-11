@@ -731,6 +731,380 @@ async function handleCreatePaymentCharge(
   });
 }
 
+// ─── Fase 10 — Recorrência controlada ────────────────────────────────────────
+
+const RECURRING_ALLOWED_STATUSES = ["pendente", "atrasado", "aguardando"] as const;
+const MAX_RECURRING_BATCH = 20;
+
+async function handlePreviewRecurringCharges(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const studentId         = typeof body.student_id          === "string" ? body.student_id          : null;
+  const studentContractId = typeof body.student_contract_id === "string" ? body.student_contract_id : null;
+  const billingType       = typeof body.billing_type        === "string" ? body.billing_type.toUpperCase() : null;
+  const limit             = typeof body.limit               === "number" ? Math.min(body.limit, MAX_RECURRING_BATCH) : MAX_RECURRING_BATCH;
+
+  if (!billingType) return err("billing_type obrigatório.", "MISSING_BILLING_TYPE");
+  const ALLOWED = ["PIX", "BOLETO", "CREDIT_CARD"] as const;
+  if (!ALLOWED.includes(billingType as typeof ALLOWED[number])) {
+    return err("billing_type inválido. Use PIX, BOLETO ou CREDIT_CARD.", "INVALID_BILLING_TYPE");
+  }
+
+  const db = serviceClient();
+  let query = db
+    .from("receivables")
+    .select("id, student_id, student_nome, descricao, valor, vencimento, status, student_contract_id, asaas_payment_id, gateway_provider")
+    .eq("contractor_id", contractorId)
+    .in("status", [...RECURRING_ALLOWED_STATUSES])
+    .gt("valor", 0)
+    .not("student_id", "is", null)
+    .order("vencimento", { ascending: true })
+    .limit(limit * 3); // busca mais para filtrar depois
+
+  if (studentId)         query = query.eq("student_id",          studentId);
+  if (studentContractId) query = query.eq("student_contract_id", studentContractId);
+
+  const { data: receivables, error: rcvErr } = await query;
+  if (rcvErr) return err("Falha ao buscar receivables.", "QUERY_ERROR", 500);
+
+  // Para cada receivable, verifica se já tem cobrança ativa
+  const today = new Date().toISOString().substring(0, 10);
+
+  const items: Record<string, unknown>[] = [];
+  for (const rcv of (receivables ?? [])) {
+    if (items.length >= limit) break;
+
+    let eligible = true;
+    let reason: string | null = null;
+    let existingChargeId: string | null = null;
+    let existingChargeStatus: string | null = null;
+
+    // Cobrança ativa?
+    const { data: existingCharge } = await db
+      .from("payment_charges")
+      .select("id, status, billing_type, provider_charge_id")
+      .eq("receivable_id", rcv.id)
+      .eq("provider", "asaas")
+      .not("status", "in", '("CANCELLED")')
+      .maybeSingle();
+
+    if (existingCharge) {
+      eligible = false;
+      reason = "JÁ_POSSUI_COBRANÇA_ATIVA";
+      existingChargeId = existingCharge.id;
+      existingChargeStatus = existingCharge.status;
+    }
+
+    const dueDateAdj = (rcv.vencimento < today) ? today : rcv.vencimento;
+
+    items.push({
+      receivable_id:          rcv.id,
+      student_id:             rcv.student_id,
+      student_nome:           rcv.student_nome,
+      student_contract_id:    rcv.student_contract_id,
+      descricao:              rcv.descricao,
+      valor:                  Number(rcv.valor),
+      vencimento:             rcv.vencimento,
+      vencimento_ajustado:    dueDateAdj,
+      vencimento_era_passado: rcv.vencimento < today,
+      status:                 rcv.status,
+      eligible,
+      reason,
+      existing_charge_id:     existingChargeId,
+      existing_charge_status: existingChargeStatus,
+    });
+  }
+
+  const eligibleCount = items.filter(i => i.eligible).length;
+
+  return json({
+    success: true,
+    data: {
+      total:          items.length,
+      eligible_count: eligibleCount,
+      billing_type:   billingType,
+      items,
+    },
+  });
+}
+
+async function handleCreateRecurringCharges(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const rawIds      = Array.isArray(body.receivable_ids) ? body.receivable_ids as unknown[] : null;
+  const billingType = typeof body.billing_type === "string" ? body.billing_type.toUpperCase() : null;
+
+  if (!rawIds || rawIds.length === 0) return err("receivable_ids obrigatório e não pode ser vazio.", "MISSING_RECEIVABLE_IDS");
+  if (rawIds.length > MAX_RECURRING_BATCH) return err(`Máximo de ${MAX_RECURRING_BATCH} receivables por lote.`, "BATCH_TOO_LARGE");
+  if (!billingType) return err("billing_type obrigatório.", "MISSING_BILLING_TYPE");
+  const ALLOWED = ["PIX", "BOLETO", "CREDIT_CARD"] as const;
+  if (!ALLOWED.includes(billingType as typeof ALLOWED[number])) {
+    return err("billing_type inválido. Use PIX, BOLETO ou CREDIT_CARD.", "INVALID_BILLING_TYPE");
+  }
+
+  const receivableIds = rawIds.filter(id => typeof id === "string") as string[];
+  if (receivableIds.length === 0) return err("receivable_ids deve conter strings UUID.", "INVALID_RECEIVABLE_IDS");
+
+  const db = serviceClient();
+
+  // Valida GoFit Pay ativo e obtém chave encriptada uma vez (fora do loop)
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch (e) {
+    console.error(`[gofit-pay] Decrypt error: ${(e as Error)?.name ?? "Error"}`);
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  const today = new Date().toISOString().substring(0, 10);
+  const now   = new Date().toISOString();
+
+  // Cache de customers criados neste lote para evitar chamadas redundantes ao Asaas
+  const customerCache: Record<string, string> = {};
+
+  type ItemResult = {
+    receivable_id:      string;
+    status:             "created" | "already_exists" | "skipped" | "failed";
+    provider_charge_id: string | null;
+    charge_id:          string | null;
+    billing_type:       string | null;
+    reason:             string | null;
+  };
+
+  const items: ItemResult[] = [];
+  let created = 0, alreadyExists = 0, skipped = 0, failed = 0;
+
+  for (const receivableId of receivableIds) {
+    // 1. Busca receivable — valida ownership via eq(contractor_id)
+    const { data: rcv, error: rcvErr } = await db
+      .from("receivables")
+      .select("id, contractor_id, student_id, student_contract_id, valor, vencimento, descricao, status, asaas_payment_id, gateway_provider")
+      .eq("id", receivableId)
+      .eq("contractor_id", contractorId)
+      .maybeSingle();
+
+    if (rcvErr || !rcv) {
+      items.push({ receivable_id: receivableId, status: "skipped", provider_charge_id: null, charge_id: null, billing_type: null, reason: "RECEIVABLE_NOT_FOUND" });
+      skipped++;
+      continue;
+    }
+
+    // 2. Valida status
+    if (!RECURRING_ALLOWED_STATUSES.includes(rcv.status as typeof RECURRING_ALLOWED_STATUSES[number])) {
+      const reason = rcv.status === "pago" ? "RECEIVABLE_ALREADY_PAID" : rcv.status === "cancelado" ? "RECEIVABLE_CANCELLED" : "INVALID_RECEIVABLE_STATUS";
+      items.push({ receivable_id: receivableId, status: "skipped", provider_charge_id: null, charge_id: null, billing_type: null, reason });
+      skipped++;
+      continue;
+    }
+
+    const amount = Number(rcv.valor ?? 0);
+    if (!amount || amount <= 0) {
+      items.push({ receivable_id: receivableId, status: "skipped", provider_charge_id: null, charge_id: null, billing_type: null, reason: "INVALID_AMOUNT" });
+      skipped++;
+      continue;
+    }
+
+    // 3. Idempotência — cobrança ativa existente?
+    const { data: existingCharge } = await db
+      .from("payment_charges")
+      .select("id, provider_charge_id, billing_type, status")
+      .eq("receivable_id", receivableId)
+      .eq("provider", "asaas")
+      .not("status", "in", '("CANCELLED")')
+      .maybeSingle();
+
+    if (existingCharge) {
+      items.push({ receivable_id: receivableId, status: "already_exists", provider_charge_id: existingCharge.provider_charge_id, charge_id: existingCharge.id, billing_type: existingCharge.billing_type, reason: null });
+      alreadyExists++;
+      continue;
+    }
+
+    // Também checar por asaas_payment_id na receivable
+    if (rcv.asaas_payment_id && rcv.gateway_provider === "asaas") {
+      items.push({ receivable_id: receivableId, status: "already_exists", provider_charge_id: rcv.asaas_payment_id, charge_id: null, billing_type: null, reason: null });
+      alreadyExists++;
+      continue;
+    }
+
+    const studentId = rcv.student_id;
+    if (!studentId) {
+      items.push({ receivable_id: receivableId, status: "skipped", provider_charge_id: null, charge_id: null, billing_type: null, reason: "MISSING_STUDENT_ID" });
+      skipped++;
+      continue;
+    }
+
+    // 4. Customer (com cache por student_id para este lote)
+    let providerCustomerId: string;
+    if (customerCache[studentId]) {
+      providerCustomerId = customerCache[studentId];
+    } else {
+      const { data: existingCust } = await db.from("payment_customers")
+        .select("id, provider_customer_id")
+        .eq("contractor_id", contractorId).eq("student_id", studentId).eq("provider", "asaas").maybeSingle();
+
+      if (existingCust?.provider_customer_id) {
+        providerCustomerId = existingCust.provider_customer_id;
+        customerCache[studentId] = providerCustomerId;
+      } else {
+        const { data: student } = await db.from("students").select("id, nome_completo, cpf, email, telefone")
+          .eq("id", studentId).eq("contractor_id", contractorId).maybeSingle();
+
+        if (!student) {
+          items.push({ receivable_id: receivableId, status: "skipped", provider_charge_id: null, charge_id: null, billing_type: null, reason: "STUDENT_NOT_FOUND" });
+          skipped++;
+          continue;
+        }
+
+        try {
+          const asaasCustomer = await AsaasService.upsertCustomer(subAccountApiKey, {
+            name: String(student.nome_completo), cpfCnpj: student.cpf ?? undefined,
+            email: student.email ?? undefined, phone: student.telefone ?? undefined,
+            externalReference: `gofit:stu:${studentId}`,
+          });
+          providerCustomerId = asaasCustomer.id;
+          customerCache[studentId] = providerCustomerId;
+          // Salva customer (ignora conflito de unicidade)
+          await db.from("payment_customers").insert({
+            contractor_id: contractorId, student_id: studentId, client_id: studentId,
+            provider: "asaas", provider_customer_id: asaasCustomer.id,
+            name: String(student.nome_completo), email: student.email ?? null,
+            cpf_cnpj: student.cpf ?? null, phone: student.telefone ?? null,
+            synced_at: now, created_at: now, updated_at: now,
+          }).then(() => {}).catch(() => {});
+        } catch (e) {
+          const name = (e as Error)?.name ?? "Error";
+          console.error(`[gofit-pay] batch upsertCustomer: ${name} rcv=${receivableId}`);
+          items.push({ receivable_id: receivableId, status: "failed", provider_charge_id: null, charge_id: null, billing_type: null, reason: `CUSTOMER_ERROR:${name}` });
+          failed++;
+          continue;
+        }
+      }
+    }
+
+    // 5. Due date — ajusta para hoje se vencimento passado
+    const rawDate         = String(rcv.vencimento ?? "").substring(0, 10);
+    const dueDateFormatted = rawDate && rawDate >= today ? rawDate : today;
+
+    // 6. Cria pagamento no Asaas
+    const externalRef = `gofit:rcv:${receivableId}`;
+    let asaasPayment: AsaasPayment;
+    try {
+      asaasPayment = await AsaasService.createPayment(subAccountApiKey, {
+        customer: providerCustomerId,
+        billingType: billingType as "PIX" | "BOLETO" | "CREDIT_CARD",
+        amount,
+        dueDate: dueDateFormatted,
+        description: rcv.descricao
+          ? String(rcv.descricao).substring(0, 200)
+          : `Mensalidade GoFit #${receivableId.substring(0, 8)}`,
+        externalReference: externalRef,
+      });
+    } catch (e) {
+      const name = (e as Error)?.name ?? "Error";
+      const code = e instanceof AsaasApiError ? String(e.code) : name;
+      console.error(`[gofit-pay] batch createPayment: ${name} rcv=${receivableId}`);
+      items.push({ receivable_id: receivableId, status: "failed", provider_charge_id: null, charge_id: null, billing_type: null, reason: `ASAAS_ERROR:${code}` });
+      failed++;
+      continue;
+    }
+
+    // 7. QR code Pix (non-fatal)
+    let pixQrCode: AsaasPixQrCode | null = null;
+    if (billingType === "PIX") {
+      try {
+        pixQrCode = await AsaasService.getPixQrCode(subAccountApiKey, asaasPayment.id);
+      } catch { /* non-fatal */ }
+    }
+
+    // 8. Salva payment_charge
+    const { data: savedCharge, error: chargeErr } = await db.from("payment_charges").insert({
+      contractor_id: contractorId, student_id: studentId,
+      student_contract_id: rcv.student_contract_id ?? null,
+      receivable_id: receivableId, provider: "asaas",
+      provider_charge_id: asaasPayment.id, billing_type: billingType,
+      amount, value: amount, due_date: dueDateFormatted, status: asaasPayment.status,
+      invoice_url: asaasPayment.invoiceUrl ?? null,
+      bank_slip_url: asaasPayment.bankSlipUrl ?? null,
+      pix_qr_code: pixQrCode?.encodedImage ?? null,
+      pix_copy_paste: pixQrCode?.payload ?? null,
+      payment_url: asaasPayment.invoiceUrl ?? null,
+      external_reference: externalRef,
+      raw_response_json: sanitizePaymentForStorage(asaasPayment),
+      created_at: now, updated_at: now,
+    }).select("id").single();
+
+    if (chargeErr) {
+      // Conflito de unicidade — já existe (concorrência)
+      if (chargeErr.code === "23505") {
+        const { data: recovered } = await db.from("payment_charges")
+          .select("id, provider_charge_id, billing_type")
+          .eq("receivable_id", receivableId).eq("provider", "asaas").maybeSingle();
+        items.push({ receivable_id: receivableId, status: "already_exists", provider_charge_id: recovered?.provider_charge_id ?? asaasPayment.id, charge_id: recovered?.id ?? null, billing_type: recovered?.billing_type ?? billingType, reason: null });
+        alreadyExists++;
+        continue;
+      }
+      const safeMsg = chargeErr.message.substring(0, 80).replace(/\s+/g, " ");
+      console.error(`[gofit-pay] batch payment_charges insert: code=${chargeErr.code} ${safeMsg}`);
+      items.push({ receivable_id: receivableId, status: "failed", provider_charge_id: asaasPayment.id, charge_id: null, billing_type: billingType, reason: `SAVE_ERROR:${chargeErr.code}` });
+      failed++;
+      continue;
+    }
+
+    // 9. Atualiza gateway fields na receivable
+    await db.from("receivables").update({
+      asaas_payment_id:  asaasPayment.id,
+      asaas_customer_id: providerCustomerId,
+      asaas_payment_url: asaasPayment.invoiceUrl ?? null,
+      gateway_status:    asaasPayment.status,
+      gateway_provider:  "asaas",
+    }).eq("id", receivableId);
+
+    items.push({
+      receivable_id:      receivableId,
+      status:             "created",
+      provider_charge_id: asaasPayment.id,
+      charge_id:          savedCharge.id,
+      billing_type:       billingType,
+      reason:             null,
+    });
+    created++;
+  }
+
+  console.log(
+    `[gofit-pay] create_recurring_charges: contractor=${contractorId} ` +
+    `requested=${receivableIds.length} created=${created} already=${alreadyExists} ` +
+    `skipped=${skipped} failed=${failed} billing=${billingType}`
+  );
+
+  return json({
+    success: true,
+    data: {
+      summary: {
+        requested:     receivableIds.length,
+        created,
+        already_exists: alreadyExists,
+        skipped,
+        failed,
+      },
+      billing_type: billingType,
+      items,
+    },
+  });
+}
+
 async function handleGetCharge(body: Record<string, unknown>, contractorId: string): Promise<Response> {
   const chargeId = typeof body.charge_id === "string" ? body.charge_id : null;
   if (!chargeId) return err("charge_id obrigatório.", "MISSING_CHARGE_ID");
@@ -1354,6 +1728,12 @@ serve(async (req) => {
 
       case "process_pending_webhooks":
         return await handleProcessPendingWebhooks(body, identity.contractorId);
+
+      case "preview_recurring_charges":
+        return await handlePreviewRecurringCharges(body, identity.contractorId);
+
+      case "create_recurring_charges":
+        return await handleCreateRecurringCharges(body, identity.contractorId, secrets);
 
       case "cancel_charge":
       case "cancel-charge":

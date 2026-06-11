@@ -16,6 +16,7 @@ import {
   CheckCircle2, AlertCircle, ChevronRight, Copy, ExternalLink, X,
   Zap, Eye, RefreshCw, RotateCcw, Webhook, User, Receipt,
   Clock, AlertTriangle, ChevronDown, ChevronUp, Ban,
+  Layers, Search, ChevronLeft, ListChecks, Package,
 } from "lucide-react";
 import AppLayout          from "@/components/app/AppLayout";
 import { supabase }       from "@/integrations/supabase/client";
@@ -938,6 +939,533 @@ function ChargeResultModal({ result, onClose }: { result: ChargeResult; onClose:
   );
 }
 
+/* ─── Fase 10: Tipos do modal de recorrência ─────────────────────────── */
+
+interface StudentOption  { id: string; nome_completo: string; }
+interface ContractOption { id: string; status: string; valor_mensalidade: number; data_inicio: string; data_fim: string | null; }
+
+interface PreviewItem {
+  receivable_id:          string;
+  student_id:             string | null;
+  student_nome:           string | null;
+  student_contract_id:    string | null;
+  descricao:              string | null;
+  valor:                  number;
+  vencimento:             string;
+  vencimento_ajustado:    string;
+  vencimento_era_passado: boolean;
+  status:                 string;
+  eligible:               boolean;
+  reason:                 string | null;
+  existing_charge_id:     string | null;
+  existing_charge_status: string | null;
+}
+
+interface BatchSummary {
+  requested:     number;
+  created:       number;
+  already_exists: number;
+  skipped:       number;
+  failed:        number;
+}
+
+interface BatchItemResult {
+  receivable_id:      string;
+  status:             "created" | "already_exists" | "skipped" | "failed";
+  provider_charge_id: string | null;
+  charge_id:          string | null;
+  billing_type:       string | null;
+  reason:             string | null;
+}
+
+const REASON_LABEL: Record<string, string> = {
+  JÁ_POSSUI_COBRANÇA_ATIVA:    "Já possui cobrança ativa",
+  RECEIVABLE_ALREADY_PAID:     "Já paga",
+  RECEIVABLE_CANCELLED:        "Cancelada",
+  INVALID_RECEIVABLE_STATUS:   "Status inválido",
+  MISSING_STUDENT_ID:          "Sem aluno",
+  INVALID_AMOUNT:              "Valor inválido",
+  RECEIVABLE_NOT_FOUND:        "Não encontrada",
+  STUDENT_NOT_FOUND:           "Aluno não encontrado",
+};
+
+/* ─── Modal de cobranças recorrentes (Fase 10) ───────────────────────── */
+
+function RecurringChargesModal({
+  onClose, onCreated,
+}: { onClose: () => void; onCreated: () => void }) {
+  const { user } = useAuth();
+
+  type Phase = "setup" | "loading" | "preview" | "creating" | "summary";
+  const [phase, setPhase]                           = useState<Phase>("setup");
+  const [billingType, setBillingType]               = useState<"PIX" | "BOLETO" | "CREDIT_CARD" | null>(null);
+  const [studentSearch, setStudentSearch]           = useState("");
+  const [studentOptions, setStudentOptions]         = useState<StudentOption[]>([]);
+  const [selectedStudent, setSelectedStudent]       = useState<StudentOption | null>(null);
+  const [showStudentDrop, setShowStudentDrop]       = useState(false);
+  const [contracts, setContracts]                   = useState<ContractOption[]>([]);
+  const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
+  const [previewItems, setPreviewItems]             = useState<PreviewItem[]>([]);
+  const [selectedIds, setSelectedIds]               = useState<Set<string>>(new Set());
+  const [summary, setSummary]                       = useState<BatchSummary | null>(null);
+  const [batchItems, setBatchItems]                 = useState<BatchItemResult[]>([]);
+  const [error, setError]                           = useState<string | null>(null);
+  const studentInputRef                             = useRef<HTMLInputElement>(null);
+
+  // Busca alunos com debounce
+  useEffect(() => {
+    if (studentSearch.length < 2) { setStudentOptions([]); setShowStudentDrop(false); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from("students")
+        .select("id, nome_completo")
+        .eq("contractor_id", user!.contractorId)
+        .ilike("nome_completo", `%${studentSearch}%`)
+        .limit(6);
+      setStudentOptions((data ?? []) as StudentOption[]);
+      setShowStudentDrop(true);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [studentSearch, user]);
+
+  // Carrega contratos do aluno selecionado
+  useEffect(() => {
+    if (!selectedStudent) { setContracts([]); setSelectedContractId(null); return; }
+    supabase.from("student_contracts")
+      .select("id, status, valor_mensalidade, data_inicio, data_fim")
+      .eq("contractor_id", user!.contractorId)
+      .eq("student_id", selectedStudent.id)
+      .order("data_inicio", { ascending: false })
+      .then(({ data }) => setContracts((data ?? []) as ContractOption[]));
+  }, [selectedStudent, user]);
+
+  function selectStudent(s: StudentOption) {
+    setSelectedStudent(s);
+    setStudentSearch(s.nome_completo);
+    setShowStudentDrop(false);
+    setSelectedContractId(null);
+  }
+
+  function clearStudent() {
+    setSelectedStudent(null);
+    setStudentSearch("");
+    setStudentOptions([]);
+    setSelectedContractId(null);
+    setContracts([]);
+  }
+
+  async function handlePreview() {
+    if (!billingType) return;
+    setPhase("loading");
+    setError(null);
+    const res = await GoFitPayService.previewRecurringCharges({
+      billing_type:        billingType,
+      student_id:          selectedStudent?.id          ?? undefined,
+      student_contract_id: selectedContractId           ?? undefined,
+      limit:               20,
+    });
+    if (!res.success || !res.data) {
+      setError(res.error ?? "Erro ao carregar preview.");
+      setPhase("setup");
+      return;
+    }
+    setPreviewItems(res.data.items);
+    setSelectedIds(new Set(res.data.items.filter(i => i.eligible).map(i => i.receivable_id)));
+    setPhase("preview");
+  }
+
+  async function handleCreate() {
+    if (!billingType || selectedIds.size === 0) return;
+    setPhase("creating");
+    setError(null);
+    const res = await GoFitPayService.createRecurringCharges({
+      receivable_ids: [...selectedIds],
+      billing_type:   billingType,
+    });
+    if (!res.success || !res.data) {
+      setError(res.error ?? "Erro ao gerar cobranças.");
+      setPhase("preview");
+      return;
+    }
+    setSummary(res.data.summary);
+    setBatchItems(res.data.items);
+    setPhase("summary");
+  }
+
+  function toggleId(id: string) {
+    setSelectedIds(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  }
+
+  function selectNext(n: number | "all") {
+    const eligible = previewItems.filter(i => i.eligible);
+    const slice    = n === "all" ? eligible : eligible.slice(0, n);
+    setSelectedIds(new Set(slice.map(i => i.receivable_id)));
+  }
+
+  const billingLabel = billingType === "PIX" ? "Pix" : billingType === "BOLETO" ? "Boleto" : billingType === "CREDIT_CARD" ? "Cartão" : "";
+  const eligibleItems = previewItems.filter(i => i.eligible);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {phase === "preview" && (
+              <button onClick={() => setPhase("setup")} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <Layers className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-900">Gerar cobranças recorrentes</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {phase === "setup"   && "Configure e faça preview das mensalidades"}
+                {phase === "loading" && "Carregando mensalidades elegíveis..."}
+                {phase === "preview" && `${eligibleItems.length} elegível(is) · ${selectedIds.size} selecionada(s)`}
+                {phase === "creating" && "Gerando cobranças no Asaas..."}
+                {phase === "summary" && "Cobranças geradas com sucesso"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── Setup ── */}
+          {(phase === "setup" || phase === "loading") && (
+            <div className="px-6 py-5 space-y-5">
+
+              {error && (
+                <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />{error}
+                </div>
+              )}
+
+              {/* Forma de cobrança */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2">Forma de cobrança *</label>
+                <div className="flex gap-2">
+                  {(["PIX", "BOLETO", "CREDIT_CARD"] as const).map(bt => {
+                    const active = billingType === bt;
+                    const ac = bt === "PIX" ? "border-green-400 bg-green-50 text-green-700"
+                             : bt === "BOLETO" ? "border-blue-400 bg-blue-50 text-blue-700"
+                             : "border-purple-400 bg-purple-50 text-purple-700";
+                    const label = bt === "PIX" ? "Pix" : bt === "BOLETO" ? "Boleto" : "Cartão";
+                    const icon  = bt === "PIX" ? <QrCode className="w-4 h-4" />
+                                : bt === "BOLETO" ? <FileText className="w-4 h-4" />
+                                : <CreditCard className="w-4 h-4" />;
+                    return (
+                      <button key={bt} onClick={() => setBillingType(bt)}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${active ? ac : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+                      >
+                        {icon}{label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Filtro por aluno (opcional) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2">Aluno (opcional)</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Search className="w-3.5 h-3.5 text-gray-400" />
+                  </div>
+                  <input
+                    ref={studentInputRef}
+                    type="text"
+                    placeholder="Buscar aluno por nome..."
+                    value={studentSearch}
+                    onChange={e => { setStudentSearch(e.target.value); if (!e.target.value) clearStudent(); }}
+                    onFocus={() => studentOptions.length && setShowStudentDrop(true)}
+                    className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                  {selectedStudent && (
+                    <button onClick={clearStudent} className="absolute inset-y-0 right-3 flex items-center">
+                      <X className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                  )}
+                  {showStudentDrop && studentOptions.length > 0 && (
+                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                      {studentOptions.map(s => (
+                        <button key={s.id} onClick={() => selectStudent(s)}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 transition-colors flex items-center gap-2">
+                          <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          {s.nome_completo}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Filtro por contrato (opcional, só se aluno selecionado) */}
+              {selectedStudent && contracts.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">Contrato (opcional)</label>
+                  <select
+                    value={selectedContractId ?? ""}
+                    onChange={e => setSelectedContractId(e.target.value || null)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                  >
+                    <option value="">Todos os contratos do aluno</option>
+                    {contracts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.status === "ativo" ? "Ativo" : c.status} — {fmtCurrency(c.valor_mensalidade)}/mês · {fmtDate(c.data_inicio)}{c.data_fim ? ` até ${fmtDate(c.data_fim)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="p-3 bg-indigo-50 rounded-xl">
+                <p className="text-xs text-indigo-700">
+                  Serão listadas as mensalidades <strong>pendentes, atrasadas ou aguardando</strong> sem cobrança ativa, vinculadas
+                  {selectedStudent ? ` ao aluno ${selectedStudent.nome_completo}` : " à sua empresa"}.
+                  Máximo de 20 por lote.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Loading ── */}
+          {phase === "loading" && (
+            <div className="flex items-center justify-center gap-3 py-12 text-sm text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" /> Buscando mensalidades elegíveis...
+            </div>
+          )}
+
+          {/* ── Preview ── */}
+          {(phase === "preview" || phase === "creating") && (
+            <div className="px-6 py-5 space-y-4">
+
+              {error && (
+                <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />{error}
+                </div>
+              )}
+
+              {/* Seletores rápidos */}
+              {eligibleItems.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-gray-600 mr-1">Selecionar:</span>
+                  {[1, 3, 6].filter(n => n < eligibleItems.length).map(n => (
+                    <button key={n} onClick={() => selectNext(n)}
+                      className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors">
+                      Próxima{n > 1 ? `s ${n}` : ""}
+                    </button>
+                  ))}
+                  <button onClick={() => selectNext("all")}
+                    className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors">
+                    <ListChecks className="w-3 h-3 inline mr-1" />Todas elegíveis
+                  </button>
+                  <button onClick={() => setSelectedIds(new Set())}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors">
+                    Limpar
+                  </button>
+                </div>
+              )}
+
+              {/* Tabela preview */}
+              {previewItems.length === 0 ? (
+                <div className="text-center py-8 text-sm text-gray-400">
+                  Nenhuma mensalidade elegível encontrada com os filtros selecionados.
+                </div>
+              ) : (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 grid grid-cols-[24px_1fr_90px_80px_120px] gap-3 px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <span />
+                    <span>Mensalidade</span>
+                    <span>Vencimento</span>
+                    <span className="text-right">Valor</span>
+                    <span className="text-center">Situação</span>
+                  </div>
+                  {previewItems.map(item => {
+                    const isChecked = selectedIds.has(item.receivable_id);
+                    return (
+                      <div key={item.receivable_id}
+                        onClick={() => item.eligible && toggleId(item.receivable_id)}
+                        className={`grid grid-cols-[24px_1fr_90px_80px_120px] gap-3 px-3 py-2.5 border-t border-gray-50 items-center transition-colors ${
+                          item.eligible ? "hover:bg-indigo-50/50 cursor-pointer" : "opacity-50 cursor-not-allowed bg-gray-50/50"
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          {item.eligible ? (
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                              isChecked ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
+                            }`}>
+                              {isChecked && <CheckCircle2 className="w-3 h-3 text-white" style={{ fill: "currentColor" }} />}
+                            </div>
+                          ) : (
+                            <div className="w-4 h-4 rounded border-2 border-gray-200 bg-gray-100" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {item.student_nome ?? "—"}
+                          </p>
+                          {item.descricao && (
+                            <p className="text-xs text-gray-400 truncate">{item.descricao}</p>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {fmtDate(item.vencimento_ajustado)}
+                          {item.vencimento_era_passado && (
+                            <span className="block text-[10px] text-amber-600 font-semibold">ajustado p/ hoje</span>
+                          )}
+                        </div>
+                        <div className="text-sm font-bold text-gray-900 text-right">{fmtCurrency(item.valor)}</div>
+                        <div className="flex justify-center">
+                          {item.eligible
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Elegível</span>
+                            : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 text-center leading-tight" title={item.reason ?? ""}>
+                                {REASON_LABEL[item.reason ?? ""] ?? item.reason ?? "Bloqueada"}
+                              </span>
+                          }
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedIds.size > 0 && (
+                <div className="p-3 bg-indigo-50 rounded-xl flex items-center gap-2">
+                  <BillingBadge type={billingType} />
+                  <span className="text-xs text-indigo-700">
+                    <strong>{selectedIds.size}</strong> cobrança{selectedIds.size > 1 ? "s" : ""} via <strong>{billingLabel}</strong> serão criadas no Asaas.
+                    {billingType === "CREDIT_CARD" && " O aluno receberá um link de pagamento por cobrança."}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Creating spinner ── */}
+          {phase === "creating" && (
+            <div className="flex items-center justify-center gap-3 py-8 text-sm text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" /> Criando cobranças...
+            </div>
+          )}
+
+          {/* ── Summary ── */}
+          {phase === "summary" && summary && (
+            <div className="px-6 py-5 space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-2xl bg-green-50 border border-green-100">
+                  <p className="text-2xl font-black text-green-700">{summary.created}</p>
+                  <p className="text-xs font-semibold text-green-600 mt-0.5">Cobranças criadas</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                  <p className="text-2xl font-black text-blue-700">{summary.already_exists}</p>
+                  <p className="text-xs font-semibold text-blue-600 mt-0.5">Já existentes</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100">
+                  <p className="text-2xl font-black text-gray-500">{summary.skipped}</p>
+                  <p className="text-xs font-semibold text-gray-400 mt-0.5">Ignoradas</p>
+                </div>
+                {summary.failed > 0 && (
+                  <div className="p-4 rounded-2xl bg-red-50 border border-red-100">
+                    <p className="text-2xl font-black text-red-600">{summary.failed}</p>
+                    <p className="text-xs font-semibold text-red-500 mt-0.5">Falhas</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de itens criados */}
+              {batchItems.filter(i => i.status === "created").length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-600 mb-2">Cobranças criadas</p>
+                  <div className="border border-gray-100 rounded-xl overflow-hidden">
+                    {batchItems.filter(i => i.status === "created").map(item => (
+                      <div key={item.receivable_id} className="grid grid-cols-[1fr_100px] gap-3 px-3 py-2 border-b border-gray-50 last:border-0 items-center">
+                        <p className="text-xs text-gray-600 font-mono truncate">{item.provider_charge_id ?? item.receivable_id.substring(0, 16)}</p>
+                        <BillingBadge type={item.billing_type} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {batchItems.filter(i => i.status === "skipped" || i.status === "failed").length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-600 mb-2">Itens ignorados / falhas</p>
+                  <div className="border border-gray-100 rounded-xl overflow-hidden">
+                    {batchItems.filter(i => i.status === "skipped" || i.status === "failed").map(item => (
+                      <div key={item.receivable_id} className="grid grid-cols-[1fr_140px] gap-3 px-3 py-2 border-b border-gray-50 last:border-0 items-center">
+                        <p className="text-xs text-gray-500 font-mono truncate">{item.receivable_id.substring(0, 16)}</p>
+                        <span className={`text-xs font-semibold ${item.status === "failed" ? "text-red-600" : "text-gray-400"}`}>
+                          {REASON_LABEL[item.reason?.split(":")[0] ?? ""] ?? item.reason ?? item.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-6 pt-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
+          {phase === "setup" && (
+            <>
+              <button onClick={onClose}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-600 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handlePreview} disabled={!billingType}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-sm font-bold text-white transition-colors">
+                <Eye className="w-4 h-4" /> Ver mensalidades
+              </button>
+            </>
+          )}
+          {phase === "loading" && (
+            <button disabled className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-100 text-sm font-bold text-indigo-400 cursor-not-allowed">
+              <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+            </button>
+          )}
+          {phase === "preview" && (
+            <>
+              <button onClick={() => setPhase("setup")}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-600 transition-colors">
+                Voltar
+              </button>
+              <button onClick={handleCreate} disabled={selectedIds.size === 0}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-sm font-bold text-white transition-colors">
+                <Layers className="w-4 h-4" /> Gerar {selectedIds.size > 0 ? `${selectedIds.size} ` : ""}cobrança{selectedIds.size !== 1 ? "s" : ""}
+              </button>
+            </>
+          )}
+          {phase === "creating" && (
+            <button disabled className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-100 text-sm font-bold text-indigo-400 cursor-not-allowed">
+              <Loader2 className="w-4 h-4 animate-spin" /> Criando cobranças...
+            </button>
+          )}
+          {phase === "summary" && (
+            <button onClick={() => { onCreated(); onClose(); }}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-sm font-bold text-white transition-colors">
+              <Package className="w-4 h-4" /> Fechar e atualizar lista
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
 ══════════════════════════════════════════════════════════════════════ */
@@ -948,13 +1476,14 @@ export default function GoFitPayCobrancasPage() {
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
-  const [charges,       setCharges]      = useState<ChargeRow[]>([]);
-  const [loading,       setLoading]      = useState(true);
-  const [moduleActive,  setModuleActive] = useState<boolean | null>(null);
-  const [filter,        setFilter]       = useState<StatusFilter>("all");
+  const [charges,        setCharges]      = useState<ChargeRow[]>([]);
+  const [loading,        setLoading]      = useState(true);
+  const [moduleActive,   setModuleActive] = useState<boolean | null>(null);
+  const [filter,         setFilter]       = useState<StatusFilter>("all");
   const [selectedCharge, setSelectedCharge] = useState<ChargeRow | null>(null);
-  const [showEmitir,    setShowEmitir]   = useState(false);
-  const [globalError,   setGlobalError]  = useState<string | null>(null);
+  const [showEmitir,     setShowEmitir]   = useState(false);
+  const [showRecurring,  setShowRecurring] = useState(false);
+  const [globalError,    setGlobalError]  = useState<string | null>(null);
 
   const loadCharges = useCallback(async () => {
     if (!user?.contractorId) return;
@@ -1110,6 +1639,12 @@ export default function GoFitPayCobrancasPage() {
                 <RefreshCcw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} /> Atualizar
               </button>
               <button
+                onClick={() => setShowRecurring(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors"
+              >
+                <Layers className="w-3 h-3" /> Gerar em lote
+              </button>
+              <button
                 onClick={() => setShowEmitir(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors"
               >
@@ -1124,7 +1659,7 @@ export default function GoFitPayCobrancasPage() {
           {/* Título */}
           <div className="mb-5">
             <h1 className="text-xl font-black text-gray-900">Cobranças GoFit Pay</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Operação e auditoria de cobranças Pix e Boleto.</p>
+            <p className="text-sm text-gray-400 mt-0.5">Operação, auditoria e recorrência de cobranças GoFit Pay.</p>
           </div>
 
           {/* Erro global */}
@@ -1244,6 +1779,14 @@ export default function GoFitPayCobrancasPage() {
           <EmitirCobrancaModal
             onClose={() => setShowEmitir(false)}
             onCharged={() => { setShowEmitir(false); loadCharges(); }}
+          />
+        )}
+
+        {/* Modal de cobranças recorrentes (Fase 10) */}
+        {showRecurring && (
+          <RecurringChargesModal
+            onClose={() => setShowRecurring(false)}
+            onCreated={loadCharges}
           />
         )}
       </div>
