@@ -727,6 +727,45 @@ export const GoFitPayService = {
   },
 
   /**
+   * FASE 13 — Relatórios e conciliação.
+   * Retorna summary, agrupamento por forma de pagamento, tabela de cobranças e divergências.
+   * contractor_id resolvido server-side via JWT.
+   */
+  async getReports(opts?: ReportFilters): Promise<EdgeFunctionResponse<{
+    summary:        ReportSummary;
+    by_billing_type: BillingTypeStat[];
+    charges:        ReportCharge[];
+    discrepancies:  ReportDiscrepancy[];
+    meta:           { date_from: string|null; date_to: string|null; total_charges_in_period: number; returned: number; filtered_total: number; offset: number };
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: {
+        action:              "get_reports",
+        date_from:           opts?.date_from           ?? null,
+        date_to:             opts?.date_to             ?? null,
+        billing_type:        opts?.billing_type        ?? null,
+        status_financeiro:   opts?.status_financeiro   ?? null,
+        status_gateway:      opts?.status_gateway      ?? null,
+        student_name:        opts?.student_name        ?? null,
+        tipo_baixa:          opts?.tipo_baixa          ?? null,
+        limit:               opts?.limit               ?? 100,
+        offset:              opts?.offset              ?? 0,
+      },
+    });
+    if (error) {
+      console.error("[GoFitPayService] getReports error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{
+      summary:        ReportSummary;
+      by_billing_type: BillingTypeStat[];
+      charges:        ReportCharge[];
+      discrepancies:  ReportDiscrepancy[];
+      meta:           { date_from: string|null; date_to: string|null; total_charges_in_period: number; returned: number; filtered_total: number; offset: number };
+    }>;
+  },
+
+  /**
    * FASE 11 — Retorna taxas ativas do GoFit Pay.
    * Taxas específicas da empresa têm prioridade sobre globais.
    */
@@ -791,6 +830,77 @@ export interface GoFitPayFee {
   description:     string | null;
   is_demo:         boolean;
   sort_order:      number;
+}
+
+/* ─── Tipos Fase 13 ─────────────────────────────────────────────── */
+export interface ReportFilters {
+  date_from?:         string;
+  date_to?:           string;
+  billing_type?:      string;
+  status_financeiro?: string;
+  status_gateway?:    string;
+  student_name?:      string;
+  tipo_baixa?:        string[];
+  limit?:             number;
+  offset?:            number;
+}
+
+export interface ReportSummary {
+  total_cobrado:      number;
+  total_pago:         number;
+  total_pendente:     number;
+  total_vencido:      number;
+  total_cancelado:    number;
+  qtd_cobranças:      number;
+  qtd_alunos:         number;
+  baixas_automaticas: number;
+  baixas_manuais:     number;
+  divergencias:       number;
+}
+
+export interface BillingTypeStat {
+  billing_type:   string;
+  qtd:            number;
+  total_emitido:  number;
+  total_pago:     number;
+  pendente:       number;
+  vencido:        number;
+  cancelado:      number;
+}
+
+export interface ReportCharge {
+  charge_id:          string;
+  provider_charge_id: string | null;
+  billing_type:       string | null;
+  amount:             number;
+  due_date:           string | null;
+  status_gateway:     string | null;
+  invoice_url:        string | null;
+  bank_slip_url:      string | null;
+  pix_copy_paste:     string | null;
+  paid_at:            string | null;
+  cancelled_at:       string | null;
+  created_at:         string | null;
+  student_nome:       string | null;
+  student_email:      string | null;
+  receivable_id:      string | null;
+  descricao:          string | null;
+  vencimento:         string | null;
+  valor_rcv:          number | null;
+  valor_pago_rcv:     number | null;
+  status_financeiro:  string | null;
+  pago_em:            string | null;
+  tipo_baixa:         "automatica" | "manual" | "nao_pago" | "nao_identificado";
+}
+
+export interface ReportDiscrepancy {
+  tipo:               string;
+  severidade:         "Alta" | "Média" | "Baixa";
+  student_nome:       string | null;
+  receivable_id:      string | null;
+  provider_charge_id: string | null;
+  descricao:          string;
+  acao_sugerida:      string;
 }
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */

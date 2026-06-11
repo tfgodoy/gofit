@@ -26,6 +26,12 @@ export type {
   EdgeFunctionResponse,
   // Utilitários
 } from "./types";
+// Fase 12
+export type { OverdueItem, CollectionSummary } from "./GoFitPayService";
+// Fase 11
+export type { GoFitPayFee } from "./GoFitPayService";
+// Fase 13
+export type { ReportFilters, ReportSummary, BillingTypeStat, ReportCharge, ReportDiscrepancy } from "./GoFitPayService";
 export {
   CHARGE_STATUS_LABEL,
   CHARGE_STATUS_COLOR,

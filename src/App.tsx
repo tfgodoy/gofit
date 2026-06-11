@@ -79,6 +79,7 @@ import GoFitPayAtivarPage         from "@/pages/app/gofit-pay/GoFitPayAtivarPage
 import GoFitPayPage               from "@/pages/app/gofit-pay/GoFitPayPage";
 import GoFitPayCobrancasPage      from "@/pages/app/gofit-pay/GoFitPayCobrancasPage";
 import GoFitPayInadimplenciaPage  from "@/pages/app/gofit-pay/GoFitPayInadimplenciaPage";
+import GoFitPayRelatoriosPage     from "@/pages/app/gofit-pay/GoFitPayRelatoriosPage";
 
 const queryClient = new QueryClient();
 
@@ -222,6 +223,7 @@ export default function App() {
             <Route path="/app/gofit-pay"               element={<AppGuard><GoFitPayPage /></AppGuard>} />
             <Route path="/app/gofit-pay/cobrancas"      element={<AppGuard><GoFitPayCobrancasPage /></AppGuard>} />
             <Route path="/app/gofit-pay/inadimplencia" element={<AppGuard><GoFitPayInadimplenciaPage /></AppGuard>} />
+            <Route path="/app/gofit-pay/relatorios"    element={<AppGuard><GoFitPayRelatoriosPage    /></AppGuard>} />
             <Route path="/app/ajuda/*"                 element={<AppGuard><PlaceholderPage title="Ajuda" /></AppGuard>} />
 
             {/* Fallback */}

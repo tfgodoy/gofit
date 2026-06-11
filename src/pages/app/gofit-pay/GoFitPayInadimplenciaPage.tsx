@@ -19,7 +19,7 @@ import {
   ArrowLeft, RefreshCcw, Loader2, AlertTriangle, CreditCard,
   QrCode, FileText, Copy, ExternalLink, ChevronRight,
   Users, Wallet, Clock, AlertCircle, Ban, CheckCircle2,
-  MessageSquare, X, Search, Filter, Zap, RotateCcw, Plus,
+  MessageSquare, X, Search, Filter, Zap, RotateCcw, Plus, BarChart3,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -342,10 +342,16 @@ export default function GoFitPayInadimplenciaPage() {
               <ChevronRight className="w-3 h-3 text-gray-300" />
               <span className="text-xs font-semibold text-gray-700">Inadimplência</span>
             </div>
-            <button onClick={loadData} disabled={loading}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50">
-              <RefreshCcw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} /> Atualizar
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigate("/app/gofit-pay/relatorios")}
+                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-600 transition-colors">
+                <BarChart3 className="w-3 h-3" /> Relatórios
+              </button>
+              <button onClick={loadData} disabled={loading}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50">
+                <RefreshCcw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} /> Atualizar
+              </button>
+            </div>
           </div>
         </div>
 

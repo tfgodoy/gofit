@@ -1880,6 +1880,263 @@ async function handleWebhookReceive(req: Request): Promise<Response> {
   });
 }
 
+// ─── Fase 13: get_reports ─────────────────────────────────────────────────────
+
+async function handleGetReports(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const db = serviceClient();
+
+  const dateFrom    = typeof body.date_from         === "string" ? body.date_from  : null;
+  const dateTo      = typeof body.date_to           === "string" ? body.date_to    : null;
+  const billingType = typeof body.billing_type      === "string" ? body.billing_type.toUpperCase() : null;
+  const statusFin   = typeof body.status_financeiro === "string" ? body.status_financeiro : null;
+  const statusGw    = typeof body.status_gateway    === "string" ? body.status_gateway    : null;
+  const studentName = typeof body.student_name      === "string" ? body.student_name.toLowerCase() : null;
+  const tipoBaixaFilter = Array.isArray(body.tipo_baixa) ? body.tipo_baixa as string[] : null;
+  const limitRows   = typeof body.limit  === "number" ? Math.min(body.limit,  500) : 100;
+  const offsetRows  = typeof body.offset === "number" ? body.offset                : 0;
+
+  const today = new Date().toISOString().substring(0, 10);
+
+  // ── 1. payment_charges do período ──────────────────────────────────────────
+  let pcQuery = db.from("payment_charges")
+    .select("id,student_id,receivable_id,provider_charge_id,billing_type,amount,due_date,status,invoice_url,bank_slip_url,pix_copy_paste,paid_at,confirmed_at,cancelled_at,created_at")
+    .eq("contractor_id", contractorId)
+    .order("created_at", { ascending: false });
+
+  if (dateFrom)    pcQuery = pcQuery.gte("created_at", dateFrom + "T00:00:00Z");
+  if (dateTo)      pcQuery = pcQuery.lte("created_at", dateTo   + "T23:59:59Z");
+  if (billingType) pcQuery = pcQuery.eq("billing_type", billingType);
+  if (statusGw)    pcQuery = pcQuery.eq("status", statusGw);
+
+  const { data: chargesRaw, error: chargesErr } = await pcQuery.limit(500);
+  if (chargesErr) return err("Falha ao buscar cobranças.", "QUERY_ERROR", 500);
+  const charges = chargesRaw ?? [];
+
+  // ── 2. receivables vinculadas ao GoFit Pay ─────────────────────────────────
+  const { data: allRcvRaw } = await db.from("receivables")
+    .select("id,student_id,descricao,valor,valor_pago,status,vencimento,pago_em,asaas_payment_id,gateway_provider")
+    .eq("contractor_id", contractorId)
+    .eq("gateway_provider", "asaas")
+    .limit(2000);
+  const allRcv = allRcvRaw ?? [];
+  const rcvMap = new Map(allRcv.map(r => [r.id as string, r]));
+
+  // ── 3. students para nomes ─────────────────────────────────────────────────
+  const studentIds = [...new Set([
+    ...charges.map(c => c.student_id),
+    ...allRcv.map(r => r.student_id),
+  ].filter(Boolean) as string[])];
+
+  const studentsMap = new Map<string, { nome_completo: string; email: string | null }>();
+  if (studentIds.length > 0) {
+    const { data: stRows } = await db.from("students")
+      .select("id,nome_completo,email")
+      .in("id", studentIds.slice(0, 500));
+    for (const s of stRows ?? []) studentsMap.set(s.id as string, { nome_completo: s.nome_completo ?? "", email: s.email ?? null });
+  }
+
+  // ── 4. webhooks processados para baixa automática ─────────────────────────
+  const asaasIds = [...new Set([
+    ...allRcv.map(r => r.asaas_payment_id),
+    ...charges.map(c => c.provider_charge_id),
+  ].filter(Boolean) as string[])];
+
+  const webhookAutoSet = new Set<string>();
+  if (asaasIds.length > 0) {
+    const { data: wh } = await db.from("gofit_pay_webhook_events")
+      .select("provider_payment_id")
+      .eq("contractor_id", contractorId)
+      .in("event_type", ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"])
+      .eq("processed", true)
+      .in("provider_payment_id", asaasIds.slice(0, 200));
+    for (const w of wh ?? []) {
+      if (w.provider_payment_id) webhookAutoSet.add(w.provider_payment_id as string);
+    }
+  }
+
+  // ── 5. Summary ─────────────────────────────────────────────────────────────
+  const totalCobrado   = charges.reduce((s, c) => s + ((c.amount as number) ?? 0), 0);
+  const totalCancelado = charges.filter(c => c.status === "CANCELLED").reduce((s, c) => s + ((c.amount as number) ?? 0), 0);
+  const qtdCobranças   = charges.length;
+  const qtdAlunos      = new Set(charges.map(c => c.student_id).filter(Boolean)).size;
+
+  const rcvPago = allRcv.filter(r => {
+    if (r.status !== "pago") return false;
+    const pagoEm = (r.pago_em as string | null)?.substring(0, 10);
+    if (dateFrom && pagoEm && pagoEm < dateFrom) return false;
+    if (dateTo   && pagoEm && pagoEm > dateTo)   return false;
+    return true;
+  });
+  const totalPago = rcvPago.reduce((s, r) => s + (((r.valor_pago ?? r.valor) as number) ?? 0), 0);
+
+  const rcvPendente = allRcv.filter(r => !["pago","cancelado"].includes(r.status as string) && (r.vencimento as string) >= today);
+  const rcvVencido  = allRcv.filter(r => !["pago","cancelado"].includes(r.status as string) && (r.vencimento as string) <  today);
+  const totalPendente = rcvPendente.reduce((s, r) => s + ((r.valor as number) ?? 0), 0);
+  const totalVencido  = rcvVencido.reduce( (s, r) => s + ((r.valor as number) ?? 0), 0);
+
+  let baixasAuto = 0, baixasManuais = 0;
+  for (const r of rcvPago) {
+    const apId = r.asaas_payment_id as string | null;
+    if (apId && webhookAutoSet.has(apId)) baixasAuto++;
+    else baixasManuais++;
+  }
+
+  // ── 6. Agrupamento por forma de pagamento ──────────────────────────────────
+  type BtStat = { qtd: number; total_emitido: number; total_pago: number; pendente: number; vencido: number; cancelado: number };
+  const btMap = new Map<string, BtStat>();
+  const ensureBt = (bt: string): BtStat => {
+    if (!btMap.has(bt)) btMap.set(bt, { qtd: 0, total_emitido: 0, total_pago: 0, pendente: 0, vencido: 0, cancelado: 0 });
+    return btMap.get(bt)!;
+  };
+  for (const c of charges) {
+    const bt = (c.billing_type as string) ?? "UNKNOWN";
+    const s = ensureBt(bt);
+    s.qtd++;
+    s.total_emitido += (c.amount as number) ?? 0;
+    if (c.status === "CANCELLED") s.cancelado += (c.amount as number) ?? 0;
+  }
+  const rcvToCharge = new Map<string, typeof charges[0]>();
+  for (const c of charges) { if (c.receivable_id) rcvToCharge.set(c.receivable_id as string, c); }
+  for (const r of rcvPago)     { const c = rcvToCharge.get(r.id as string); if (c) ensureBt((c.billing_type as string) ?? "UNKNOWN").total_pago += (((r.valor_pago ?? r.valor) as number) ?? 0); }
+  for (const r of rcvPendente) { const c = rcvToCharge.get(r.id as string); if (c) ensureBt((c.billing_type as string) ?? "UNKNOWN").pendente  += ((r.valor as number) ?? 0); }
+  for (const r of rcvVencido)  { const c = rcvToCharge.get(r.id as string); if (c) ensureBt((c.billing_type as string) ?? "UNKNOWN").vencido   += ((r.valor as number) ?? 0); }
+  const byBillingType = [...btMap.entries()].map(([bt, s]) => ({ billing_type: bt, ...s }));
+
+  // ── 7. Tabela de cobranças (paginada) ──────────────────────────────────────
+  const rawTable = charges.map(c => {
+    const rcv     = (c.receivable_id ? rcvMap.get(c.receivable_id as string) : null) ?? null;
+    const student = (c.student_id    ? studentsMap.get(c.student_id as string) : null) ?? null;
+    const apId    = (rcv?.asaas_payment_id ?? c.provider_charge_id) as string | null;
+    let tipoBaixa = "nao_pago";
+    if (rcv?.status === "pago") {
+      tipoBaixa = apId && webhookAutoSet.has(apId) ? "automatica" : apId ? "manual" : "nao_identificado";
+    }
+    return {
+      charge_id:         c.id,
+      provider_charge_id: c.provider_charge_id,
+      billing_type:      c.billing_type,
+      amount:            c.amount,
+      due_date:          c.due_date,
+      status_gateway:    c.status,
+      invoice_url:       c.invoice_url,
+      bank_slip_url:     c.bank_slip_url,
+      pix_copy_paste:    c.pix_copy_paste,
+      paid_at:           c.paid_at ?? c.confirmed_at,
+      cancelled_at:      c.cancelled_at,
+      created_at:        c.created_at,
+      student_nome:      student?.nome_completo ?? null,
+      student_email:     student?.email ?? null,
+      receivable_id:     c.receivable_id,
+      descricao:         rcv?.descricao ?? null,
+      vencimento:        rcv?.vencimento ?? c.due_date,
+      valor_rcv:         rcv?.valor ?? null,
+      valor_pago_rcv:    rcv?.valor_pago ?? null,
+      status_financeiro: rcv?.status ?? null,
+      pago_em:           rcv?.pago_em ?? null,
+      tipo_baixa:        tipoBaixa,
+    };
+  });
+
+  // Filtros adicionais (client-side no servidor para garantir contractor_id)
+  let filtered = rawTable;
+  if (statusFin)           filtered = filtered.filter(r => r.status_financeiro === statusFin);
+  if (studentName)         filtered = filtered.filter(r => r.student_nome?.toLowerCase().includes(studentName));
+  if (tipoBaixaFilter?.length) filtered = filtered.filter(r => tipoBaixaFilter.includes(r.tipo_baixa));
+
+  const chargesTable = filtered.slice(offsetRows, offsetRows + limitRows);
+
+  // ── 8. Divergências ────────────────────────────────────────────────────────
+  type Disc = {
+    tipo: string; severidade: "Alta" | "Média" | "Baixa";
+    student_nome: string | null; receivable_id: string | null;
+    provider_charge_id: string | null; descricao: string; acao_sugerida: string;
+  };
+  const discs: Disc[] = [];
+
+  for (const c of charges) {
+    const rcv     = (c.receivable_id ? rcvMap.get(c.receivable_id as string) : null) ?? null;
+    const student = (c.student_id    ? studentsMap.get(c.student_id as string) : null) ?? null;
+    const sNome   = student?.nome_completo ?? null;
+    const amt     = (c.amount as number) ?? 0;
+    const rcvVal  = (rcv?.valor as number) ?? 0;
+
+    if ((c.status === "RECEIVED" || c.status === "CONFIRMED") && rcv && rcv.status !== "pago") {
+      discs.push({ tipo: "gateway_pago_financeiro_aberto", severidade: "Alta", student_nome: sNome, receivable_id: c.receivable_id as string, provider_charge_id: c.provider_charge_id as string, descricao: `Gateway ${c.status}, mas conta a receber está "${rcv.status}" no financeiro.`, acao_sugerida: "Verificar webhook ou efetuar baixa manual no financeiro." });
+    }
+    if (c.status === "CANCELLED" && rcv && rcv.status === "pago") {
+      discs.push({ tipo: "cobranca_cancelada_financeiro_pago", severidade: "Alta", student_nome: sNome, receivable_id: c.receivable_id as string, provider_charge_id: c.provider_charge_id as string, descricao: "Cobrança cancelada no gateway, mas conta a receber está paga no financeiro.", acao_sugerida: "Verificar se o pagamento foi registrado por outro meio." });
+    }
+    if (rcv && amt > 0 && rcvVal > 0 && Math.abs(amt - rcvVal) > 0.01) {
+      discs.push({ tipo: "valor_divergente", severidade: "Alta", student_nome: sNome, receivable_id: c.receivable_id as string, provider_charge_id: c.provider_charge_id as string, descricao: `Cobrança R$${amt.toFixed(2)} vs conta a receber R$${rcvVal.toFixed(2)}.`, acao_sugerida: "Verificar se o valor foi ajustado manualmente." });
+    }
+    if (rcv && rcv.status === "pago" && c.status && !["RECEIVED","CONFIRMED"].includes(c.status as string)) {
+      discs.push({ tipo: "financeiro_pago_gateway_pendente", severidade: "Média", student_nome: sNome, receivable_id: c.receivable_id as string, provider_charge_id: c.provider_charge_id as string, descricao: `Conta a receber paga, mas cobrança com status "${c.status}" no gateway.`, acao_sugerida: "Sincronizar status da cobrança ou verificar pagamento manual." });
+    }
+  }
+
+  // receivables com asaas_payment_id mas sem cobrança no período
+  const chargeRcvIds = new Set(charges.map(c => c.receivable_id).filter(Boolean));
+  let orphanCount = 0;
+  for (const r of allRcv) {
+    if (orphanCount >= 10) break;
+    if (!r.asaas_payment_id || chargeRcvIds.has(r.id as string)) continue;
+    if (dateFrom && (r.vencimento as string) < dateFrom) continue;
+    if (dateTo   && (r.vencimento as string) > dateTo)   continue;
+    const student = (r.student_id ? studentsMap.get(r.student_id as string) : null) ?? null;
+    discs.push({ tipo: "rcv_asaas_sem_cobranca", severidade: "Baixa", student_nome: student?.nome_completo ?? null, receivable_id: r.id as string, provider_charge_id: r.asaas_payment_id as string, descricao: "Conta a receber tem asaas_payment_id mas sem cobrança no período consultado.", acao_sugerida: "Verificar filtro de período ou se o pagamento foi feito fora do GoFit Pay." });
+    orphanCount++;
+  }
+
+  // webhooks não processados deste contractor
+  const { data: pendingWh } = await db.from("gofit_pay_webhook_events")
+    .select("id,event_type,provider_payment_id,created_at")
+    .eq("contractor_id", contractorId)
+    .in("event_type", ["PAYMENT_RECEIVED","PAYMENT_CONFIRMED"])
+    .eq("processed", false)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  for (const w of pendingWh ?? []) {
+    discs.push({ tipo: "webhook_nao_processado", severidade: "Alta", student_nome: null, receivable_id: null, provider_charge_id: w.provider_payment_id as string, descricao: `Evento ${w.event_type} recebido em ${(w.created_at as string)?.substring(0,10)} ainda não processado.`, acao_sugerida: "Usar 'Processar webhooks pendentes' na tela de cobranças." });
+  }
+
+  const divCount = discs.length;
+
+  console.log(`[gofit-pay] get_reports: contractor=${contractorId} charges=${charges.length} discs=${divCount}`);
+
+  return json({
+    success: true,
+    data: {
+      summary: {
+        total_cobrado:      totalCobrado,
+        total_pago:         totalPago,
+        total_pendente:     totalPendente,
+        total_vencido:      totalVencido,
+        total_cancelado:    totalCancelado,
+        qtd_cobranças:      qtdCobranças,
+        qtd_alunos:         qtdAlunos,
+        baixas_automaticas: baixasAuto,
+        baixas_manuais:     baixasManuais,
+        divergencias:       divCount,
+      },
+      by_billing_type: byBillingType,
+      charges: chargesTable,
+      discrepancies: discs.slice(0, 100),
+      meta: {
+        date_from:               dateFrom,
+        date_to:                 dateTo,
+        total_charges_in_period: charges.length,
+        returned:                chargesTable.length,
+        filtered_total:          filtered.length,
+        offset:                  offsetRows,
+      },
+    },
+  });
+}
+
 // ─── Main router ──────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -1966,6 +2223,9 @@ serve(async (req) => {
 
       case "create_recurring_charges":
         return await handleCreateRecurringCharges(body, identity.contractorId, secrets);
+
+      case "get_reports":
+        return await handleGetReports(body, identity.contractorId);
 
       case "cancel_charge":
       case "cancel-charge":
