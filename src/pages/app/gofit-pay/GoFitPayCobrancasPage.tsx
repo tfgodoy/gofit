@@ -16,7 +16,7 @@ import {
   CheckCircle2, AlertCircle, ChevronRight, Copy, ExternalLink, X,
   Zap, Eye, RefreshCw, RotateCcw, Webhook, User, Receipt,
   Clock, AlertTriangle, ChevronDown, ChevronUp, Ban,
-  Layers, Search, ChevronLeft, ListChecks, Package, Percent,
+  Layers, Search, ChevronLeft, ListChecks, Package, Percent, AlertOctagon,
 } from "lucide-react";
 import AppLayout          from "@/components/app/AppLayout";
 import { supabase }       from "@/integrations/supabase/client";
@@ -1645,6 +1645,12 @@ export default function GoFitPayCobrancasPage() {
                 className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <Percent className="w-3 h-3" /> Taxas
+              </button>
+              <button
+                onClick={() => navigate("/app/gofit-pay/inadimplencia")}
+                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 transition-colors"
+              >
+                <AlertOctagon className="w-3 h-3" /> Inadimplência
               </button>
               <button
                 onClick={() => setShowRecurring(true)}

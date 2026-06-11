@@ -13,7 +13,7 @@ import {
   CreditCard, Clock, CheckCircle2, AlertCircle,
   TrendingUp, Wallet, Users, ArrowUpRight,
   RefreshCcw, Loader2, Settings, ChevronRight,
-  QrCode, FileText, XCircle, RotateCcw, AlertTriangle, Percent,
+  QrCode, FileText, XCircle, RotateCcw, AlertTriangle, Percent, AlertOctagon,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -345,6 +345,20 @@ export default function GoFitPayPage() {
                       <p className="text-xs text-gray-400 mt-0.5">Visualize as taxas por forma de pagamento</p>
                     </div>
                     <ArrowUpRight className="w-4 h-4 text-gray-400 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate("/app/gofit-pay/inadimplencia")}
+                    className="flex items-center gap-4 bg-white rounded-2xl border border-red-100 hover:border-red-200 hover:shadow-sm p-5 text-left transition-all group"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0 group-hover:bg-red-200 transition-colors">
+                      <AlertOctagon className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-gray-900">Inadimplência</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Cobranças vencidas e alunos inadimplentes</p>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-red-400 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </button>
                 </div>
               )}

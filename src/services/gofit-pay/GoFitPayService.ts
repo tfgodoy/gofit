@@ -669,6 +669,64 @@ export const GoFitPayService = {
   },
 
   /**
+   * FASE 12 — Retorna overview de inadimplência.
+   * Receivables vencidas, não pagas, com cobrança GoFit Pay se houver.
+   */
+  async getCollectionOverview(opts?: {
+    student_id?:   string;
+    has_charge?:   boolean;
+    billing_type?: string;
+    delay_band?:   string;
+    limit?:        number;
+  }): Promise<EdgeFunctionResponse<{
+    summary: CollectionSummary;
+    items:   OverdueItem[];
+    total:   number;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: {
+        action:       "get_collection_overview",
+        student_id:   opts?.student_id   ?? undefined,
+        has_charge:   opts?.has_charge   ?? undefined,
+        billing_type: opts?.billing_type ?? undefined,
+        delay_band:   opts?.delay_band   ?? undefined,
+        limit:        opts?.limit        ?? 150,
+      },
+    });
+    if (error) {
+      console.error("[GoFitPayService] getCollectionOverview error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ summary: CollectionSummary; items: OverdueItem[]; total: number }>;
+  },
+
+  async addCollectionNote(receivable_id: string, note: string): Promise<EdgeFunctionResponse<{
+    note: { id: string; note: string; created_at: string };
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "add_collection_note", receivable_id, note },
+    });
+    if (error) {
+      console.error("[GoFitPayService] addCollectionNote error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ note: { id: string; note: string; created_at: string } }>;
+  },
+
+  async getCollectionNotes(receivable_id: string): Promise<EdgeFunctionResponse<{
+    notes: Array<{ id: string; note: string; created_at: string; created_by: string | null }>;
+  }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "get_collection_notes", receivable_id },
+    });
+    if (error) {
+      console.error("[GoFitPayService] getCollectionNotes error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ notes: Array<{ id: string; note: string; created_at: string; created_by: string | null }> }>;
+  },
+
+  /**
    * FASE 11 — Retorna taxas ativas do GoFit Pay.
    * Taxas específicas da empresa têm prioridade sobre globais.
    */
@@ -687,6 +745,37 @@ export const GoFitPayService = {
   },
 
 } as const;
+
+/* ─── Tipos Fase 12 ─────────────────────────────────────────────── */
+export interface OverdueItem {
+  receivable_id:       string;
+  student_id:          string | null;
+  student_nome:        string | null;
+  student_email:       string | null;
+  student_contract_id: string | null;
+  descricao:           string | null;
+  valor:               number;
+  vencimento:          string;
+  dias_em_atraso:      number;
+  rcv_status:          string;
+  charge_id:           string | null;
+  provider_charge_id:  string | null;
+  charge_status:       string | null;
+  billing_type:        string | null;
+  invoice_url:         string | null;
+  bank_slip_url:       string | null;
+  pix_copy_paste:      string | null;
+  pix_qr_code:         string | null;
+}
+
+export interface CollectionSummary {
+  total_amount_open:  number;
+  students_count:     number;
+  overdue_count:      number;
+  overdue_30_plus:    number;
+  without_charge:     number;
+  with_active_charge: number;
+}
 
 /* ─── Tipos Fase 11 ─────────────────────────────────────────────── */
 export interface GoFitPayFee {

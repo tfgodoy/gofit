@@ -736,6 +736,196 @@ async function handleCreatePaymentCharge(
 const RECURRING_ALLOWED_STATUSES = ["pendente", "atrasado", "aguardando"] as const;
 const MAX_RECURRING_BATCH = 20;
 
+/* ── Fase 12: régua de cobrança e inadimplência ───────────────────── */
+async function handleGetCollectionOverview(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const db     = serviceClient();
+  const today  = new Date().toISOString().split("T")[0];
+
+  const studentId   = typeof body.student_id   === "string"  ? body.student_id   : undefined;
+  const hasCharge   = typeof body.has_charge   === "boolean" ? body.has_charge   : undefined;
+  const billingType = typeof body.billing_type === "string"  ? body.billing_type : undefined;
+  const delayBand   = typeof body.delay_band   === "string"  ? body.delay_band   : undefined;
+  const limitRows   = typeof body.limit        === "number"  ? Math.min(body.limit as number, 300) : 150;
+
+  type RawRcv = {
+    id: string; student_id: string|null; student_contract_id: string|null;
+    descricao: string|null; valor: string|number; vencimento: string;
+    status: string; asaas_payment_id: string|null; gateway_status: string|null;
+    students: { nome_completo: string; email: string|null } | null;
+  };
+  type RawCharge = {
+    id: string; receivable_id: string|null; provider_charge_id: string; status: string; billing_type: string;
+    invoice_url: string|null; bank_slip_url: string|null;
+    pix_copy_paste: string|null; pix_qr_code: string|null; created_at: string;
+  };
+
+  // Step 1: receivables with student join (FK exists: receivables.student_id → students.id)
+  let rcvQuery = db
+    .from("receivables")
+    .select("id,student_id,student_contract_id,descricao,valor,vencimento,status,asaas_payment_id,gateway_status,students(nome_completo,email)")
+    .eq("contractor_id", contractorId)
+    .not("status", "in", '("pago","cancelado")')
+    .lt("vencimento", today)
+    .gt("valor", 0)
+    .order("vencimento", { ascending: true })
+    .limit(limitRows);
+
+  if (studentId) rcvQuery = rcvQuery.eq("student_id", studentId);
+
+  const { data: rawItems, error } = await rcvQuery;
+  if (error) {
+    console.error(`[gofit-pay] get_collection_overview rcv error: ${error.message}`);
+    throw new GoFitPayBusinessError(error.message, "DB_ERROR");
+  }
+
+  const rcvList = (rawItems ?? []) as RawRcv[];
+  const rcvIds  = rcvList.map(r => r.id);
+
+  // Step 2: payment_charges for those receivables (separate query — no FK defined)
+  let chargeMap: Map<string, RawCharge[]> = new Map();
+  if (rcvIds.length > 0) {
+    const { data: rawCharges } = await db
+      .from("payment_charges")
+      .select("id,receivable_id,provider_charge_id,status,billing_type,invoice_url,bank_slip_url,pix_copy_paste,pix_qr_code,created_at")
+      .in("receivable_id", rcvIds)
+      .neq("status", "CANCELLED");
+    for (const c of (rawCharges ?? []) as RawCharge[]) {
+      if (!c.receivable_id) continue;
+      if (!chargeMap.has(c.receivable_id)) chargeMap.set(c.receivable_id, []);
+      chargeMap.get(c.receivable_id)!.push(c);
+    }
+  }
+
+  const todayMs = new Date(today + "T00:00:00").getTime();
+
+  const allItems = rcvList.map(item => {
+    const vencMs = new Date(item.vencimento + "T00:00:00").getTime();
+    const dias   = Math.floor((todayMs - vencMs) / 86_400_000);
+
+    const charges = chargeMap.get(item.id) ?? [];
+    const activeCharge = charges
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ?? null;
+
+    const studentNode = item.students as { nome_completo: string; email: string|null } | null;
+
+    return {
+      receivable_id:       item.id,
+      student_id:          item.student_id,
+      student_nome:        studentNode?.nome_completo ?? null,
+      student_email:       studentNode?.email ?? null,
+      student_contract_id: item.student_contract_id,
+      descricao:           item.descricao,
+      valor:               Number(item.valor),
+      vencimento:          item.vencimento,
+      dias_em_atraso:      dias,
+      rcv_status:          item.status,
+      charge_id:           activeCharge?.id ?? null,
+      provider_charge_id:  activeCharge?.provider_charge_id ?? null,
+      charge_status:       activeCharge?.status ?? null,
+      billing_type:        activeCharge?.billing_type ?? null,
+      invoice_url:         activeCharge?.invoice_url ?? null,
+      bank_slip_url:       activeCharge?.bank_slip_url ?? null,
+      pix_copy_paste:      activeCharge?.pix_copy_paste ?? null,
+      pix_qr_code:         activeCharge?.pix_qr_code ?? null,
+    };
+  });
+
+  // Client-side filters (data set per company is small)
+  let filtered = allItems;
+  if (typeof hasCharge === "boolean")
+    filtered = filtered.filter(i => hasCharge ? i.charge_id !== null : i.charge_id === null);
+  if (billingType)
+    filtered = filtered.filter(i => i.billing_type === billingType);
+  if (delayBand) {
+    filtered = filtered.filter(i => {
+      const d = i.dias_em_atraso;
+      if (delayBand === "0")     return d === 0;
+      if (delayBand === "1-3")   return d >= 1  && d <= 3;
+      if (delayBand === "4-7")   return d >= 4  && d <= 7;
+      if (delayBand === "8-15")  return d >= 8  && d <= 15;
+      if (delayBand === "16-30") return d >= 16 && d <= 30;
+      if (delayBand === "30+")   return d > 30;
+      return true;
+    });
+  }
+
+  const summary = {
+    total_amount_open:  allItems.reduce((s, i) => s + i.valor, 0),
+    students_count:     new Set(allItems.filter(i => i.student_id).map(i => i.student_id)).size,
+    overdue_count:      allItems.length,
+    overdue_30_plus:    allItems.filter(i => i.dias_em_atraso > 30).length,
+    without_charge:     allItems.filter(i => i.charge_id === null).length,
+    with_active_charge: allItems.filter(i => i.charge_id !== null).length,
+  };
+
+  console.log(`[gofit-pay] get_collection_overview: total=${allItems.length} filtered=${filtered.length}`);
+  return json({ success: true, data: { summary, items: filtered, total: allItems.length } });
+}
+
+async function handleAddCollectionNote(
+  body: Record<string, unknown>,
+  contractorId: string,
+  userId: string
+): Promise<Response> {
+  const receivableId = typeof body.receivable_id === "string" ? body.receivable_id : null;
+  const note         = typeof body.note          === "string" ? body.note.trim()   : null;
+
+  if (!receivableId || !note) return err("receivable_id e note são obrigatórios.", "MISSING_FIELDS");
+  if (note.length > 500)      return err("Observação muito longa (máx. 500 caracteres).", "NOTE_TOO_LONG");
+
+  const db = serviceClient();
+
+  const { data: rcv } = await db
+    .from("receivables")
+    .select("id,student_id")
+    .eq("id", receivableId)
+    .eq("contractor_id", contractorId)
+    .maybeSingle();
+
+  if (!rcv) return err("Receivable não encontrada ou sem permissão.", "NOT_FOUND", 404);
+
+  const { data: saved, error } = await db
+    .from("gofit_pay_collection_notes")
+    .insert({ contractor_id: contractorId, receivable_id: receivableId, student_id: rcv.student_id, note, created_by: userId })
+    .select("id,note,created_at")
+    .single();
+
+  if (error) {
+    console.error(`[gofit-pay] add_collection_note error: ${error.message}`);
+    throw new GoFitPayBusinessError(error.message, "DB_ERROR");
+  }
+
+  return json({ success: true, data: { note: saved } });
+}
+
+async function handleGetCollectionNotes(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const receivableId = typeof body.receivable_id === "string" ? body.receivable_id : null;
+  if (!receivableId) return err("receivable_id é obrigatório.", "MISSING_FIELDS");
+
+  const db = serviceClient();
+
+  const { data: notes, error } = await db
+    .from("gofit_pay_collection_notes")
+    .select("id,note,created_at,created_by")
+    .eq("contractor_id", contractorId)
+    .eq("receivable_id", receivableId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error(`[gofit-pay] get_collection_notes error: ${error.message}`);
+    throw new GoFitPayBusinessError(error.message, "DB_ERROR");
+  }
+
+  return json({ success: true, data: { notes: notes ?? [] } });
+}
+
 /* ── Fase 11: taxas GoFit Pay ─────────────────────────────────────── */
 async function handleGetFees(contractorId: string): Promise<Response> {
   const db = serviceClient();
@@ -1758,6 +1948,15 @@ serve(async (req) => {
 
       case "process_pending_webhooks":
         return await handleProcessPendingWebhooks(body, identity.contractorId);
+
+      case "get_collection_overview":
+        return await handleGetCollectionOverview(body, identity.contractorId);
+
+      case "add_collection_note":
+        return await handleAddCollectionNote(body, identity.contractorId, identity.userId);
+
+      case "get_collection_notes":
+        return await handleGetCollectionNotes(body, identity.contractorId);
 
       case "get_fees":
         return await handleGetFees(identity.contractorId);
