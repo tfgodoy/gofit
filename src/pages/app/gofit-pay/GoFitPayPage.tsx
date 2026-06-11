@@ -13,7 +13,7 @@ import {
   CreditCard, Clock, CheckCircle2, AlertCircle,
   TrendingUp, Wallet, Users, ArrowUpRight,
   RefreshCcw, Loader2, Settings, ChevronRight,
-  QrCode, FileText, XCircle, RotateCcw, AlertTriangle, Percent, AlertOctagon, BarChart3,
+  QrCode, FileText, XCircle, RotateCcw, AlertTriangle, Percent, AlertOctagon, BarChart3, Shield,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -380,6 +380,20 @@ export default function GoFitPayPage() {
                       <p className="text-xs text-gray-400 mt-0.5">Acompanhe recebimentos, cobranças, status e divergências</p>
                     </div>
                     <ArrowUpRight className="w-4 h-4 text-blue-400 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate("/app/gofit-pay/producao")}
+                    className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-sm p-5 text-left transition-all group"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+                      <Shield className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-gray-900">Produção Controlada</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Checklist, piloto, rollback e ambiente</p>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-primary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </button>
                 </div>
               )}

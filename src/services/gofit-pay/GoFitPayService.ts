@@ -813,6 +813,36 @@ export const GoFitPayService = {
     return data as EdgeFunctionResponse<ProductionReadiness>;
   },
 
+  /**
+   * FASE 15 — Habilita o piloto de produção para esta empresa.
+   * Requer ASAAS_ENV=production nos Supabase Secrets.
+   */
+  async enableProductionPilot(notes?: string): Promise<EdgeFunctionResponse<PilotResult>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "enable_production_pilot", notes: notes ?? "" },
+    });
+    if (error) {
+      console.error("[GoFitPayService] enableProductionPilot error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<PilotResult>;
+  },
+
+  /**
+   * FASE 15 — Executa rollback do piloto: bloqueia novas cobranças reais.
+   * Histórico preservado. Sandbox continua funcionando.
+   */
+  async disableProductionPilot(reason: string): Promise<EdgeFunctionResponse<RollbackResult>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "disable_production_pilot", reason },
+    });
+    if (error) {
+      console.error("[GoFitPayService] disableProductionPilot error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<RollbackResult>;
+  },
+
 } as const;
 
 /* ─── Tipos Fase 12 ─────────────────────────────────────────────── */
@@ -970,6 +1000,22 @@ export interface ProductionReadiness {
   current_environment:  string;
   summary:              string;
   checks:               ProductionReadinessCheck[];
+}
+
+/* ─── Tipos Fase 15 ─────────────────────────────────────────────── */
+export interface PilotResult {
+  production_enabled:       boolean;
+  allowed_for_real_charges: boolean;
+  pilot_enabled_at:         string;
+  notes:                    string;
+  message:                  string;
+}
+
+export interface RollbackResult {
+  allowed_for_real_charges: boolean;
+  rolled_back_at:           string;
+  reason:                   string;
+  message:                  string;
 }
 
 /* ─── Erro de funcionalidade não implementada ────────────────────── */

@@ -34,6 +34,8 @@ export type { GoFitPayFee } from "./GoFitPayService";
 export type { ReportFilters, ReportSummary, BillingTypeStat, ReportCharge, ReportDiscrepancy } from "./GoFitPayService";
 // Fase 14
 export type { EnvironmentStatus, ProductionReadinessCheck, ProductionReadiness } from "./GoFitPayService";
+// Fase 15
+export type { PilotResult, RollbackResult } from "./GoFitPayService";
 export {
   CHARGE_STATUS_LABEL,
   CHARGE_STATUS_COLOR,

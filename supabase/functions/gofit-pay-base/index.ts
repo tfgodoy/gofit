@@ -677,7 +677,10 @@ async function handleCreatePaymentCharge(
   }
 
   const now = new Date().toISOString();
-  const { env: chargeEnv } = await resolveEnvironment(db, contractorId);
+  const { env: chargeEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+  if (chargeEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
+    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
+  }
   const { data: savedCharge, error: chargeErr } = await db.from("payment_charges").insert({
     contractor_id: contractorId, student_id: studentId,
     student_contract_id: receivable.student_contract_id ?? null,
@@ -2065,6 +2068,107 @@ async function handleValidateProductionReadiness(
   });
 }
 
+// ─── Fase 15: enable_production_pilot ────────────────────────────────────────
+
+async function handleEnableProductionPilot(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const notes = typeof body.notes === "string" ? body.notes.trim() : "Go-live controlado — empresa piloto";
+
+  const globalEnv = Deno.env.get("ASAAS_ENV") ?? "sandbox";
+  const hasApiKey = !!Deno.env.get("ASAAS_API_KEY");
+  const hasWhToken = !!Deno.env.get("ASAAS_WEBHOOK_TOKEN");
+  const hasEncKey  = !!Deno.env.get("GOFIT_PAY_ENCRYPTION_KEY");
+
+  if (!hasApiKey)  return err("ASAAS_API_KEY não configurado em Supabase Secrets.", "SECRET_MISSING_API_KEY",   422);
+  if (!hasWhToken) return err("ASAAS_WEBHOOK_TOKEN não configurado em Supabase Secrets.", "SECRET_MISSING_WH_TOKEN", 422);
+  if (!hasEncKey)  return err("GOFIT_PAY_ENCRYPTION_KEY não configurado em Supabase Secrets.", "SECRET_MISSING_ENC_KEY",  422);
+
+  if (globalEnv !== "production") {
+    return err(
+      `ASAAS_ENV está como '${globalEnv}'. Configure ASAAS_ENV=production em Supabase Secrets antes de habilitar o piloto.`,
+      "ENV_NOT_PRODUCTION",
+      422
+    );
+  }
+
+  const db = serviceClient();
+  const now = new Date().toISOString();
+
+  const { error } = await db.from("gofit_pay_settings").upsert(
+    {
+      contractor_id:           contractorId,
+      environment:             "production",
+      production_enabled:      true,
+      allowed_for_real_charges: true,
+      production_approved_at:  now,
+      pilot_enabled_at:        now,
+      pilot_notes:             notes,
+      rollback_at:             null,
+      rollback_notes:          null,
+    },
+    { onConflict: "contractor_id" }
+  );
+
+  if (error) {
+    console.error("[gofit-pay] enable_production_pilot DB error:", error.message);
+    return err("Erro ao salvar configuração de produção.", "DB_ERROR", 500);
+  }
+
+  console.log(`[gofit-pay] PRODUCTION PILOT ENABLED: contractor=${contractorId} notes="${notes}"`);
+
+  return json({
+    success: true,
+    data: {
+      production_enabled:      true,
+      allowed_for_real_charges: true,
+      pilot_enabled_at:        now,
+      notes,
+      message:                 "Piloto de produção habilitado. Cobranças reais agora autorizadas.",
+    },
+  });
+}
+
+// ─── Fase 15: disable_production_pilot (rollback) ────────────────────────────
+
+async function handleDisableProductionPilot(
+  body: Record<string, unknown>,
+  contractorId: string
+): Promise<Response> {
+  const reason = typeof body.reason === "string" && body.reason.trim()
+    ? body.reason.trim()
+    : "Rollback operacional — Fase 15";
+
+  const db  = serviceClient();
+  const now = new Date().toISOString();
+
+  const { error } = await db.from("gofit_pay_settings")
+    .update({
+      allowed_for_real_charges: false,
+      rollback_at:              now,
+      rollback_notes:           reason,
+    })
+    .eq("contractor_id", contractorId);
+
+  if (error) {
+    console.error("[gofit-pay] disable_production_pilot DB error:", error.message);
+    return err("Erro ao executar rollback.", "DB_ERROR", 500);
+  }
+
+  console.log(`[gofit-pay] PRODUCTION PILOT ROLLED BACK: contractor=${contractorId} reason="${reason}"`);
+
+  return json({
+    success: true,
+    data: {
+      allowed_for_real_charges: false,
+      rolled_back_at:           now,
+      reason,
+      message: "Rollback executado. Novas cobranças reais bloqueadas. Histórico preservado.",
+    },
+  });
+}
+
 // ─── Fase 13: get_reports ─────────────────────────────────────────────────────
 
 async function handleGetReports(
@@ -2417,6 +2521,12 @@ serve(async (req) => {
 
       case "validate_production_readiness":
         return await handleValidateProductionReadiness(identity.contractorId, secrets);
+
+      case "enable_production_pilot":
+        return await handleEnableProductionPilot(body, identity.contractorId);
+
+      case "disable_production_pilot":
+        return await handleDisableProductionPilot(body, identity.contractorId);
 
       case "cancel_charge":
       case "cancel-charge":
