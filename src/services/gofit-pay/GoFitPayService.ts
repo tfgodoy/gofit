@@ -919,6 +919,22 @@ export const GoFitPayService = {
     return data as EdgeFunctionResponse<{ registration_url: string; expires_at: string }>;
   },
 
+  /**
+   * FASE 15.3 — Cobra uma receivable no cartão principal tokenizado do aluno.
+   * O token é descriptografado apenas server-side, no momento da cobrança.
+   * A baixa financeira segue via webhook — esta chamada nunca marca como pago.
+   */
+  async chargeReceivableWithDefaultCard(receivableId: string): Promise<EdgeFunctionResponse<TokenizedChargeResult>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "charge_receivable_with_default_card", receivable_id: receivableId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] chargeReceivableWithDefaultCard error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<TokenizedChargeResult>;
+  },
+
   /* Ações PÚBLICAS — usadas pela página /aluno/cartao/:token (sem login) */
 
   async validateCardRegistrationLink(token: string): Promise<EdgeFunctionResponse<CardLinkValidation>> {
@@ -968,6 +984,21 @@ export interface TokenizeCardInput {
   ccv:          string;  // SENSÍVEL — só no body da invocação
   card_alias?:  string;
   is_default?:  boolean;
+}
+
+export interface TokenizedChargeResult {
+  already_existed:       boolean;
+  charge_id:             string | null;
+  provider_charge_id:    string | null;
+  billing_type?:         string;
+  charge_mode?:          string | null;
+  status:                string | null;
+  amount?:               number;
+  due_date?:             string;
+  card_brand?:           string | null;
+  card_last4?:           string | null;
+  provider_environment?: string;
+  message?:              string;
 }
 
 export interface CardLinkValidation {

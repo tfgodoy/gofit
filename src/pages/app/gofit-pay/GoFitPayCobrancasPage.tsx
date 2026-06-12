@@ -23,6 +23,7 @@ import { supabase }       from "@/integrations/supabase/client";
 import { useAuth }        from "@/contexts/AuthContext";
 import { GoFitPayService } from "@/services/gofit-pay";
 import type { CreateChargePayload, PaymentCharge, WebhookEvent } from "@/services/gofit-pay/types";
+import type { StudentCardMasked, TokenizedChargeResult } from "@/services/gofit-pay/GoFitPayService";
 import GoFitPayFeesModal  from "./GoFitPayFeesModal";
 import { GoFitPayEnvironmentBadge } from "@/components/gofit-pay/GoFitPayEnvironmentBadge";
 
@@ -712,10 +713,28 @@ function EmitirCobrancaModal({
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRcv, setSelectedRcv] = useState<Receivable | null>(null);
-  const [billingType, setBillingType] = useState<"PIX" | "BOLETO" | "CREDIT_CARD" | null>(null);
+  const [billingType, setBillingType] = useState<"PIX" | "BOLETO" | "CREDIT_CARD" | "TOKENIZED_CARD" | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chargeResult, setChargeResult] = useState<ChargeResult | null>(null);
+
+  // Fase 15.3 — cartão principal tokenizado do aluno selecionado
+  const [defaultCard, setDefaultCard] = useState<StudentCardMasked | null>(null);
+  const [confirmTokenCharge, setConfirmTokenCharge] = useState(false);
+  const [tokenChargeDone, setTokenChargeDone] = useState<TokenizedChargeResult | null>(null);
+
+  useEffect(() => {
+    setDefaultCard(null);
+    setConfirmTokenCharge(false);
+    if (billingType === "TOKENIZED_CARD") setBillingType(null);
+    if (!selectedRcv?.student_id) return;
+    GoFitPayService.listStudentCards(selectedRcv.student_id).then(res => {
+      if (res.success && res.data) {
+        setDefaultCard(res.data.cards.find(c => c.is_default && c.status === "active") ?? null);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRcv?.id]);
 
   useEffect(() => {
     async function load() {
@@ -742,8 +761,20 @@ function EmitirCobrancaModal({
     load();
   }, [user?.contractorId]);
 
+  async function handleTokenizedCharge() {
+    if (!selectedRcv) return;
+    setGenerating(true);
+    setError(null);
+    const res = await GoFitPayService.chargeReceivableWithDefaultCard(selectedRcv.id);
+    setGenerating(false);
+    setConfirmTokenCharge(false);
+    if (!res.success || !res.data) { setError(res.error ?? "Erro ao cobrar no cartão."); return; }
+    setTokenChargeDone(res.data);
+  }
+
   async function handleGenerate() {
     if (!selectedRcv || !billingType) return;
+    if (billingType === "TOKENIZED_CARD") { setConfirmTokenCharge(true); return; }
     setGenerating(true);
     setError(null);
     const payload: CreateChargePayload = {
@@ -764,6 +795,85 @@ function EmitirCobrancaModal({
     return (
       <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
         <ChargeResultModal result={chargeResult} onClose={() => { onClose(); onCharged(); }} />
+      </div>
+    );
+  }
+
+  // Fase 15.3 — sucesso da cobrança no cartão tokenizado
+  if (tokenChargeDone) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 text-center space-y-4">
+          <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto" />
+          <p className="text-base font-black text-gray-900">
+            {tokenChargeDone.already_existed
+              ? "Esta parcela já possuía cobrança ativa."
+              : "Cobrança enviada ao Asaas com sucesso."}
+          </p>
+          {!tokenChargeDone.already_existed && (
+            <p className="text-sm text-gray-500">
+              {tokenChargeDone.card_brand} **** {tokenChargeDone.card_last4} · {fmtCurrency(tokenChargeDone.amount ?? 0)}
+            </p>
+          )}
+          <p className="text-xs text-gray-400">
+            Status: <strong>{tokenChargeDone.status ?? "—"}</strong>
+            {tokenChargeDone.provider_environment === "sandbox" && " · Ambiente: SANDBOX"}
+          </p>
+          <p className="text-[11px] text-gray-400">
+            A baixa da parcela acontece automaticamente após a confirmação do pagamento (webhook).
+          </p>
+          <button
+            onClick={() => { onClose(); onCharged(); }}
+            className="w-full px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fase 15.3 — confirmação antes de cobrar no cartão cadastrado
+  if (confirmTokenCharge && selectedRcv && defaultCard) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+              <CreditCard className="w-5 h-5 text-purple-600" />
+            </div>
+            <p className="text-base font-black text-gray-900">Cobrar no cartão cadastrado</p>
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Você está prestes a cobrar <strong>{fmtCurrency(selectedRcv.valor)}</strong> no
+            cartão principal do aluno:
+          </p>
+          <div className="bg-gray-50 rounded-xl px-4 py-3">
+            <p className="text-sm font-bold text-gray-800">
+              {defaultCard.card_brand} **** {defaultCard.card_last4}
+            </p>
+            {defaultCard.card_alias && <p className="text-xs text-gray-400">{defaultCard.card_alias}</p>}
+          </div>
+          <p className="text-xs font-bold text-orange-600 uppercase">
+            Ambiente: {defaultCard.provider_environment === "sandbox" ? "SANDBOX" : "PRODUÇÃO"}
+          </p>
+          <p className="text-sm text-gray-600">Deseja continuar?</p>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setConfirmTokenCharge(false)}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-600"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleTokenizedCharge}
+              disabled={generating}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold disabled:opacity-50 transition-colors"
+            >
+              {generating ? <><Loader2 className="w-4 h-4 animate-spin inline mr-1" />Cobrando...</> : "Confirmar cobrança"}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -836,6 +946,21 @@ function EmitirCobrancaModal({
                 );
               })}
             </div>
+
+            {/* Fase 15.3 — cobrar direto no cartão principal tokenizado */}
+            {defaultCard && (
+              <button
+                onClick={() => setBillingType("TOKENIZED_CARD")}
+                className={`mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                  billingType === "TOKENIZED_CARD"
+                    ? "border-purple-500 bg-purple-50 text-purple-700"
+                    : "border-dashed border-purple-300 text-purple-600 hover:border-purple-400"
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                Cobrar no cartão cadastrado ({defaultCard.card_brand} **** {defaultCard.card_last4})
+              </button>
+            )}
           </div>
         )}
 

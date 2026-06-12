@@ -2995,6 +2995,214 @@ async function handleTokenizeCardFromLink(
   return json({ success: true, data: masked });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Fase 15.3 — Cobrança de receivable usando cartão principal tokenizado
+//
+// REGRAS:
+//   - creditCardToken é descriptografado SOMENTE aqui, no momento da cobrança,
+//     usado na chamada ao Asaas e descartado (escopo de função);
+//   - nunca logado, nunca retornado;
+//   - idempotência: receivable com asaas_payment_id ou payment_charge ativa
+//     não gera nova cobrança (retorna already_existed);
+//   - a baixa financeira segue exclusivamente via webhook/sync — esta action
+//     NUNCA marca a receivable como paga.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CHARGEABLE_RECEIVABLE_STATUSES = ["pendente", "atrasado", "aguardando"];
+
+async function handleChargeReceivableWithDefaultCard(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation,
+  req: Request
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const receivableId = typeof body.receivable_id === "string" ? body.receivable_id : null;
+  if (!receivableId) return err("receivable_id obrigatório.", "MISSING_RECEIVABLE_ID");
+
+  const db = serviceClient();
+
+  // 1. Receivable do contractor logado (contractor_id NUNCA vem do body)
+  const { data: receivable } = await db.from("receivables")
+    .select("id, contractor_id, student_id, student_contract_id, valor, vencimento, descricao, status, asaas_payment_id")
+    .eq("id", receivableId).eq("contractor_id", contractorId).maybeSingle();
+  if (!receivable) return err("Conta a receber não encontrada ou não pertence a esta empresa.", "RECEIVABLE_NOT_FOUND", 404);
+
+  if (!CHARGEABLE_RECEIVABLE_STATUSES.includes(receivable.status ?? "")) {
+    return err(
+      `Receivable com status '${receivable.status}' não pode ser cobrada. Permitido: ${CHARGEABLE_RECEIVABLE_STATUSES.join(", ")}.`,
+      "INVALID_RECEIVABLE_STATUS", 422
+    );
+  }
+
+  // 2. Idempotência — já tem cobrança ativa?
+  const { data: existingCharge } = await db.from("payment_charges")
+    .select("id, provider_charge_id, billing_type, status, charge_mode, card_last4, card_brand")
+    .eq("receivable_id", receivableId).eq("provider", "asaas")
+    .is("cancelled_at", null)
+    .not("status", "in", "(CANCELLED,REFUNDED)")
+    .maybeSingle();
+  if (existingCharge || receivable.asaas_payment_id) {
+    return json({
+      success: true,
+      data: {
+        already_existed: true,
+        charge_id: existingCharge?.id ?? null,
+        provider_charge_id: existingCharge?.provider_charge_id ?? receivable.asaas_payment_id,
+        status: existingCharge?.status ?? null,
+        charge_mode: existingCharge?.charge_mode ?? null,
+        message: "Esta parcela já possui cobrança ativa no gateway.",
+      },
+    });
+  }
+
+  const amount  = Number(receivable.valor ?? 0);
+  const dueDate = String(receivable.vencimento ?? "").substring(0, 10);
+  if (!amount || amount <= 0) return err("Valor da receivable inválido.", "INVALID_AMOUNT", 422);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return err("Vencimento da receivable inválido.", "INVALID_DUE_DATE", 422);
+
+  const studentId = receivable.student_id;
+  if (!studentId) return err("Receivable sem aluno vinculado.", "MISSING_STUDENT_ID", 422);
+
+  // 3. Ambiente e conta ativa
+  const { env: chargeEnv, productionEnabled, allowedRealCharges } = await resolveEnvironment(db, contractorId);
+  if (chargeEnv === "production" && (!productionEnabled || !allowedRealCharges)) {
+    return err("Cobranças em produção não autorizadas para esta empresa.", "PRODUCTION_NOT_ALLOWED", 403);
+  }
+
+  // 4. Cartão principal ativo do aluno no ambiente atual
+  const { data: card } = await db.from("gofit_pay_student_cards")
+    .select("id, credit_card_token_encrypted, card_brand, card_last4, provider_customer_id")
+    .eq("contractor_id", contractorId).eq("student_id", studentId)
+    .eq("provider_environment", chargeEnv)
+    .eq("is_default", true).eq("status", "active").is("deleted_at", null)
+    .maybeSingle();
+  if (!card) {
+    return err("Aluno não possui cartão principal cadastrado. Cadastre em Mais Ações → Cartões.", "NO_DEFAULT_CARD", 422);
+  }
+
+  let subAccInfo: { account_id: string; provider_api_key_encrypted: string; provider_account_id: string };
+  try {
+    subAccInfo = await assertGoFitPayActive(db, contractorId, chargeEnv);
+  } catch (e) {
+    if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+    throw e;
+  }
+
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch {
+    return err("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  // 5. Customer Asaas (reusa o vinculado ao cartão; fallback cria/busca)
+  let providerCustomerId = card.provider_customer_id as string;
+  if (!providerCustomerId) {
+    try {
+      const ensured = await ensureProviderCustomer(db, contractorId, studentId, subAccountApiKey);
+      providerCustomerId = ensured.providerCustomerId;
+    } catch (e) {
+      if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+      throw e;
+    }
+  }
+
+  // 6. Token descriptografado APENAS aqui — usado e descartado
+  let creditCardToken: string;
+  try {
+    creditCardToken = await decryptSubAccountKey(card.credit_card_token_encrypted);
+  } catch {
+    return err("Falha ao acessar cartão cadastrado. Cadastre o cartão novamente.", "CARD_DECRYPT_ERROR", 503);
+  }
+
+  const externalRef = `gofit:rcv:${receivableId}`;
+  let asaasPayment: AsaasPayment;
+  try {
+    asaasPayment = await AsaasService.createCreditCardPaymentWithToken(subAccountApiKey, {
+      customer: providerCustomerId,
+      amount,
+      dueDate,
+      creditCardToken,
+      remoteIp: clientIp(req),
+      description: receivable.descricao
+        ? String(receivable.descricao).substring(0, 200)
+        : `Mensalidade GoFit #${receivableId.substring(0, 8)}`,
+      externalReference: externalRef,
+    });
+  } catch (e) {
+    if (e instanceof AsaasApiError) {
+      const { message } = sanitizeError(e);
+      console.error(`[gofit-pay] token charge HTTP ${e.httpStatus} code=${e.code}`);
+      return err(message, "ASAAS_TOKEN_CHARGE_ERROR", 502);
+    }
+    throw e;
+  }
+
+  // 7. Persiste payment_charge (modo tokenized_card)
+  const now = new Date().toISOString();
+  const { data: savedCharge, error: chargeErr } = await db.from("payment_charges").insert({
+    contractor_id: contractorId, student_id: studentId,
+    student_contract_id: receivable.student_contract_id ?? null,
+    receivable_id: receivableId, provider: "asaas",
+    provider_charge_id: asaasPayment.id, billing_type: "CREDIT_CARD",
+    amount, value: amount, due_date: dueDate, status: asaasPayment.status,
+    invoice_url: asaasPayment.invoiceUrl ?? null,
+    payment_url: asaasPayment.invoiceUrl ?? null,
+    external_reference: externalRef,
+    provider_environment: chargeEnv,
+    raw_response_json: sanitizePaymentForStorage(asaasPayment),
+    student_card_id: card.id,
+    card_last4: card.card_last4 ?? null,
+    card_brand: card.card_brand ?? null,
+    charge_mode: "tokenized_card",
+    created_at: now, updated_at: now,
+  }).select("id").single();
+
+  if (chargeErr) {
+    if (chargeErr.code === "23505") {
+      const { data: recovered } = await db.from("payment_charges")
+        .select("id, provider_charge_id, status")
+        .eq("receivable_id", receivableId).eq("provider", "asaas").maybeSingle();
+      return json({ success: true, data: { already_existed: true, charge_id: recovered?.id ?? null, provider_charge_id: recovered?.provider_charge_id ?? asaasPayment.id, status: recovered?.status ?? asaasPayment.status, message: "Cobrança já existente (concorrência)." } });
+    }
+    console.error(`[gofit-pay] token charge save error: code=${chargeErr.code}`);
+    return err("Falha ao salvar cobrança. Cobrança foi criada no Asaas.", "CHARGE_SAVE_ERROR", 500);
+  }
+
+  // 8. Atualiza APENAS gateway fields — baixa fica para o webhook/sync
+  await db.from("receivables").update({
+    asaas_payment_id: asaasPayment.id, asaas_customer_id: providerCustomerId,
+    asaas_payment_url: asaasPayment.invoiceUrl ?? null,
+    gateway_status: asaasPayment.status, gateway_provider: "asaas",
+  }).eq("id", receivableId);
+
+  console.log(
+    `[gofit-pay] TOKENIZED CHARGE: contractor=${contractorId} receivable=${receivableId} ` +
+    `charge=${asaasPayment.id} status=${asaasPayment.status} env=${chargeEnv} ` +
+    `card=${card.card_brand ?? "?"}-${card.card_last4 ?? "?"}`
+  );
+
+  return json({
+    success: true,
+    data: {
+      already_existed: false,
+      charge_id: savedCharge.id,
+      provider_charge_id: asaasPayment.id,
+      billing_type: "CREDIT_CARD",
+      charge_mode: "tokenized_card",
+      status: asaasPayment.status,
+      amount,
+      due_date: dueDate,
+      card_brand: card.card_brand ?? null,
+      card_last4: card.card_last4 ?? null,
+      provider_environment: chargeEnv,
+      message: `Cobrança enviada ao cartão ${card.card_brand ?? ""} **** ${card.card_last4 ?? ""}.`,
+    },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -3139,6 +3347,9 @@ serve(async (req) => {
 
       case "create_card_registration_link":
         return await handleCreateCardRegistrationLink(body, identity.contractorId, identity.userId);
+
+      case "charge_receivable_with_default_card":
+        return await handleChargeReceivableWithDefaultCard(body, identity.contractorId, secrets, req);
 
       case "cancel_charge":
       case "cancel-charge":
