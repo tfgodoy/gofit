@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import {
   ArrowLeft, RefreshCcw, Loader2, AlertTriangle, CreditCard,
   QrCode, FileText, Copy, ExternalLink, ChevronRight,

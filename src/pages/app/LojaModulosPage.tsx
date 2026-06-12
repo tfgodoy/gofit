@@ -164,7 +164,7 @@ export default function LojaModulosPage() {
     if (!user?.contractorId) return;
     setLoading(true);
 
-    const [{ data: mods }, { data: comps }] = await Promise.all([
+    const [{ data: mods, error: modsErr }, { data: comps, error: compsErr }] = await Promise.all([
       supabase
         .from("modules")
         .select("id, slug, name, description, route, icon, status, sort_order")
@@ -175,6 +175,9 @@ export default function LojaModulosPage() {
         .select("id, module_id, status, activated_at, config_json")
         .eq("contractor_id", user!.contractorId),
     ]);
+
+    if (modsErr)  console.error("[loja] erro ao carregar modules:", modsErr.message);
+    if (compsErr) console.error("[loja] erro ao carregar company_modules:", compsErr.message);
 
     setModules((mods ?? []) as Module[]);
     setCompanyModules((comps ?? []) as CompanyModule[]);
@@ -230,9 +233,24 @@ export default function LojaModulosPage() {
   /* ── Ativar módulo: cria ou atualiza company_modules ── */
   async function activateModule(mod: Module) {
     if (!user?.contractorId) return;
+
+    // RLS de company_modules exige sessão Supabase Auth (auth.uid())
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error("Sessão expirada. Saia e entre novamente para ativar módulos.");
+      return;
+    }
+
     setActivating(mod.id);
 
     const cm = getCompanyModule(mod.id);
+
+    // Já ativo — nada a inserir, apenas sincroniza a UI
+    if (cm?.status === "active") {
+      setActivating(null);
+      await loadData();
+      return;
+    }
 
     if (cm) {
       // Já existe — atualizar status
@@ -243,26 +261,30 @@ export default function LojaModulosPage() {
           activated_at: new Date().toISOString(),
           updated_at:   new Date().toISOString(),
         })
-        .eq("id", cm.id);
+        .eq("id", cm.id)
+        .eq("contractor_id", user!.contractorId);
 
       if (error) {
+        console.error("[loja] erro ao reativar módulo:", error.message);
         toast.error("Erro ao reativar módulo");
         setActivating(null);
         return;
       }
     } else {
-      // Não existe — criar
+      // Não existe (ou o SELECT não enxergou) — upsert idempotente evita
+      // violar UNIQUE(contractor_id, module_id) se o registro já existir
       const { error } = await supabase
         .from("company_modules")
-        .insert({
+        .upsert({
           contractor_id: user!.contractorId,
           module_id:     mod.id,
           status:        "pending",
           activated_at:  new Date().toISOString(),
           config_json:   {},
-        });
+        }, { onConflict: "contractor_id,module_id" });
 
       if (error) {
+        console.error("[loja] erro ao ativar módulo:", error.message);
         toast.error("Erro ao ativar módulo");
         setActivating(null);
         return;
@@ -339,6 +361,9 @@ export default function LojaModulosPage() {
                   const cm            = getCompanyModule(mod.id);
                   const isGoFitPay    = mod.slug === "gofit_pay";
                   const isLoading     = activating === mod.id;
+                  const btnLabel      = isGoFitPay && companyStatus === "active"
+                    ? "Acessar GoFit Pay"
+                    : statusCfg.btnLabel;
 
                   return (
                     <div
@@ -400,7 +425,7 @@ export default function LojaModulosPage() {
                           ) : (
                             <StatusIcon className="w-4 h-4" />
                           )}
-                          {isLoading ? "Ativando..." : statusCfg.btnLabel}
+                          {isLoading ? "Ativando..." : btnLabel}
                           {statusCfg.canClick && !isLoading && (
                             <ChevronRight className="w-4 h-4 ml-auto" />
                           )}

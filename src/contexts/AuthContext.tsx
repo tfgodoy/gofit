@@ -81,10 +81,10 @@ async function loadStaffPermissions(contractorId: string, role: string): Promise
     const perms: Record<string, ModulePerm> = {};
     for (const row of data) {
       perms[row.module_name] = {
-        can_view:   row.can_view,
-        can_create: row.can_create,
-        can_edit:   row.can_edit,
-        can_delete: row.can_delete,
+        can_view:   row.can_view   ?? false,
+        can_create: row.can_create ?? false,
+        can_edit:   row.can_edit   ?? false,
+        can_delete: row.can_delete ?? false,
       };
     }
     return perms;
@@ -156,6 +156,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData) return { error: "Falha na autenticação. Contate o suporte." };
       if (authData.password_hash !== btoa(password)) return { error: "Senha incorreta." };
 
+      // Sessão Supabase Auth — necessária para RLS por auth.uid() (ex.: company_modules)
+      // e para as Edge Functions que resolvem o contractor pelo JWT.
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: contractor.email,
+        password,
+      });
+      if (authErr) {
+        console.warn("[auth] Sessão Supabase Auth não estabelecida:", authErr.message);
+      }
+
       const contractorUser: AuthUser = {
         id:             contractor.id,
         name:           contractor.razao_social,
@@ -182,6 +192,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!staffMember.active)  return { error: "Conta inativa. Contate o administrador." };
     if (!staffMember.password_hash) return { error: "Senha não definida. Solicite ao administrador." };
     if (staffMember.password_hash !== btoa(password)) return { error: "Senha incorreta." };
+
+    // Sessão Supabase Auth do colaborador (se provisionado em auth.users)
+    const { error: staffAuthErr } = await supabase.auth.signInWithPassword({
+      email: staffMember.email,
+      password,
+    });
+    if (staffAuthErr) {
+      console.warn("[auth] Sessão Supabase Auth não estabelecida (staff):", staffAuthErr.message);
+    }
 
     // Busca o nome da academia
     const { data: contractorData } = await supabase
@@ -212,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     setUser(null);
     localStorage.removeItem("fitcoresys_user");
+    supabase.auth.signOut();
   }
 
   // Helpers de permissão — contractor/owner sempre tem tudo

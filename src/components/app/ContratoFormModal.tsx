@@ -705,19 +705,20 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
                   >
                     <Plus className="w-4 h-4" /> Adicionar modalidade
                   </button>
-                  <div className=\"flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl mt-4\">
-                    <div className=\"flex-1\">
-                      <span className=\"text-sm font-medium text-gray-800\">Contabilizar sessões de forma conjunta</span>
-                      <p className=\"text-xs text-gray-500 mt-0.5\">Ao ativar, todas as aulas realizadas contam no mesmo saldo, independente da modalidade.</p>
+                  <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl mt-4">
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-800">Contabilizar sessões de forma conjunta</span>
+                      <p className="text-xs text-gray-500 mt-0.5">Ao ativar, todas as aulas realizadas contam no mesmo saldo, independente da modalidade.</p>
                     </div>
                     <button
-                      type=\"button\"
+                      type="button"
                       onClick={() => setForm(f => ({ ...f, contabilizar_sessoes_conjunto: !f.contabilizar_sessoes_conjunto }))}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ml-4 ${form.contabilizar_sessoes_conjunto ? \"bg-primary\" : \"bg-gray-200\"}`}
+                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ml-4 ${form.contabilizar_sessoes_conjunto ? "bg-primary" : "bg-gray-200"}`}
                     >
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.contabilizar_sessoes_conjunto ? \"translate-x-5\" : \"\"}`} />
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.contabilizar_sessoes_conjunto ? "translate-x-5" : ""}`} />
                     </button>
-                  </div>                </>
+                  </div>
+                </>
               )}
             </div>
           )}
