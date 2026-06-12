@@ -42,6 +42,7 @@ import {
   mapAsaasAccountStatus,
   toOnboardingStatus,
   CreateSubAccountParams,
+  TokenizeCreditCardParams,
 } from "./_asaas.ts";
 import {
   processWebhookEvent,
@@ -2532,6 +2533,468 @@ async function handleGetReports(
 
 // ─── Main router ──────────────────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Fase 15.2 — Carteira de cartões / tokenização
+//
+// REGRAS:
+//   - número do cartão e CVV existem APENAS no request — nunca em log, DB,
+//     response ou erro;
+//   - creditCardToken é criptografado (AES-256-GCM) antes de persistir;
+//   - somente dados mascarados saem nas responses (brand, last4, alias);
+//   - links públicos: token aleatório forte, só o SHA-256 vai ao banco.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://fitcoresys.com.br";
+
+/** IP do cliente a partir de headers confiáveis do gateway Supabase.
+ *  Limitação documentada: atrás do proxy, o primeiro hop de x-forwarded-for
+ *  é o melhor IP disponível; não inventamos IP. */
+function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0].trim();
+    if (first) return first;
+  }
+  return req.headers.get("cf-connecting-ip") ?? "0.0.0.0";
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function maskedCard(row: Record<string, unknown>) {
+  return {
+    card_id:              row.id,
+    card_brand:           row.card_brand ?? null,
+    card_last4:           row.card_last4 ?? null,
+    card_alias:           row.card_alias ?? null,
+    card_holder_name:     row.card_holder_name ?? null,
+    expiry_month:         row.expiry_month ?? null,
+    expiry_year:          row.expiry_year ?? null,
+    is_default:           row.is_default === true,
+    status:               row.status,
+    provider_environment: row.provider_environment,
+    created_at:           row.created_at,
+  };
+}
+
+/** Garante payment_customer + customer Asaas para o aluno (reuso do padrão Fase 6). */
+async function ensureProviderCustomer(
+  db: ReturnType<typeof serviceClient>,
+  contractorId: string,
+  studentId: string,
+  subAccountApiKey: string
+): Promise<{ paymentCustomerId: string | null; providerCustomerId: string; student: Record<string, unknown> }> {
+  const { data: student } = await db.from("students").select("id, nome_completo, cpf, email, telefone, cep")
+    .eq("id", studentId).eq("contractor_id", contractorId).maybeSingle();
+  if (!student) {
+    throw new GoFitPayBusinessError("Aluno não encontrado ou não pertence a esta empresa.", "STUDENT_NOT_FOUND", 404);
+  }
+
+  const { data: existingCust } = await db.from("payment_customers")
+    .select("id, provider_customer_id")
+    .eq("contractor_id", contractorId).eq("student_id", studentId).eq("provider", "asaas").maybeSingle();
+  if (existingCust?.provider_customer_id) {
+    return { paymentCustomerId: existingCust.id, providerCustomerId: existingCust.provider_customer_id, student };
+  }
+
+  const asaasCustomer = await AsaasService.upsertCustomer(subAccountApiKey, {
+    name: String(student.nome_completo), cpfCnpj: student.cpf ?? undefined,
+    email: student.email ?? undefined, phone: student.telefone ?? undefined,
+    externalReference: `gofit:stu:${studentId}`,
+  });
+
+  const nowCust = new Date().toISOString();
+  const { data: saved, error: insErr } = await db.from("payment_customers").insert({
+    contractor_id: contractorId, student_id: studentId, client_id: studentId,
+    provider: "asaas", provider_customer_id: asaasCustomer.id,
+    name: String(student.nome_completo), email: student.email ?? null,
+    cpf_cnpj: student.cpf ?? null, phone: student.telefone ?? null,
+    synced_at: nowCust, created_at: nowCust, updated_at: nowCust,
+  }).select("id").single();
+
+  if (insErr && insErr.code !== "23505") {
+    console.error(`[gofit-pay] payment_customers insert warn: ${insErr.code}`);
+  }
+  return { paymentCustomerId: saved?.id ?? null, providerCustomerId: asaasCustomer.id, student };
+}
+
+interface CardFormInput {
+  card_number:  string;
+  holder_name:  string;
+  expiry_month: string;
+  expiry_year:  string;
+  ccv:          string;
+  card_alias:   string | null;
+  is_default:   boolean;
+  holder_info:  Record<string, unknown> | null;
+}
+
+/** Extrai e valida os campos do cartão do body. Os valores sensíveis ficam
+ *  apenas no objeto retornado — o chamador nunca os loga nem persiste. */
+function parseCardInput(body: Record<string, unknown>): CardFormInput | { error: string; code: string } {
+  const cardNumber = typeof body.card_number === "string" ? body.card_number.replace(/\D/g, "") : "";
+  const holderName = typeof body.holder_name === "string" ? body.holder_name.trim() : "";
+  let expiryMonth  = typeof body.expiry_month === "string" ? body.expiry_month.trim() : "";
+  let expiryYear   = typeof body.expiry_year  === "string" ? body.expiry_year.trim()  : "";
+  const ccv        = typeof body.ccv === "string" ? body.ccv.replace(/\D/g, "") : "";
+
+  if (cardNumber.length < 13 || cardNumber.length > 19) return { error: "Número do cartão inválido.", code: "INVALID_CARD_NUMBER" };
+  if (!holderName)                                       return { error: "Nome do titular obrigatório.", code: "MISSING_HOLDER_NAME" };
+  if (!/^\d{1,2}$/.test(expiryMonth) || Number(expiryMonth) < 1 || Number(expiryMonth) > 12) {
+    return { error: "Mês de validade inválido.", code: "INVALID_EXPIRY" };
+  }
+  expiryMonth = expiryMonth.padStart(2, "0");
+  if (/^\d{2}$/.test(expiryYear)) expiryYear = `20${expiryYear}`;
+  if (!/^\d{4}$/.test(expiryYear)) return { error: "Ano de validade inválido.", code: "INVALID_EXPIRY" };
+  if (ccv.length < 3 || ccv.length > 4) return { error: "CVV inválido.", code: "INVALID_CCV" };
+
+  return {
+    card_number:  cardNumber,
+    holder_name:  holderName,
+    expiry_month: expiryMonth,
+    expiry_year:  expiryYear,
+    ccv,
+    card_alias:   typeof body.card_alias === "string" && body.card_alias.trim() ? body.card_alias.trim().substring(0, 60) : null,
+    is_default:   body.is_default === true,
+    holder_info:  body.holder_info && typeof body.holder_info === "object" ? body.holder_info as Record<string, unknown> : null,
+  };
+}
+
+/** Tokeniza no Asaas e persiste somente token criptografado + dados mascarados. */
+async function tokenizeAndSaveCard(
+  db: ReturnType<typeof serviceClient>,
+  contractorId: string,
+  studentId: string,
+  env: "sandbox" | "production",
+  card: CardFormInput,
+  remoteIp: string
+): Promise<Record<string, unknown>> {
+  const subAccInfo = await assertGoFitPayActive(db, contractorId, env);
+
+  let subAccountApiKey: string;
+  try {
+    subAccountApiKey = await decryptSubAccountKey(subAccInfo.provider_api_key_encrypted);
+  } catch {
+    throw new GoFitPayBusinessError("Falha de configuração interna. Reative o GoFit Pay.", "DECRYPT_ERROR", 503);
+  }
+
+  const { paymentCustomerId, providerCustomerId, student } =
+    await ensureProviderCustomer(db, contractorId, studentId, subAccountApiKey);
+
+  const cpfDigits   = String((card.holder_info?.cpfCnpj     as string) ?? (student.cpf      as string) ?? "").replace(/\D/g, "");
+  let   cepDigits   = String((card.holder_info?.postalCode  as string) ?? (student.cep      as string) ?? "").replace(/\D/g, "");
+  const phoneDigits = String((card.holder_info?.mobilePhone as string) ?? (student.telefone as string) ?? "").replace(/\D/g, "");
+  let   addrNumber  = String((card.holder_info?.addressNumber as string) ?? "").trim();
+  let   holderEmail = String((card.holder_info?.email as string) ?? (student.email as string) ?? "").trim();
+
+  // Asaas exige postalCode/addressNumber no holderInfo. Quando o aluno não tem
+  // endereço cadastrado, usa o endereço da academia como cobrança (fallback).
+  if (!cepDigits || !addrNumber || !holderEmail) {
+    const { data: ctr } = await db.from("contractors").select("cep, numero, email")
+      .eq("id", contractorId).maybeSingle();
+    if (!cepDigits)   cepDigits   = String(ctr?.cep    ?? "").replace(/\D/g, "");
+    if (!addrNumber)  addrNumber  = String(ctr?.numero ?? "").trim() || "S/N";
+    if (!holderEmail) holderEmail = String(ctr?.email  ?? "").trim();
+  }
+
+  const holderInfo: Record<string, unknown> = {
+    name:          card.holder_name,
+    email:         holderEmail || undefined,
+    cpfCnpj:       cpfDigits   !== "" ? cpfDigits   : undefined,
+    postalCode:    cepDigits   !== "" ? cepDigits   : undefined,
+    addressNumber: addrNumber  !== "" ? addrNumber  : undefined,
+    mobilePhone:   phoneDigits !== "" ? phoneDigits : undefined,
+  };
+
+  const tokenResult = await AsaasService.tokenizeCreditCard(subAccountApiKey, {
+    customer: providerCustomerId,
+    creditCard: {
+      holderName:  card.holder_name,
+      number:      card.card_number,
+      expiryMonth: card.expiry_month,
+      expiryYear:  card.expiry_year,
+      ccv:         card.ccv,
+    },
+    creditCardHolderInfo: holderInfo as TokenizeCreditCardParams["creditCardHolderInfo"],
+    remoteIp,
+  });
+
+  const encryptedToken = await encryptSubAccountKey(tokenResult.creditCardToken);
+  const last4 = (tokenResult.creditCardNumber ?? card.card_number.slice(-4)).slice(-4);
+  const now = new Date().toISOString();
+
+  if (card.is_default) {
+    await db.from("gofit_pay_student_cards")
+      .update({ is_default: false, updated_at: now })
+      .eq("contractor_id", contractorId).eq("student_id", studentId)
+      .eq("provider_environment", env).eq("is_default", true);
+  }
+
+  // Primeiro cartão ativo do aluno vira principal automaticamente
+  const { count: activeCount } = await db.from("gofit_pay_student_cards")
+    .select("id", { count: "exact", head: true })
+    .eq("contractor_id", contractorId).eq("student_id", studentId)
+    .eq("provider_environment", env).eq("status", "active").is("deleted_at", null);
+  const willBeDefault = card.is_default || (activeCount ?? 0) === 0;
+
+  const { data: savedCard, error: cardErr } = await db.from("gofit_pay_student_cards").insert({
+    contractor_id: contractorId,
+    student_id:    studentId,
+    payment_customer_id: paymentCustomerId,
+    provider: "asaas",
+    provider_environment: env,
+    provider_customer_id: providerCustomerId,
+    credit_card_token_encrypted: encryptedToken,
+    card_brand: tokenResult.creditCardBrand ?? null,
+    card_last4: last4,
+    card_holder_name: card.holder_name,
+    card_alias: card.card_alias,
+    expiry_month: card.expiry_month,
+    expiry_year:  card.expiry_year,
+    is_default: willBeDefault,
+    status: "active",
+    created_at: now, updated_at: now,
+  }).select("id, card_brand, card_last4, card_alias, card_holder_name, expiry_month, expiry_year, is_default, status, provider_environment, created_at").single();
+
+  if (cardErr || !savedCard) {
+    console.error(`[gofit-pay] student_cards insert error: ${cardErr?.code ?? "?"}`);
+    throw new GoFitPayBusinessError("Falha ao salvar cartão.", "CARD_SAVE_ERROR", 500);
+  }
+
+  console.log(
+    `[gofit-pay] CARD TOKENIZED: contractor=${contractorId} student=${studentId} ` +
+    `env=${env} brand=${savedCard.card_brand ?? "?"} last4=${savedCard.card_last4 ?? "?"} default=${willBeDefault}`
+  );
+
+  return maskedCard(savedCard as Record<string, unknown>);
+}
+
+// ─── Action: list_student_cards ──────────────────────────────────────────────
+
+async function handleListStudentCards(body: Record<string, unknown>, contractorId: string): Promise<Response> {
+  const studentId = typeof body.student_id === "string" ? body.student_id : null;
+  if (!studentId) return err("student_id obrigatório.", "MISSING_STUDENT_ID");
+
+  const db = serviceClient();
+  const { data: student } = await db.from("students").select("id")
+    .eq("id", studentId).eq("contractor_id", contractorId).maybeSingle();
+  if (!student) return err("Aluno não encontrado ou não pertence a esta empresa.", "STUDENT_NOT_FOUND", 404);
+
+  const { data: cards, error } = await db.from("gofit_pay_student_cards")
+    .select("id, card_brand, card_last4, card_alias, card_holder_name, expiry_month, expiry_year, is_default, status, provider_environment, created_at")
+    .eq("contractor_id", contractorId).eq("student_id", studentId)
+    .is("deleted_at", null)
+    .order("is_default", { ascending: false }).order("created_at", { ascending: false });
+
+  if (error) return err("Falha ao listar cartões.", "QUERY_ERROR", 500);
+  return json({ success: true, data: { cards: (cards ?? []).map(c => maskedCard(c as Record<string, unknown>)) } });
+}
+
+// ─── Action: tokenize_student_card (operador autenticado) ────────────────────
+
+async function handleTokenizeStudentCard(
+  body: Record<string, unknown>,
+  contractorId: string,
+  secrets: SecretsValidation,
+  req: Request
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const studentId = typeof body.student_id === "string" ? body.student_id : null;
+  if (!studentId) return err("student_id obrigatório.", "MISSING_STUDENT_ID");
+
+  const parsed = parseCardInput(body);
+  if ("error" in parsed) return err(parsed.error, parsed.code, 422);
+
+  const db = serviceClient();
+  const { env } = await resolveEnvironment(db, contractorId);
+  const remoteIp = typeof body.remote_ip === "string" && body.remote_ip ? body.remote_ip : clientIp(req);
+
+  const masked = await tokenizeAndSaveCard(db, contractorId, studentId, env, parsed, remoteIp);
+  return json({ success: true, data: masked });
+}
+
+// ─── Action: set_default_student_card ────────────────────────────────────────
+
+async function handleSetDefaultStudentCard(body: Record<string, unknown>, contractorId: string): Promise<Response> {
+  const cardId = typeof body.card_id === "string" ? body.card_id : null;
+  if (!cardId) return err("card_id obrigatório.", "MISSING_CARD_ID");
+
+  const db = serviceClient();
+  const { data: card } = await db.from("gofit_pay_student_cards")
+    .select("id, student_id, provider_environment, status")
+    .eq("id", cardId).eq("contractor_id", contractorId).is("deleted_at", null).maybeSingle();
+  if (!card) return err("Cartão não encontrado.", "CARD_NOT_FOUND", 404);
+  if (card.status !== "active") return err("Apenas cartão ativo pode ser principal.", "CARD_NOT_ACTIVE", 422);
+
+  const now = new Date().toISOString();
+  await db.from("gofit_pay_student_cards")
+    .update({ is_default: false, updated_at: now })
+    .eq("contractor_id", contractorId).eq("student_id", card.student_id)
+    .eq("provider_environment", card.provider_environment).eq("is_default", true);
+  const { error } = await db.from("gofit_pay_student_cards")
+    .update({ is_default: true, updated_at: now }).eq("id", cardId);
+  if (error) return err("Falha ao definir cartão principal.", "DB_ERROR", 500);
+
+  return json({ success: true, data: { card_id: cardId, is_default: true } });
+}
+
+// ─── Action: deactivate_student_card ─────────────────────────────────────────
+
+async function handleDeactivateStudentCard(body: Record<string, unknown>, contractorId: string): Promise<Response> {
+  const cardId = typeof body.card_id === "string" ? body.card_id : null;
+  if (!cardId) return err("card_id obrigatório.", "MISSING_CARD_ID");
+
+  const db = serviceClient();
+  const { data: card } = await db.from("gofit_pay_student_cards")
+    .select("id, student_id, provider_environment, is_default")
+    .eq("id", cardId).eq("contractor_id", contractorId).is("deleted_at", null).maybeSingle();
+  if (!card) return err("Cartão não encontrado.", "CARD_NOT_FOUND", 404);
+
+  const now = new Date().toISOString();
+  const { error } = await db.from("gofit_pay_student_cards")
+    .update({ status: "inactive", is_default: false, deleted_at: now, updated_at: now })
+    .eq("id", cardId);
+  if (error) return err("Falha ao remover cartão.", "DB_ERROR", 500);
+
+  // Se o removido era o principal, promove o cartão ativo mais recente
+  if (card.is_default) {
+    const { data: next } = await db.from("gofit_pay_student_cards")
+      .select("id")
+      .eq("contractor_id", contractorId).eq("student_id", card.student_id)
+      .eq("provider_environment", card.provider_environment)
+      .eq("status", "active").is("deleted_at", null)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (next) {
+      await db.from("gofit_pay_student_cards")
+        .update({ is_default: true, updated_at: now }).eq("id", next.id);
+    }
+  }
+
+  return json({ success: true, data: { card_id: cardId, status: "inactive" } });
+}
+
+// ─── Action: create_card_registration_link ───────────────────────────────────
+
+async function handleCreateCardRegistrationLink(
+  body: Record<string, unknown>,
+  contractorId: string,
+  userId: string
+): Promise<Response> {
+  const studentId = typeof body.student_id === "string" ? body.student_id : null;
+  if (!studentId) return err("student_id obrigatório.", "MISSING_STUDENT_ID");
+  const expiresInHours = typeof body.expires_in_hours === "number"
+    ? Math.min(Math.max(body.expires_in_hours, 1), 168) : 72;
+
+  const db = serviceClient();
+  const { data: student } = await db.from("students").select("id")
+    .eq("id", studentId).eq("contractor_id", contractorId).maybeSingle();
+  if (!student) return err("Aluno não encontrado ou não pertence a esta empresa.", "STUDENT_NOT_FOUND", 404);
+
+  const { env } = await resolveEnvironment(db, contractorId);
+
+  // Token forte: 32 bytes aleatórios em base64url — só o hash vai ao banco
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const token = btoa(String.fromCharCode(...raw)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const tokenHash = await sha256Hex(token);
+  const expiresAt = new Date(Date.now() + expiresInHours * 3600_000).toISOString();
+
+  const { error } = await db.from("gofit_pay_card_registration_links").insert({
+    contractor_id: contractorId, student_id: studentId,
+    token_hash: tokenHash, provider_environment: env,
+    expires_at: expiresAt, created_by: userId,
+  });
+  if (error) return err("Falha ao gerar link.", "DB_ERROR", 500);
+
+  return json({
+    success: true,
+    data: {
+      registration_url: `${PUBLIC_APP_URL}/aluno/cartao/${token}`,
+      expires_at: expiresAt,
+    },
+  });
+}
+
+// ─── Link público: validação compartilhada ───────────────────────────────────
+
+async function resolveRegistrationLink(
+  db: ReturnType<typeof serviceClient>,
+  token: string
+): Promise<{ ok: true; link: Record<string, unknown> } | { ok: false; reason: string }> {
+  if (!token || token.length < 20) return { ok: false, reason: "Token inválido." };
+  const tokenHash = await sha256Hex(token);
+  const { data: link } = await db.from("gofit_pay_card_registration_links")
+    .select("id, contractor_id, student_id, provider_environment, expires_at, used_at, revoked_at")
+    .eq("token_hash", tokenHash).maybeSingle();
+  if (!link)            return { ok: false, reason: "Link não encontrado." };
+  if (link.revoked_at)  return { ok: false, reason: "Link revogado." };
+  if (link.used_at)     return { ok: false, reason: "Link já utilizado." };
+  if (new Date(link.expires_at) < new Date()) return { ok: false, reason: "Link expirado." };
+  return { ok: true, link };
+}
+
+// ─── Action pública: validate_card_registration_link ─────────────────────────
+
+async function handleValidateCardRegistrationLink(body: Record<string, unknown>): Promise<Response> {
+  const token = typeof body.token === "string" ? body.token : "";
+  const db = serviceClient();
+  const res = await resolveRegistrationLink(db, token);
+  if (!res.ok) return json({ success: true, data: { valid: false, reason: res.reason } });
+
+  const { data: student } = await db.from("students").select("nome_completo")
+    .eq("id", res.link.student_id).maybeSingle();
+  const { data: contractor } = await db.from("contractors").select("nome_fantasia, razao_social")
+    .eq("id", res.link.contractor_id).maybeSingle();
+
+  // Nome parcial: primeiro nome + inicial do sobrenome
+  const partes = String(student?.nome_completo ?? "").trim().split(/\s+/);
+  const partial = partes.length > 1 ? `${partes[0]} ${partes[partes.length - 1][0]}.` : (partes[0] ?? "");
+
+  return json({
+    success: true,
+    data: {
+      valid: true,
+      student_name: partial,
+      company_name: contractor?.nome_fantasia ?? contractor?.razao_social ?? "",
+      expires_at: res.link.expires_at,
+    },
+  });
+}
+
+// ─── Action pública: tokenize_card_from_link ─────────────────────────────────
+
+async function handleTokenizeCardFromLink(
+  body: Record<string, unknown>,
+  secrets: SecretsValidation,
+  req: Request
+): Promise<Response> {
+  if (!secrets.valid) return err("Configuração incompleta.", "CONFIG_INCOMPLETE", 503);
+
+  const token = typeof body.token === "string" ? body.token : "";
+  const db = serviceClient();
+  const res = await resolveRegistrationLink(db, token);
+  if (!res.ok) return err(res.reason, "INVALID_REGISTRATION_LINK", 410);
+
+  const parsed = parseCardInput(body);
+  if ("error" in parsed) return err(parsed.error, parsed.code, 422);
+
+  // contractor/student vêm do LINK — nunca do body (não permite trocar pelo URL)
+  const contractorId = String(res.link.contractor_id);
+  const studentId    = String(res.link.student_id);
+  const env          = res.link.provider_environment as "sandbox" | "production";
+  const remoteIp     = clientIp(req);
+
+  const masked = await tokenizeAndSaveCard(db, contractorId, studentId, env, parsed, remoteIp);
+
+  // Uso único: marca o link como utilizado
+  await db.from("gofit_pay_card_registration_links")
+    .update({ used_at: new Date().toISOString() }).eq("id", res.link.id);
+
+  return json({ success: true, data: masked });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
@@ -2557,6 +3020,33 @@ serve(async (req) => {
   const action = typeof body?.action === "string" ? body.action : null;
 
   if (action === "ping") return json({ success: true, data: { pong: true, phase: 9 } });
+
+  // ── Ações PÚBLICAS do link de cadastro de cartão (sem login do painel) ──
+  // Segurança: o token do link identifica contractor+student; valida hash,
+  // expiração e revogação server-side. Nada além disso é exposto.
+  if (action === "validate_card_registration_link") {
+    try {
+      return await handleValidateCardRegistrationLink(body);
+    } catch (e) {
+      const { message, code } = sanitizeError(e);
+      return err(message, code, 500);
+    }
+  }
+  if (action === "tokenize_card_from_link") {
+    try {
+      return await handleTokenizeCardFromLink(body, validateSecrets(), req);
+    } catch (e) {
+      if (e instanceof GoFitPayBusinessError) return err(e.message, e.code, e.httpStatus);
+      if (e instanceof AsaasApiError) {
+        const { message } = sanitizeError(e);
+        console.error(`[gofit-pay] tokenize_from_link AsaasApiError HTTP ${e.httpStatus} code=${e.code}`);
+        return err(message, e.code, 502);
+      }
+      const { message, code } = sanitizeError(e);
+      console.error(`[gofit-pay] tokenize_from_link error: ${(e as Error)?.name ?? "Error"}`);
+      return err(message, code, 500);
+    }
+  }
 
   const identity = await resolveContractor(req);
   if (!identity) return err("Não autenticado ou empresa não encontrada.", "UNAUTHORIZED", 401);
@@ -2634,6 +3124,21 @@ serve(async (req) => {
 
       case "link_production_account":
         return await handleLinkProductionAccount(body, identity.contractorId);
+
+      case "list_student_cards":
+        return await handleListStudentCards(body, identity.contractorId);
+
+      case "tokenize_student_card":
+        return await handleTokenizeStudentCard(body, identity.contractorId, secrets, req);
+
+      case "set_default_student_card":
+        return await handleSetDefaultStudentCard(body, identity.contractorId);
+
+      case "deactivate_student_card":
+        return await handleDeactivateStudentCard(body, identity.contractorId);
+
+      case "create_card_registration_link":
+        return await handleCreateCardRegistrationLink(body, identity.contractorId, identity.userId);
 
       case "cancel_charge":
       case "cancel-charge":

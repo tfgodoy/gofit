@@ -9,8 +9,10 @@ import {
   Trash2, Copy, Eye, Mail, Link2, Printer,
   DollarSign, Coins, CalendarDays, ScrollText, Gift, FlaskConical, FileText, MessageSquare,
   UploadCloud, Receipt, Share2, Check, MessageCircle as WhatsAppIcon, ChevronLeft,
+  CreditCard,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
+import StudentCardsModal from "@/components/gofit-pay/StudentCardsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -4969,6 +4971,8 @@ export default function ClienteDashboardPage() {
   const [kpiPendente,         setKpiPendente]         = useState(0);
   const [kpiProxVenc,         setKpiProxVenc]         = useState<string | null>(null);
   const [bloqueado,           setBloqueado]           = useState(false);
+  const [maisAcoesOpen,       setMaisAcoesOpen]       = useState(false);
+  const [showCardsModal,      setShowCardsModal]      = useState(false);
 
   useEffect(() => {
     if (!id || !user?.contractorId) return;
@@ -5116,9 +5120,27 @@ export default function ClienteDashboardPage() {
                     <MessageCircle className="w-3.5 h-3.5" /> WHATSAPP
                   </button>
                 )}
-                <button className="inline-flex items-center gap-2 border border-gray-200 text-gray-600 text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  <MoreHorizontal className="w-3.5 h-3.5" /> MAIS AÇÕES
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setMaisAcoesOpen(o => !o)}
+                    className="inline-flex items-center gap-2 border border-gray-200 text-gray-600 text-sm font-semibold px-5 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" /> MAIS AÇÕES
+                  </button>
+                  {maisAcoesOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMaisAcoesOpen(false)} />
+                      <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[180px]">
+                        <button
+                          onClick={() => { setMaisAcoesOpen(false); setShowCardsModal(true); }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <CreditCard className="w-4 h-4 text-gray-400" /> Cartões
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -5471,6 +5493,16 @@ export default function ClienteDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Fase 15.2 — Carteira de cartões (Mais Ações → Cartões) */}
+      {showCardsModal && student && (
+        <StudentCardsModal
+          studentId={student.id}
+          studentName={student.nome_completo}
+          companyName={user?.contractorName ?? "sua academia"}
+          onClose={() => setShowCardsModal(false)}
+        />
+      )}
     </AppLayout>
   );
 }

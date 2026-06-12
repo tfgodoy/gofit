@@ -72,6 +72,7 @@ import ConvitePage                  from "@/pages/public/ConvitePage";
 import AnamnesePublicPage           from "@/pages/public/AnamnesePublicPage";
 import BookingPage                  from "@/pages/public/BookingPage";
 import PublicReciboPage             from "@/pages/public/PublicReciboPage";
+import CardRegistrationPage         from "@/pages/public/CardRegistrationPage";
 import ConfigAgendamentoPublicoPage from "@/pages/app/ConfigAgendamentoPublicoPage";
 import LojaModulosPage             from "@/pages/app/LojaModulosPage";
 import GoFitPayLandingPage        from "@/pages/app/gofit-pay/GoFitPayLandingPage";
@@ -123,6 +124,7 @@ export default function App() {
             <Route path="/anamnese/:token"  element={<AnamnesePublicPage />} />
             <Route path="/booking/:contractorId" element={<BookingPage />} />
             <Route path="/recibo/:token"    element={<PublicReciboPage />} />
+            <Route path="/aluno/cartao/:token" element={<CardRegistrationPage />} />
 
             {/* Owner */}
             <Route path="/owner/dashboard" element={

@@ -858,7 +858,125 @@ export const GoFitPayService = {
     return data as EdgeFunctionResponse<LinkProductionAccountResult>;
   },
 
+  /* ─── Fase 15.2: Carteira de cartões / tokenização ─────────────────
+   * SEGURANÇA: número do cartão e CVV passam direto para a Edge Function
+   * dentro do body da invocação — nunca são logados, persistidos ou
+   * mantidos em estado global. As responses contêm apenas dados mascarados.
+   */
+
+  async listStudentCards(studentId: string): Promise<EdgeFunctionResponse<{ cards: StudentCardMasked[] }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "list_student_cards", student_id: studentId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] listStudentCards error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ cards: StudentCardMasked[] }>;
+  },
+
+  async tokenizeStudentCard(params: TokenizeCardInput & { student_id: string }): Promise<EdgeFunctionResponse<StudentCardMasked>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "tokenize_student_card", ...params },
+    });
+    if (error) {
+      console.error("[GoFitPayService] tokenizeStudentCard error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<StudentCardMasked>;
+  },
+
+  async setDefaultStudentCard(cardId: string): Promise<EdgeFunctionResponse<{ card_id: string; is_default: boolean }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "set_default_student_card", card_id: cardId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] setDefaultStudentCard error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ card_id: string; is_default: boolean }>;
+  },
+
+  async deactivateStudentCard(cardId: string): Promise<EdgeFunctionResponse<{ card_id: string; status: string }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "deactivate_student_card", card_id: cardId },
+    });
+    if (error) {
+      console.error("[GoFitPayService] deactivateStudentCard error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ card_id: string; status: string }>;
+  },
+
+  async createCardRegistrationLink(studentId: string, expiresInHours?: number): Promise<EdgeFunctionResponse<{ registration_url: string; expires_at: string }>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "create_card_registration_link", student_id: studentId, expires_in_hours: expiresInHours },
+    });
+    if (error) {
+      console.error("[GoFitPayService] createCardRegistrationLink error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<{ registration_url: string; expires_at: string }>;
+  },
+
+  /* Ações PÚBLICAS — usadas pela página /aluno/cartao/:token (sem login) */
+
+  async validateCardRegistrationLink(token: string): Promise<EdgeFunctionResponse<CardLinkValidation>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "validate_card_registration_link", token },
+    });
+    if (error) {
+      console.error("[GoFitPayService] validateCardRegistrationLink error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<CardLinkValidation>;
+  },
+
+  async tokenizeCardFromLink(params: TokenizeCardInput & { token: string }): Promise<EdgeFunctionResponse<StudentCardMasked>> {
+    const { data, error } = await supabase.functions.invoke("gofit-pay-base", {
+      body: { action: "tokenize_card_from_link", ...params },
+    });
+    if (error) {
+      console.error("[GoFitPayService] tokenizeCardFromLink error:", error.message);
+      return { success: false, error: error.message };
+    }
+    return data as EdgeFunctionResponse<StudentCardMasked>;
+  },
+
 } as const;
+
+/* ─── Tipos Fase 15.2 ───────────────────────────────────────────── */
+export interface StudentCardMasked {
+  card_id:              string;
+  card_brand:           string | null;
+  card_last4:           string | null;
+  card_alias:           string | null;
+  card_holder_name:     string | null;
+  expiry_month:         string | null;
+  expiry_year:          string | null;
+  is_default:           boolean;
+  status:               string;
+  provider_environment: string;
+  created_at:           string;
+}
+
+export interface TokenizeCardInput {
+  card_number:  string;  // SENSÍVEL — só no body da invocação
+  holder_name:  string;
+  expiry_month: string;
+  expiry_year:  string;
+  ccv:          string;  // SENSÍVEL — só no body da invocação
+  card_alias?:  string;
+  is_default?:  boolean;
+}
+
+export interface CardLinkValidation {
+  valid:         boolean;
+  reason?:       string;
+  student_name?: string;
+  company_name?: string;
+  expires_at?:   string;
+}
 
 /* ─── Tipos Fase 12 ─────────────────────────────────────────────── */
 export interface OverdueItem {

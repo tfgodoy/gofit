@@ -370,6 +370,80 @@ export const AsaasService = {
     );
   },
 
+  /* ─── Tokenização de cartão (Fase 15.2) ───────────────────────────── */
+
+  /**
+   * FASE 15.2 — Tokeniza cartão de crédito no Asaas.
+   *
+   * SEGURANÇA: params.creditCard contém número e CVV — só existem em memória
+   * nesta chamada. NUNCA logar params, NUNCA retornar o payload bruto.
+   * O retorno traz creditCardToken + bandeira + last4; o token é criptografado
+   * pelo chamador antes de persistir.
+   */
+  async tokenizeCreditCard(
+    subAccountApiKey: string,
+    params: TokenizeCreditCardParams
+  ): Promise<AsaasCreditCardToken> {
+    const baseUrl = getBaseUrl();
+
+    const body: Record<string, unknown> = {
+      customer: params.customer,
+      creditCard: {
+        holderName:  params.creditCard.holderName,
+        number:      params.creditCard.number,
+        expiryMonth: params.creditCard.expiryMonth,
+        expiryYear:  params.creditCard.expiryYear,
+        ccv:         params.creditCard.ccv,
+      },
+      creditCardHolderInfo: params.creditCardHolderInfo,
+      remoteIp: params.remoteIp,
+    };
+
+    const result = await asaasRequest<AsaasCreditCardToken>(
+      subAccountApiKey, baseUrl, "POST", "/creditCard/tokenize", body
+    );
+
+    // Log apenas campos seguros — NUNCA logar number/ccv/token
+    console.log(
+      `[gofit-pay] Cartão tokenizado: brand=${result.creditCardBrand ?? "?"} ` +
+      `last4=${result.creditCardNumber ?? "?"}`
+    );
+
+    return result;
+  },
+
+  /**
+   * FASE 15.2 (preparação p/ 15.3) — Cria cobrança CREDIT_CARD usando
+   * creditCardToken já tokenizado (sem número/CVV).
+   */
+  async createCreditCardPaymentWithToken(
+    subAccountApiKey: string,
+    params: CreateTokenPaymentParams
+  ): Promise<AsaasPayment> {
+    const baseUrl = getBaseUrl();
+
+    const body: Record<string, unknown> = {
+      customer:        params.customer,
+      billingType:     "CREDIT_CARD",
+      value:           params.amount,
+      dueDate:         params.dueDate,
+      creditCardToken: params.creditCardToken,
+      remoteIp:        params.remoteIp,
+    };
+    if (params.description)       body.description       = params.description;
+    if (params.externalReference) body.externalReference = params.externalReference;
+
+    const result = await asaasRequest<AsaasPayment>(
+      subAccountApiKey, baseUrl, "POST", "/payments", body
+    );
+
+    console.log(
+      `[gofit-pay] Cobrança token-cartão criada: id=${result.id} status=${result.status} value=${result.value}`
+    );
+
+    return result;
+  },
+
   /**
    * FASE 8 — Cancela cobrança no Asaas via DELETE /payments/{id}.
    * Retorna { deleted: true } em caso de sucesso.
@@ -411,6 +485,37 @@ export interface CreateCustomerParams {
   email?:             string;
   cpfCnpj?:           string;
   phone?:             string;
+  externalReference?: string;
+}
+
+export interface TokenizeCreditCardParams {
+  customer: string;            // Asaas customer ID (cus_xxx)
+  creditCard: {
+    holderName:  string;
+    number:      string;       // SENSÍVEL — só em memória, nunca logar/persistir
+    expiryMonth: string;
+    expiryYear:  string;
+    ccv:         string;       // SENSÍVEL — só em memória, nunca logar/persistir
+  };
+  creditCardHolderInfo: {
+    name:              string;
+    email?:            string;
+    cpfCnpj?:          string;
+    postalCode?:       string;
+    addressNumber?:    string;
+    phone?:            string;
+    mobilePhone?:      string;
+  };
+  remoteIp: string;            // IP do aluno/cliente, não do servidor
+}
+
+export interface CreateTokenPaymentParams {
+  customer:           string;
+  amount:             number;
+  dueDate:            string;  // YYYY-MM-DD
+  creditCardToken:    string;  // token já descriptografado — só em memória
+  remoteIp:           string;
+  description?:       string;
   externalReference?: string;
 }
 
@@ -463,6 +568,12 @@ export interface AsaasPayment {
 
 export interface AsaasCancelResult {
   deleted: boolean;
+}
+
+export interface AsaasCreditCardToken {
+  creditCardToken:  string;        // SENSÍVEL — criptografar antes de salvar, nunca logar
+  creditCardNumber: string | null; // últimos 4 dígitos (Asaas retorna só o final)
+  creditCardBrand:  string | null;
 }
 
 export interface AsaasPixQrCode {
