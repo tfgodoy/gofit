@@ -96,6 +96,7 @@ export default function GoFitPayPage() {
   const [activeEnv,        setActiveEnv]        = useState<"sandbox" | "production" | null>(null);
   const [charges,          setCharges]          = useState<DashCharge[]>([]);
   const [studentNames,     setStudentNames]     = useState<Record<string, string>>({});
+  const [neverActivated,   setNeverActivated]   = useState(false);
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -114,6 +115,7 @@ export default function GoFitPayPage() {
     if (cfg) setOnboardingStatus(cfg.onboarding_status ?? "enviado");
 
     // Status do módulo (pending → wizard completo mas Asaas ainda não ativado)
+    let moduleRow: { status: string } | null = null;
     const { data: mod } = await supabase
       .from("modules")
       .select("id")
@@ -127,8 +129,12 @@ export default function GoFitPayPage() {
         .eq("contractor_id", user!.contractorId)
         .eq("module_id", mod.id)
         .maybeSingle();
+      moduleRow = cm;
       if (cm) setModuleStatus(cm.status);
     }
+
+    // Empresa nova: módulo nunca foi ativado e não há onboarding iniciado
+    setNeverActivated(!moduleRow && !cfg);
 
     setLoading(false);
 
@@ -181,6 +187,28 @@ export default function GoFitPayPage() {
     setRetrying(false);
     loadConfig();    // recarrega status após retry
   }
+
+  // Empresa nova — módulo nunca ativado: orienta para a Loja
+  if (neverActivated) return (
+    <AppLayout>
+      <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4 text-center px-8">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <CreditCard className="w-8 h-8 text-primary" />
+        </div>
+        <h1 className="text-xl font-black text-gray-900">GoFit Pay</h1>
+        <p className="text-sm text-gray-500 max-w-sm">
+          Receba dos seus alunos por <strong>Pix, Boleto e Cartão</strong> sem sair do GoFit.
+          Para começar, ative o GoFit Pay na Loja de Módulos.
+        </p>
+        <button
+          onClick={() => navigate("/app/loja")}
+          className="mt-2 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors"
+        >
+          <ArrowUpRight className="w-4 h-4" /> Ative o GoFit Pay na Loja
+        </button>
+      </div>
+    </AppLayout>
+  );
 
   return (
     <AppLayout>

@@ -52,7 +52,7 @@ import IntegracoesHubPage       from "@/pages/app/IntegracoesHubPage";
 import CrmConfigListPage        from "@/pages/app/CrmConfigListPage";
 import ConfigCrmFunisPage       from "@/pages/app/ConfigCrmFunisPage";
 import NfsePage                 from "@/pages/app/NfsePage";
-import FitcorePayPage           from "@/pages/app/FitcorePayPage";
+import GoFitPayContaPage          from "@/pages/app/gofit-pay/GoFitPayContaPage";
 import MatriculaPage            from "@/pages/app/MatriculaPage";
 import VendaWizardPage          from "@/pages/app/VendaWizardPage";
 import ContasPagarPage         from "@/pages/app/ContasPagarPage";
@@ -167,7 +167,9 @@ export default function App() {
             <Route path="/app/financeiro/comissao"          element={<AppGuard><ModuleGuard module="financeiro"><ComissoesPage /></ModuleGuard></AppGuard>} />
             <Route path="/app/financeiro/vendas"            element={<AppGuard><ModuleGuard module="financeiro"><VendasPage /></ModuleGuard></AppGuard>} />
             <Route path="/app/financeiro/nfs-e"             element={<AppGuard><ModuleGuard module="financeiro"><NfsePage /></ModuleGuard></AppGuard>} />
-            <Route path="/app/financeiro/pay"               element={<AppGuard><ModuleGuard module="financeiro"><FitcorePayPage /></ModuleGuard></AppGuard>} />
+            {/* FitCore Pay removido — o GoFit Pay assume este papel */}
+            <Route path="/app/financeiro/pay"               element={<Navigate to="/app/gofit-pay" replace />} />
+            <Route path="/app/gofit-pay/conta"              element={<AppGuard><GoFitPayContaPage /></AppGuard>} />
             <Route path="/app/financeiro/contas-financeiras" element={<AppGuard><ModuleGuard module="financeiro"><ContasFinanceirasPage /></ModuleGuard></AppGuard>} />
             <Route path="/app/financeiro/contas-financeiras/:contaId/extrato" element={<AppGuard><ModuleGuard module="financeiro"><ExtratoContaPage /></ModuleGuard></AppGuard>} />
             <Route path="/app/financeiro/*"      element={<AppGuard><ModuleGuard module="financeiro"><PlaceholderPage title="Financeiro" /></ModuleGuard></AppGuard>} />

@@ -103,7 +103,7 @@ const mainNav: NavItem[] = [
       { icon: ArrowDownCircle, label: "Contas a receber",   to: "/app/financeiro/contas-a-receber",   iconColor: "text-green-500" },
       { icon: BarChart2,       label: "DRE Gerencial",      to: "/app/financeiro/dre",                iconColor: "text-green-500" },
       { icon: Landmark,        label: "Contas financeiras", to: "/app/financeiro/contas-financeiras", iconColor: "text-green-500" },
-      { icon: CreditCard,      label: "FitCore Pay",        to: "/app/financeiro/pay",                iconColor: "text-green-500" },
+      { icon: CreditCard,      label: "GoFit Pay",          to: "/app/gofit-pay",                     iconColor: "text-green-500" },
       { icon: FileText,        label: "NFS-e",              to: "/app/financeiro/nfs-e",              iconColor: "text-green-500" },
       { icon: FileText,        label: "NFC-e",              to: "/app/financeiro/nfc-e",              iconColor: "text-green-500" },
       { icon: ShoppingBag,     label: "Vendas",             to: "/app/financeiro/vendas",             iconColor: "text-green-500" },

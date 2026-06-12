@@ -463,7 +463,7 @@ export default function IntegracoesHubPage() {
                 {
                   title: "GoFit Pay",
                   desc: "Gateway de pagamento para cobranças recorrentes por cartão.",
-                  href: "/app/financeiro/pay",
+                  href: "/app/gofit-pay",
                   icon: "GP",
                   bg: "bg-primary",
                 },

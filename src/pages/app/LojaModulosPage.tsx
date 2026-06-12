@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import {
   CreditCard, MessageSquare, Sparkles, Apple, ClipboardList,
   Loader2, CheckCircle2, Clock, AlertCircle, ChevronRight,
-  Store, Zap, ArrowRight, RefreshCw,
+  Store, Zap, ArrowRight, RefreshCw, Pencil,
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -414,7 +414,7 @@ export default function LojaModulosPage() {
                       </div>
 
                       {/* Footer do card */}
-                      <div className="px-6 pb-6">
+                      <div className="px-6 pb-6 space-y-2">
                         <button
                           onClick={() => handleAction(mod, companyStatus)}
                           disabled={!statusCfg.canClick || isLoading}
@@ -430,6 +430,15 @@ export default function LojaModulosPage() {
                             <ChevronRight className="w-4 h-4 ml-auto" />
                           )}
                         </button>
+                        {/* Editar conta/configurações (GoFit Pay ativo) */}
+                        {isGoFitPay && companyStatus === "active" && (
+                          <button
+                            onClick={() => navigate("/app/gofit-pay/conta")}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border border-primary text-primary hover:bg-primary/5 transition-all"
+                          >
+                            <Pencil className="w-4 h-4" /> EDITAR
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
