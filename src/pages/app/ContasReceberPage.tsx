@@ -4,8 +4,12 @@ import {
   DollarSign, TrendingDown, TrendingUp, Wallet,
   Eye, FileText, Receipt, CalendarDays, RotateCcw,
   X, Loader2, Coins, Printer, Share2, Copy, Mail,
-  MessageCircle, Check, ArrowDownCircle,
+  MessageCircle, Check, ArrowDownCircle, ExternalLink,
 } from "lucide-react";
+import {
+  getReceivableDisplayStatus, chargeModeLabel,
+  type GatewayChargeInfo,
+} from "@/lib/gatewayDisplayStatus";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +42,10 @@ interface Receivable {
   pagador: string | null;
   anexo_url: string | null;
   modo: string | null;
+  gateway_provider: string | null;
+  gateway_status: string | null;
+  asaas_payment_id: string | null;
+  asaas_payment_url: string | null;
 }
 
 interface CentroReceita { id: string; descricao: string; }
@@ -397,7 +405,7 @@ ${contractor?.fone ? `<p class="line">${fmtFone(contractor.fone)}</p>` : ""}
 }
 
 /* ─── Modal Detalhes do Financeiro (inline) ──────────────────── */
-function DetalheModal({ r, onClose }: { r: Receivable; onClose: () => void }) {
+function DetalheModal({ r, charge, onClose }: { r: Receivable; charge?: GatewayChargeInfo | null; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState("dados");
   const [scData,    setScData]    = useState<any | null>(null);
   const [events,    setEvents]    = useState<any[]>([]);
@@ -505,14 +513,50 @@ function DetalheModal({ r, onClose }: { r: Receivable; onClose: () => void }) {
           )}
 
           {activeTab === "gateway" && (
-            <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Coins className="w-6 h-6 text-primary" />
+            (r.asaas_payment_id || charge) ? (
+              <div className="space-y-5">
+                {(() => {
+                  const ds = getReceivableDisplayStatus(r, charge);
+                  return ds ? (
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${ds.bg} ${ds.text}`}>{ds.label}</span>
+                      <p className="text-xs text-gray-400">{ds.description}</p>
+                    </div>
+                  ) : null;
+                })()}
+                <div className="grid grid-cols-3 gap-5">
+                  {field("Provider", "Asaas")}
+                  {field("Ambiente", (charge?.provider_environment ?? "sandbox") === "production" ? "Produção" : "Sandbox")}
+                  {field("Status gateway", charge?.status ?? r.gateway_status ?? "—")}
+                  {field("ID da cobrança", charge?.provider_charge_id ?? r.asaas_payment_id ?? "—")}
+                  {field("Forma", charge?.billing_type ?? "—")}
+                  {field("Modo", chargeModeLabel(charge?.charge_mode))}
+                  {charge?.card_brand && charge?.card_last4 && field("Cartão", `${charge.card_brand} **** ${charge.card_last4}`)}
+                </div>
+                {(charge?.invoice_url || r.asaas_payment_url) && (
+                  <a
+                    href={charge?.invoice_url ?? r.asaas_payment_url ?? "#"}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                  >
+                    <ExternalLink className="w-4 h-4" /> Abrir cobrança no Asaas
+                  </a>
+                )}
+                <p className="text-[11px] text-gray-400 border-t border-gray-100 pt-3">
+                  A baixa financeira acontece automaticamente quando o Asaas confirma o
+                  recebimento (PAYMENT_RECEIVED). Status CONFIRMED indica cartão aprovado
+                  aguardando liquidação — a parcela permanece pendente até lá.
+                </p>
               </div>
-              <p className="text-sm font-semibold text-gray-600">Integração com gateway de pagamento</p>
-              <p className="text-xs text-center max-w-xs">A integração com o gateway Asaas será configurada em breve. Esta aba exibirá o status do processamento, parcelas e opções de PROCESSAR / CANCELAR / ESTORNAR.</p>
-              <span className="mt-2 px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">Em breve</span>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Coins className="w-6 h-6 text-primary" />
+                </div>
+                <p className="text-sm font-semibold text-gray-600">Sem cobrança GoFit Pay</p>
+                <p className="text-xs text-center max-w-xs">Nenhuma cobrança foi emitida no gateway para esta conta. Emita em GoFit Pay → Cobranças.</p>
+              </div>
+            )
           )}
 
           {activeTab === "venda" && (
@@ -1097,6 +1141,9 @@ export default function ContasReceberPage() {
   const [dataFim,    setDataFim]    = useState(new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10));
   const [filtroAtivo, setFiltroAtivo] = useState(false);
 
+  // Fase 15.4 — mapa receivable_id → dados mascarados da cobrança gateway
+  const [chargeMap, setChargeMap] = useState<Record<string, GatewayChargeInfo>>({});
+
   // 3-dots
   const [menuId,    setMenuId]    = useState<string | null>(null);
   const [detalheRec,setDetalheRec]= useState<Receivable | null>(null);
@@ -1110,11 +1157,24 @@ export default function ContasReceberPage() {
     setLoading(true);
     const { data } = await supabase
       .from("receivables")
-      .select("id, student_nome, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, desconto, multa, juros, parcela_numero, total_parcelas, pago_em, hora_recebimento, created_at, updated_at, student_contract_id, centro_receita_id, categoria_id, subcategoria_id, conta_financeira_id, data_competencia, pagador, anexo_url, modo")
+      .select("id, student_nome, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, desconto, multa, juros, parcela_numero, total_parcelas, pago_em, hora_recebimento, created_at, updated_at, student_contract_id, centro_receita_id, categoria_id, subcategoria_id, conta_financeira_id, data_competencia, pagador, anexo_url, modo, gateway_provider, gateway_status, asaas_payment_id, asaas_payment_url")
       .eq("contractor_id", user.contractorId)
       .order("vencimento", { ascending: false });
     setAll((data ?? []) as Receivable[]);
     setLoading(false);
+
+    // Fase 15.4 — dados mascarados das cobranças GoFit Pay (apenas campos seguros)
+    const { data: charges } = await supabase
+      .from("payment_charges")
+      .select("receivable_id, status, billing_type, charge_mode, card_brand, card_last4, provider_charge_id, invoice_url, provider_environment")
+      .eq("contractor_id", user.contractorId)
+      .not("receivable_id", "is", null)
+      .limit(2000);
+    const map: Record<string, GatewayChargeInfo> = {};
+    for (const c of charges ?? []) {
+      if (c.receivable_id) map[c.receivable_id] = c as GatewayChargeInfo;
+    }
+    setChargeMap(map);
   }
 
   async function loadLookups() {
@@ -1348,6 +1408,21 @@ export default function ContasReceberPage() {
                                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}`}>
                                   {badge.label}
                                 </span>
+                                {(() => {
+                                  // Fase 15.4 — status do gateway abaixo do status financeiro
+                                  const ds = getReceivableDisplayStatus(r, chargeMap[r.id] ?? null);
+                                  if (!ds || ds.priority === 8) return null; // sem cobrança: sem ruído na tabela
+                                  return (
+                                    <div className="mt-1" title={`${ds.description}${ds.cardMasked ? ` · ${ds.cardMasked}` : ""}`}>
+                                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ds.bg} ${ds.text}`}>
+                                        {ds.label}
+                                      </span>
+                                      {ds.cardMasked && (
+                                        <p className="text-[10px] text-gray-400 mt-0.5">{ds.cardMasked}</p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               {/* 3-pontos */}
                               <td className="px-3 py-3 relative">
@@ -1437,7 +1512,7 @@ export default function ContasReceberPage() {
       {menuId && <div className="fixed inset-0 z-20" onClick={() => setMenuId(null)} />}
 
       {/* Modal Detalhes */}
-      {detalheRec && <DetalheModal r={detalheRec} onClose={() => setDetalheRec(null)} />}
+      {detalheRec && <DetalheModal r={detalheRec} charge={chargeMap[detalheRec.id] ?? null} onClose={() => setDetalheRec(null)} />}
 
       {/* Modal Recibo */}
       {reciboRec && (

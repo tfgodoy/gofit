@@ -33,6 +33,9 @@ interface ChargeRow extends PaymentCharge {
   receivable_status:   string | null;
   receivable_valor:    number | null;
   receivable_vencimento: string | null;
+  charge_mode:         string | null;
+  card_brand:          string | null;
+  card_last4:          string | null;
   receivable_descricao: string | null;
   pago_em:             string | null;
   hora_recebimento:    string | null;
@@ -483,6 +486,12 @@ function ChargeDetailDrawer({ charge, onClose, onSynced, onReprocessed, onCancel
                 <Row label="ID no Asaas"        value={charge.provider_charge_id} mono />
                 <Row label="ID interno"         value={charge.id} mono small />
                 <Row label="Tipo"               value={<BillingBadge type={charge.billing_type} />} />
+                {charge.charge_mode && (
+                  <Row label="Modo" value={charge.charge_mode === "tokenized_card" ? "Cartão tokenizado" : "Link de fatura"} />
+                )}
+                {charge.card_brand && charge.card_last4 && (
+                  <Row label="Cartão" value={`${charge.card_brand} **** ${charge.card_last4}`} />
+                )}
                 <Row label="Valor"              value={fmtCurrency(charge.amount)} />
                 <Row label="Vencimento"         value={fmtDate(charge.due_date)} />
                 <Row label="Status gateway"     value={<GatewayBadge status={charge.status} />} />
@@ -1631,7 +1640,7 @@ export default function GoFitPayCobrancasPage() {
     // Busca payment_charges
     const { data: chargesData } = await supabase
       .from("payment_charges")
-      .select("id, contractor_id, student_id, student_contract_id, receivable_id, provider, provider_charge_id, billing_type, amount, value, due_date, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste, payment_url, paid_at, confirmed_at, refunded_at, cancelled_at, created_at, updated_at")
+      .select("id, contractor_id, student_id, student_contract_id, receivable_id, provider, provider_charge_id, billing_type, amount, value, due_date, status, invoice_url, bank_slip_url, pix_qr_code, pix_copy_paste, payment_url, paid_at, confirmed_at, refunded_at, cancelled_at, created_at, updated_at, charge_mode, card_brand, card_last4")
       .eq("contractor_id", user.contractorId)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -1902,9 +1911,29 @@ export default function GoFitPayCobrancasPage() {
                   </div>
                   <div className="text-sm text-gray-600">{fmtDate(c.due_date)}</div>
                   <div className="text-sm font-bold text-gray-900 text-right">{fmtCurrency(c.amount)}</div>
-                  <div className="flex justify-center"><BillingBadge type={c.billing_type} /></div>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <BillingBadge type={c.billing_type} />
+                    {c.charge_mode === "tokenized_card" && (
+                      <span
+                        className="text-[10px] font-semibold text-purple-600"
+                        title="Cobrança feita no cartão tokenizado do aluno — sem digitação de dados."
+                      >
+                        Tokenizado{c.card_last4 ? ` · ${c.card_brand ?? ""} **** ${c.card_last4}` : ""}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex justify-center"><GoFitBadge status={c.receivable_status} /></div>
-                  <div className="flex justify-center"><GatewayBadge status={c.status} /></div>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <GatewayBadge status={c.status} />
+                    {c.status === "CONFIRMED" && c.billing_type === "CREDIT_CARD" && (
+                      <span
+                        className="text-[10px] text-gray-400"
+                        title="Cartão aprovado pelo gateway. A baixa financeira será feita automaticamente quando o Asaas confirmar o recebimento."
+                      >
+                        Aguardando liquidação
+                      </span>
+                    )}
+                  </div>
                   <div className="flex justify-end">
                     <button
                       onClick={() => setSelectedCharge(c)}

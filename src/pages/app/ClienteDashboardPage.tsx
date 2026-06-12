@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import StudentCardsModal from "@/components/gofit-pay/StudentCardsModal";
+import { getReceivableDisplayStatus, type GatewayChargeInfo } from "@/lib/gatewayDisplayStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -4585,6 +4586,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
   const [showRecibos, setShowRecibos] = useState(false);
 
   // Fluxo de pagamento em 2 etapas
+  const [chargeMap,   setChargeMap]   = useState<Record<string, GatewayChargeInfo>>({});
   const [payModal,    setPayModal]    = useState<any | null>(null);   // step 1
   const [payVal,      setPayVal]      = useState("");
   const [payForm,     setPayForm]     = useState("pix");
@@ -4596,7 +4598,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
     setLoading(true);
     const { data } = await supabase
       .from("receivables")
-      .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em, desconto, multa, juros, parcela_numero, total_parcelas, student_contract_id, created_at, updated_at, student_nome")
+      .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em, desconto, multa, juros, parcela_numero, total_parcelas, student_contract_id, created_at, updated_at, student_nome, gateway_status, asaas_payment_id")
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
       .order("vencimento", { ascending: false });
@@ -4607,6 +4609,19 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
     }));
     setRecs(list);
     setLoading(false);
+
+    // Fase 15.4 — cobranças gateway do aluno (apenas campos seguros/mascarados)
+    const { data: charges } = await supabase
+      .from("payment_charges")
+      .select("receivable_id, status, billing_type, charge_mode, card_brand, card_last4, provider_charge_id, invoice_url, provider_environment")
+      .eq("contractor_id", contractorId)
+      .eq("student_id", studentId)
+      .not("receivable_id", "is", null);
+    const map: Record<string, GatewayChargeInfo> = {};
+    for (const c of charges ?? []) {
+      if (c.receivable_id) map[c.receivable_id] = c as GatewayChargeInfo;
+    }
+    setChargeMap(map);
   }
 
   useEffect(() => { load(); }, [studentId, contractorId]);
@@ -4790,6 +4805,21 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
                         {s.label}
                       </span>
+                      {(() => {
+                        // Fase 15.4 — status do gateway abaixo do status financeiro
+                        const ds = getReceivableDisplayStatus(r, chargeMap[r.id] ?? null);
+                        if (!ds || ds.priority === 8) return null;
+                        return (
+                          <div className="mt-1" title={`${ds.description}${ds.cardMasked ? ` · ${ds.cardMasked}` : ""}`}>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ds.bg} ${ds.text}`}>
+                              {ds.label}
+                            </span>
+                            {ds.cardMasked && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">{ds.cardMasked}</p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-right">
                       {["pendente","atrasado"].includes(r.status) && (
