@@ -618,6 +618,8 @@ export default function VendaWizardPage() {
           student_contract_id: sc.id,  // vínculo com a matrícula (contrato_id omitido — nullable)
           forma_pagamento: formaPagamento,
           desconto:        descontoPorParcela,
+          parcela_numero:  i + 1,
+          total_parcelas:  numParcelas,
         };
       });
 

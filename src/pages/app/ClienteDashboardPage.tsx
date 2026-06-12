@@ -4601,7 +4601,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
       .select("id, descricao, valor, vencimento, status, tipo, forma_pagamento, valor_pago, pago_em, desconto, multa, juros, parcela_numero, total_parcelas, student_contract_id, created_at, updated_at, student_nome, gateway_status, asaas_payment_id")
       .eq("contractor_id", contractorId)
       .eq("student_id", studentId)
-      .order("vencimento", { ascending: false });
+      .order("vencimento", { ascending: true });
     const today = new Date().toISOString().split("T")[0];
     const list = ((data ?? []) as any[]).map(r => ({
       ...r,
@@ -4787,7 +4787,12 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
                 const s = STATUS_REC[r.status] ?? STATUS_REC.pendente;
                 return (
                   <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                    <td className="px-5 py-3 text-sm text-gray-700 max-w-xs truncate">{r.descricao}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700 max-w-xs">
+                      <p className="truncate">{r.descricao}</p>
+                      {r.parcela_numero && r.total_parcelas && (
+                        <span className="text-xs text-gray-400 font-semibold">Parcela {r.parcela_numero}/{r.total_parcelas}</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
                       {new Date(r.vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
                     </td>
@@ -4796,10 +4801,20 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-right text-gray-800 whitespace-nowrap">{fmt(r.valor)}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-right whitespace-nowrap">
-                      {r.status === "pago"
-                        ? <span className="text-green-600">{fmt(r.valor_pago ?? r.valor)}</span>
-                        : <span className="text-gray-400">—</span>
-                      }
+                      {r.status === "pago" ? (
+                        <span className="text-green-600">{fmt(r.valor_pago ?? r.valor)}</span>
+                      ) : (chargeMap[r.id]?.status ?? r.gateway_status)?.toUpperCase() === "CONFIRMED" ? (
+                        // Cartão aprovado: valor previsto — vira recebido na liquidação
+                        <span
+                          className="text-purple-600"
+                          title="Cartão aprovado no gateway. O valor entra como recebido quando o Asaas liquidar o pagamento."
+                        >
+                          {fmt(r.valor)}
+                          <p className="text-[10px] font-normal text-purple-400">previsto</p>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>
