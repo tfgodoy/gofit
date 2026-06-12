@@ -1,4 +1,4 @@
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { CurrencyInput, parseBRL } from "@/components/ui/CurrencyInput";
 import { useState, useEffect, useRef } from "react";
 import {
   Plus, X, Loader2, ChevronRight, ChevronLeft,
@@ -424,7 +424,7 @@ export default function OportunidadesPage() {
       origem:           form.origem,
       etapa:            form.etapa,
       nivel_interesse:  form.nivel_interesse.trim() || null,
-      valor_estimado:   form.valor_estimado ? parseFloat(form.valor_estimado) : null,
+      valor_estimado:   form.valor_estimado ? parseBRL(form.valor_estimado) : null,
       data_prevista:    form.data_prevista || null,
       responsavel_nome: form.responsavel_nome.trim() || null,
       observacoes:      form.observacoes.trim() || null,

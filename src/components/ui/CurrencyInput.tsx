@@ -79,4 +79,14 @@ export function CurrencyInput({ value, onChange, className, ...rest }: CurrencyI
   );
 }
 
+/**
+ * Converte a string formatada pt-BR do CurrencyInput ("2.935,80") em número (2935.8).
+ * Use sempre este helper ao salvar — parseFloat direto corta nos separadores
+ * ("978,60" → 978; "2.935,80" → 2.935).
+ */
+export function parseBRL(v: string): number {
+  const n = parseFloat((v ?? "").replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
 export default CurrencyInput;

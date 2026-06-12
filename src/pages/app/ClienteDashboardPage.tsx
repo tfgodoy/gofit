@@ -4619,7 +4619,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
   // Step 1: usuário clica CONFIRMAR
   async function handleConfirmarPay() {
     if (!payModal) return;
-    const valorPago = Math.round(parseFloat(payVal.replace(",", ".")) * 100) / 100;
+    const valorPago = Math.round(parseFloat(payVal.replace(/\./g, "").replace(",", ".")) * 100) / 100;
     const valorOriginal = Math.round(Number(payModal.valor) * 100) / 100;
     if (isNaN(valorPago) || valorPago <= 0) { toast.error("Informe um valor válido."); return; }
 
@@ -4794,7 +4794,7 @@ function FinanceiroTab({ studentId, contractorId, studentNome, currentUserName }
                     <td className="px-3 py-3 text-right">
                       {["pendente","atrasado"].includes(r.status) && (
                         <button
-                          onClick={() => { setPayModal(r); setPayVal(String(r.valor)); setPayForm(r.forma_pagamento ?? "pix"); }}
+                          onClick={() => { setPayModal(r); setPayVal(Number(r.valor).toFixed(2)); setPayForm(r.forma_pagamento ?? "pix"); }}
                           className="text-xs font-bold text-primary hover:underline whitespace-nowrap px-2 py-1 rounded hover:bg-primary/5">
                           RECEBER
                         </button>

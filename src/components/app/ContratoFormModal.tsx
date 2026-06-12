@@ -1,4 +1,4 @@
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { CurrencyInput, parseBRL } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import {
   X, Plus, Trash2, ChevronDown, ChevronUp, Settings, DollarSign,
@@ -396,8 +396,8 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         tipo: contrato.tipo,
         duracao: String(contrato.duracao),
         tipo_duracao: contrato.tipo_duracao,
-        valor_total: String(contrato.valor_total),
-        valor_por_mes: contrato.valor_por_mes != null ? String(contrato.valor_por_mes) : "",
+        valor_total: Number(contrato.valor_total).toFixed(2),
+        valor_por_mes: contrato.valor_por_mes != null ? Number(contrato.valor_por_mes).toFixed(2) : "",
         permite_renovar: contrato.permite_renovar,
         renova_automaticamente: contrato.renova_automaticamente,
         renovacao_quando: contrato.renovacao_quando ?? "no_vencimento",
@@ -415,7 +415,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         max_dias_suspensao: contrato.max_dias_suspensao != null ? String(contrato.max_dias_suspensao) : "",
         permite_pre_venda: contrato.permite_pre_venda,
         possui_valor_adesao: contrato.possui_valor_adesao,
-        valor_adesao: contrato.valor_adesao != null ? String(contrato.valor_adesao) : "",
+        valor_adesao: contrato.valor_adesao != null ? Number(contrato.valor_adesao).toFixed(2) : "",
         comissionar_consultor: contrato.comissionar_consultor,
         categoria_receita: contrato.categoria_receita ?? "",
         contabilizar_sessoes_conjunto: contrato.contabilizar_sessoes_conjunto ?? false,
@@ -493,7 +493,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
 
   async function handleSave() {
     if (!form.descricao.trim()) { toast.error("Informe a descrição do contrato."); return; }
-    if (!form.valor_total || isNaN(parseFloat(form.valor_total))) { toast.error("Informe o valor total."); return; }
+    if (!form.valor_total || parseBRL(form.valor_total) <= 0) { toast.error("Informe o valor total."); return; }
     if (!user?.contractorId) return;
 
     setSaving(true);
@@ -504,8 +504,8 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         tipo: form.tipo,
         duracao: parseInt(form.duracao) || 1,
         tipo_duracao: form.tipo_duracao,
-        valor_total: parseFloat(form.valor_total) || 0,
-        valor_por_mes: form.valor_por_mes ? parseFloat(form.valor_por_mes) : null,
+        valor_total: parseBRL(form.valor_total),
+        valor_por_mes: form.valor_por_mes ? parseBRL(form.valor_por_mes) : null,
         permite_renovar: form.permite_renovar,
         renova_automaticamente: form.renova_automaticamente,
         renovacao_quando: form.permite_renovar ? form.renovacao_quando : null,
@@ -523,7 +523,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
         max_dias_suspensao: form.max_dias_suspensao ? parseInt(form.max_dias_suspensao) : null,
         permite_pre_venda: form.permite_pre_venda,
         possui_valor_adesao: form.possui_valor_adesao,
-        valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseFloat(form.valor_adesao) : null,
+        valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseBRL(form.valor_adesao) : null,
         comissionar_consultor: form.comissionar_consultor,
         categoria_receita: form.categoria_receita || null,
         contabilizar_sessoes_conjunto: form.contabilizar_sessoes_conjunto,
@@ -838,7 +838,7 @@ export default function ContratoFormModal({ contrato, onClose, onSaved }: Props)
                 <div className="mt-4 flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
                   <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                   <div className="text-xs text-blue-700 space-y-0.5">
-                    {form.possui_valor_adesao && form.valor_adesao && <p>Adesão: R$ {parseFloat(form.valor_adesao).toFixed(2)}</p>}
+                    {form.possui_valor_adesao && form.valor_adesao && <p>Adesão: R$ {parseBRL(form.valor_adesao).toFixed(2)}</p>}
                     {form.comissionar_consultor && <p>Comissão de consultor ativada</p>}
                     {form.limita_periodo_venda && <p>Período de venda limitado</p>}
                     {form.permite_pre_venda && <p>Pré-venda habilitada</p>}

@@ -1,4 +1,4 @@
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
+import { CurrencyInput, parseBRL } from "@/components/ui/CurrencyInput";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -229,7 +229,7 @@ export default function ContratoFormPage() {
         max_dias_suspensao: form.max_dias_suspensao ? parseInt(form.max_dias_suspensao) : null,
         permite_pre_venda: form.permite_pre_venda,
         possui_valor_adesao: form.possui_valor_adesao,
-        valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseFloat(form.valor_adesao) : null,
+        valor_adesao: form.possui_valor_adesao && form.valor_adesao ? parseBRL(form.valor_adesao) : null,
         comissionar_consultor: form.comissionar_consultor,
         categoria_receita: form.categoria_receita || null,
         contabilizar_sessoes_conjunto: form.contabilizar_sessoes_conjunto,
