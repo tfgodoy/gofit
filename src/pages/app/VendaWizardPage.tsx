@@ -394,6 +394,7 @@ export default function VendaWizardPage() {
   const [modalidadeMatricula, setModalidadeMatricula] = useState<ContratoModalidade | null>(null);
   const [renovacaoAutomatica, setRenovacaoAutomatica] = useState(false);
   const [desconto, setDesconto] = useState(0);
+  const [numParcelas, setNumParcelas] = useState(1);
   const [loadingContrato, setLoadingContrato] = useState(false);
 
   // Cupom / desconto
@@ -403,6 +404,7 @@ export default function VendaWizardPage() {
   const [cupomLoading, setCupomLoading] = useState(false);
   const [cupomAplicado, setCupomAplicado] = useState<{
     id: string; codigo: string; tipo: string; valor: number; desconto_reais: number;
+    usos_realizados: number;
   } | null>(null);
   const [cupomErro, setCupomErro] = useState("");
 
@@ -418,17 +420,19 @@ export default function VendaWizardPage() {
     nomeAluno: string; nomePlano: string; valorMensal: number; parcelas: number; vencimento: string;
   } | null>(null);
 
-  /* Derived */
-  const valorBase = contratoSelecionado
-    ? (contratoSelecionado.duracao === 1
-        ? contratoSelecionado.valor_total
-        : (contratoSelecionado.valor_por_mes ?? contratoSelecionado.valor_total / contratoSelecionado.duracao))
+  /* Derived — desconto incide sobre o total do contrato; parcelas derivam do novo total */
+  const valorTotalContrato = contratoSelecionado
+    ? (contratoSelecionado.valor_total
+        ?? (contratoSelecionado.valor_por_mes ?? 0) * contratoSelecionado.duracao)
     : 0;
   const descontoReais = cupomAplicado
     ? cupomAplicado.desconto_reais
-    : valorBase * (desconto / 100);
-  const valorComDesconto = Math.max(0, valorBase - descontoReais);
-  const numParcelas = contratoSelecionado?.tipo_duracao === "meses" ? contratoSelecionado.duracao : 1;
+    : valorTotalContrato * (desconto / 100);
+  const totalComDesconto = Math.max(0, valorTotalContrato - descontoReais);
+  const maxParcelas = contratoSelecionado?.tipo_duracao === "meses" ? contratoSelecionado.duracao : 1;
+  const valorParcela = numParcelas > 0
+    ? Math.round((totalComDesconto / numParcelas) * 100) / 100
+    : 0;
   const dataFim = contratoSelecionado?.tipo_duracao === "meses"
     ? addMonths(dataInicio, contratoSelecionado.duracao) : null;
 
@@ -462,6 +466,7 @@ export default function VendaWizardPage() {
   async function handleAdicionarContrato(c: Contrato) {
     setShowContratoModal(false);
     setContratoSelecionado(c);
+    setNumParcelas(c.tipo_duracao === "meses" ? c.duracao : 1);
     setEnrollments({});
     setLoadingContrato(true);
 
@@ -519,10 +524,13 @@ export default function VendaWizardPage() {
     }
 
     const desconto_reais = data.tipo === "percentual"
-      ? valorBase * (data.valor / 100)
-      : Math.min(data.valor, valorBase);
+      ? valorTotalContrato * (data.valor / 100)
+      : Math.min(data.valor, valorTotalContrato);
 
-    setCupomAplicado({ id: data.id, codigo: data.codigo, tipo: data.tipo, valor: data.valor, desconto_reais });
+    setCupomAplicado({
+      id: data.id, codigo: data.codigo, tipo: data.tipo, valor: data.valor,
+      desconto_reais, usos_realizados: data.usos_realizados ?? 0,
+    });
     setCupomErro("");
   }
 
@@ -543,7 +551,7 @@ export default function VendaWizardPage() {
         data_inicio:         dataInicio,
         data_fim:            dataFim,
         status:              "ativo",
-        valor_mensalidade:   valorComDesconto,
+        valor_mensalidade:   valorParcela,
         dia_vencimento:      diaVencimento,
         forma_pagamento:     formaPagamento,
         tipo_venda:          tipoVenda,
@@ -567,8 +575,10 @@ export default function VendaWizardPage() {
         );
       }
 
-      // Gerar uma receivable por parcela/mês
+      // Gerar uma receivable por parcela/mês — última parcela absorve a diferença de centavos
       const vencBase = calcVenc(dataInicio, diaVencimento);
+      const valorUltimaParcela = Math.round((totalComDesconto - valorParcela * (numParcelas - 1)) * 100) / 100;
+      const descontoPorParcela = descontoReais > 0 ? Math.round((descontoReais / numParcelas) * 100) / 100 : 0;
       const parcelas = Array.from({ length: numParcelas }, (_, i) => {
         const vencFinal = i === 0 ? vencBase : addMonths(vencBase, i);
         const vencDate  = new Date(vencFinal + "T00:00:00");
@@ -577,13 +587,13 @@ export default function VendaWizardPage() {
           student_id:      studentId!,
           student_nome:    student?.nome_completo ?? null,
           descricao:       `${contratoSelecionado.descricao} — ${vencDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`,
-          valor:           valorComDesconto,
+          valor:           i === numParcelas - 1 ? valorUltimaParcela : valorParcela,
           vencimento:      vencFinal,
           status:          "pendente",
           tipo:            "mensalidade",
           student_contract_id: sc.id,  // vínculo com a matrícula (contrato_id omitido — nullable)
           forma_pagamento: formaPagamento,
-          desconto:        descontoReais > 0 ? descontoReais : 0,
+          desconto:        descontoPorParcela,
         };
       });
 
@@ -607,7 +617,7 @@ export default function VendaWizardPage() {
       setResultado({
         nomeAluno: student?.nome_completo ?? "",
         nomePlano: contratoSelecionado.descricao,
-        valorMensal: valorComDesconto,
+        valorMensal: valorParcela,
         parcelas: numParcelas,
         vencimento: vencBase,
       });
@@ -700,8 +710,8 @@ export default function VendaWizardPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Cobranças geradas</p>
-                  <p className="text-sm font-bold text-gray-800">{numParcelas}x de {fmtBRL(valorComDesconto)}</p>
-                  <p className="text-xs text-gray-400 mt-1">Total: {fmtBRL(valorComDesconto * numParcelas)}</p>
+                  <p className="text-sm font-bold text-gray-800">{numParcelas}x de {fmtBRL(valorParcela)}</p>
+                  <p className="text-xs text-gray-400 mt-1">Total: {fmtBRL(totalComDesconto)}</p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Data de início</label>
@@ -717,8 +727,8 @@ export default function VendaWizardPage() {
               </div>
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
                 {numParcelas > 1
-                  ? `${numParcelas} cobranças de ${fmtBRL(valorComDesconto)} — 1ª vence em ${dataInicio ? fmtDate(calcVenc(dataInicio, diaVencimento)) : "—"}.`
-                  : `Cobrança única de ${fmtBRL(valorComDesconto)} com vencimento em ${dataInicio ? fmtDate(calcVenc(dataInicio, diaVencimento)) : "—"}.`}
+                  ? `${numParcelas} cobranças de ${fmtBRL(valorParcela)} — 1ª vence em ${dataInicio ? fmtDate(calcVenc(dataInicio, diaVencimento)) : "—"}.`
+                  : `Cobrança única de ${fmtBRL(valorParcela)} com vencimento em ${dataInicio ? fmtDate(calcVenc(dataInicio, diaVencimento)) : "—"}.`}
               </div>
             </div>
           )}
@@ -922,7 +932,7 @@ export default function VendaWizardPage() {
             {/* Total */}
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Total</span>
-              <span className="text-xl font-extrabold text-gray-900">{fmtBRL(contratoSelecionado.valor_total)}</span>
+              <span className="text-xl font-extrabold text-gray-900">{fmtBRL(valorTotalContrato)}</span>
             </div>
 
             {/* Ações de desconto */}
@@ -946,19 +956,38 @@ export default function VendaWizardPage() {
               </div>
             )}
 
-            {/* Modo: desconto manual */}
+            {/* Modo: desconto manual — % e R$ sincronizados, sobre o total do contrato */}
             {descontoMode === "manual" && (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600 whitespace-nowrap">Desconto</span>
-                <input
-                  type="number" min={0} max={100} value={desconto} autoFocus
-                  onChange={e => setDesconto(Math.max(0, Math.min(100, Number(e.target.value))))}
-                  className={`${inputCls} max-w-[80px] text-center`}
-                />
-                <span className="text-sm text-gray-500">%</span>
+              <div className="flex items-end gap-4 flex-wrap">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">% de desconto</label>
+                  <input
+                    type="number" min={0} max={100} step="0.01" value={desconto} autoFocus
+                    onChange={e => setDesconto(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className={`${inputCls} max-w-[90px] text-center`}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Valor desconto (R$)</label>
+                  <input
+                    type="number" min={0} max={valorTotalContrato} step="0.01"
+                    value={Math.round(descontoReais * 100) / 100}
+                    onChange={e => {
+                      const reais = Math.max(0, Math.min(valorTotalContrato, Number(e.target.value)));
+                      setDesconto(valorTotalContrato > 0
+                        ? Math.round((reais / valorTotalContrato) * 10000) / 100
+                        : 0);
+                    }}
+                    className={`${inputCls} max-w-[120px] text-center`}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Valor após desconto</label>
+                  <p className="text-sm font-bold text-gray-800 py-2">{fmtBRL(totalComDesconto)}</p>
+                </div>
                 <button
                   onClick={() => { setDescontoMode("none"); setDesconto(0); }}
-                  className="ml-auto text-xs text-gray-400 hover:text-red-500 transition-colors"
+                  className="ml-auto mb-2 text-xs text-gray-400 hover:text-red-500 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1029,15 +1058,27 @@ export default function VendaWizardPage() {
             )}
             {descontoReais > 0 && (
               <div className="flex items-center justify-between text-sm font-bold">
-                <span className="text-gray-700">Valor com desconto</span>
-                <span className="text-lg text-primary">{fmtBRL(valorComDesconto)}</span>
+                <span className="text-gray-700">Valor total após desconto</span>
+                <span className="text-lg text-primary">{fmtBRL(totalComDesconto)}</span>
               </div>
             )}
 
-            {numParcelas > 1 && (
-              <p className="text-xs text-gray-400 border-t border-gray-100 pt-2">
-                {numParcelas}x de {fmtBRL(valorComDesconto)} por mês
-              </p>
+            {/* Parcelamento — permite vender ex.: plano anual em 8x */}
+            {maxParcelas > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                <span className="text-sm text-gray-600">Parcelamento</span>
+                <select
+                  value={numParcelas}
+                  onChange={e => setNumParcelas(Number(e.target.value))}
+                  className={`${inputCls} max-w-[200px]`}
+                >
+                  {Array.from({ length: maxParcelas }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>
+                      {n}x de {fmtBRL(Math.round((totalComDesconto / n) * 100) / 100)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         )}
