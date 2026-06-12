@@ -1952,6 +1952,60 @@ export type Database = {
           },
         ]
       }
+      gofit_pay_card_registration_links: {
+        Row: {
+          contractor_id: string
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          provider_environment: string
+          revoked_at: string | null
+          student_id: string
+          token_hash: string
+          used_at: string | null
+        }
+        Insert: {
+          contractor_id: string
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          provider_environment?: string
+          revoked_at?: string | null
+          student_id: string
+          token_hash: string
+          used_at?: string | null
+        }
+        Update: {
+          contractor_id?: string
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          provider_environment?: string
+          revoked_at?: string | null
+          student_id?: string
+          token_hash?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gofit_pay_card_registration_links_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gofit_pay_card_registration_links_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gofit_pay_collection_notes: {
         Row: {
           contractor_id: string
@@ -2313,6 +2367,94 @@ export type Database = {
             columns: ["gofit_pay_account_id"]
             isOneToOne: false
             referencedRelation: "gofit_pay_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gofit_pay_student_cards: {
+        Row: {
+          card_alias: string | null
+          card_brand: string | null
+          card_holder_name: string | null
+          card_last4: string | null
+          contractor_id: string
+          created_at: string
+          credit_card_token_encrypted: string
+          deleted_at: string | null
+          expiry_month: string | null
+          expiry_year: string | null
+          id: string
+          is_default: boolean
+          payment_customer_id: string | null
+          provider: string
+          provider_customer_id: string
+          provider_environment: string
+          status: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          card_alias?: string | null
+          card_brand?: string | null
+          card_holder_name?: string | null
+          card_last4?: string | null
+          contractor_id: string
+          created_at?: string
+          credit_card_token_encrypted: string
+          deleted_at?: string | null
+          expiry_month?: string | null
+          expiry_year?: string | null
+          id?: string
+          is_default?: boolean
+          payment_customer_id?: string | null
+          provider?: string
+          provider_customer_id: string
+          provider_environment?: string
+          status?: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          card_alias?: string | null
+          card_brand?: string | null
+          card_holder_name?: string | null
+          card_last4?: string | null
+          contractor_id?: string
+          created_at?: string
+          credit_card_token_encrypted?: string
+          deleted_at?: string | null
+          expiry_month?: string | null
+          expiry_year?: string | null
+          id?: string
+          is_default?: boolean
+          payment_customer_id?: string | null
+          provider?: string
+          provider_customer_id?: string
+          provider_environment?: string
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gofit_pay_student_cards_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gofit_pay_student_cards_payment_customer_id_fkey"
+            columns: ["payment_customer_id"]
+            isOneToOne: false
+            referencedRelation: "payment_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gofit_pay_student_cards_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]
@@ -3037,6 +3179,9 @@ export type Database = {
           bank_slip_url: string | null
           billing_type: string
           cancelled_at: string | null
+          card_brand: string | null
+          card_last4: string | null
+          charge_mode: string | null
           confirmed_at: string | null
           contractor_id: string
           created_at: string
@@ -3058,6 +3203,7 @@ export type Database = {
           receivable_id: string | null
           refunded_at: string | null
           status: string
+          student_card_id: string | null
           student_contract_id: string | null
           student_id: string | null
           updated_at: string
@@ -3070,6 +3216,9 @@ export type Database = {
           bank_slip_url?: string | null
           billing_type: string
           cancelled_at?: string | null
+          card_brand?: string | null
+          card_last4?: string | null
+          charge_mode?: string | null
           confirmed_at?: string | null
           contractor_id: string
           created_at?: string
@@ -3091,6 +3240,7 @@ export type Database = {
           receivable_id?: string | null
           refunded_at?: string | null
           status?: string
+          student_card_id?: string | null
           student_contract_id?: string | null
           student_id?: string | null
           updated_at?: string
@@ -3103,6 +3253,9 @@ export type Database = {
           bank_slip_url?: string | null
           billing_type?: string
           cancelled_at?: string | null
+          card_brand?: string | null
+          card_last4?: string | null
+          charge_mode?: string | null
           confirmed_at?: string | null
           contractor_id?: string
           created_at?: string
@@ -3124,6 +3277,7 @@ export type Database = {
           receivable_id?: string | null
           refunded_at?: string | null
           status?: string
+          student_card_id?: string | null
           student_contract_id?: string | null
           student_id?: string | null
           updated_at?: string
@@ -3142,6 +3296,13 @@ export type Database = {
             columns: ["payment_customer_id"]
             isOneToOne: false
             referencedRelation: "payment_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_charges_student_card_id_fkey"
+            columns: ["student_card_id"]
+            isOneToOne: false
+            referencedRelation: "gofit_pay_student_cards"
             referencedColumns: ["id"]
           },
         ]

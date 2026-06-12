@@ -42,6 +42,27 @@ const COLOR_CLASSES: Record<string, { badge: string; icon: string; border: strin
   red:    { badge: "bg-red-100 text-red-700",     icon: "text-red-500",    border: "border-red-200" },
 };
 
+/* ─── Cobrança (campos seguros para o dashboard) ─────────────────── */
+interface DashCharge {
+  id: string; student_id: string | null;
+  amount: number; status: string;
+  billing_type: string | null; charge_mode: string | null;
+  card_brand: string | null; card_last4: string | null;
+  paid_at: string | null; created_at: string; due_date: string | null;
+}
+
+const OPEN_STATUSES = ["PENDING", "CONFIRMED", "AWAITING_RISK_ANALYSIS", "OVERDUE"];
+const fmtBRL = (v: number) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const CHARGE_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  PENDING:   { label: "Aguardando",            cls: "bg-blue-100 text-blue-700" },
+  CONFIRMED: { label: "Aprovado — liquidação", cls: "bg-purple-100 text-purple-700" },
+  RECEIVED:  { label: "Recebido",              cls: "bg-green-100 text-green-700" },
+  OVERDUE:   { label: "Vencida",               cls: "bg-red-100 text-red-600" },
+  CANCELLED: { label: "Cancelada",             cls: "bg-gray-100 text-gray-500" },
+  REFUNDED:  { label: "Estornada",             cls: "bg-gray-100 text-gray-500" },
+};
+
 /* ─── KPI card ───────────────────────────────────────────────────── */
 function KpiCard({ icon: Icon, label, value, sub, color = "gray" }: {
   icon: React.ElementType; label: string; value: string; sub?: string; color?: string;
@@ -73,6 +94,8 @@ export default function GoFitPayPage() {
   const [retrying,         setRetrying]         = useState(false);
   const [showFees,         setShowFees]         = useState(false);
   const [activeEnv,        setActiveEnv]        = useState<"sandbox" | "production" | null>(null);
+  const [charges,          setCharges]          = useState<DashCharge[]>([]);
+  const [studentNames,     setStudentNames]     = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user?.contractorId) return;
@@ -112,6 +135,26 @@ export default function GoFitPayPage() {
     GoFitPayService.getEnvironmentStatus().then(r => {
       if (r.success && r.data) setActiveEnv(r.data.current_environment);
     });
+
+    loadCharges();
+  }
+
+  async function loadCharges() {
+    if (!user?.contractorId) return;
+    const { data: rows } = await supabase
+      .from("payment_charges")
+      .select("id, student_id, amount, status, billing_type, charge_mode, card_brand, card_last4, paid_at, created_at, due_date")
+      .eq("contractor_id", user!.contractorId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const list = (rows ?? []) as DashCharge[];
+    setCharges(list);
+
+    const ids = [...new Set(list.map(c => c.student_id).filter(Boolean))] as string[];
+    if (ids.length) {
+      const { data: studs } = await supabase.from("students").select("id, nome_completo").in("id", ids);
+      setStudentNames(Object.fromEntries((studs ?? []).map(s => [s.id, s.nome_completo])));
+    }
   }
 
   // moduleStatus tem precedência para states pós-Asaas
@@ -241,86 +284,139 @@ export default function GoFitPayPage() {
                 </div>
               )}
 
-              {/* KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <KpiCard
-                  icon={Wallet}
-                  label="Recebido no mês"
-                  value={isAtivo ? "R$ 0,00" : "—"}
-                  sub={isAtivo ? "Nenhuma cobrança liquidada" : "Disponível após ativação"}
-                  color="green"
-                />
-                <KpiCard
-                  icon={Clock}
-                  label="Aguardando pagamento"
-                  value={isAtivo ? "R$ 0,00" : "—"}
-                  sub={isAtivo ? "0 cobranças em aberto" : "Disponível após ativação"}
-                  color="blue"
-                />
-                <KpiCard
-                  icon={TrendingUp}
-                  label="Cobranças emitidas"
-                  value={isAtivo ? "0" : "—"}
-                  sub={isAtivo ? "Este mês" : "Disponível após ativação"}
-                />
-                <KpiCard
-                  icon={Users}
-                  label="Alunos com cobrança"
-                  value={isAtivo ? "0" : "—"}
-                  sub={isAtivo ? "Nenhum" : "Disponível após ativação"}
-                />
-              </div>
+              {/* KPIs — calculados das cobranças reais */}
+              {(() => {
+                const mes = new Date().toISOString().substring(0, 7);
+                const recebidasMes = charges.filter(c => c.status === "RECEIVED" && (c.paid_at ?? "").startsWith(mes));
+                const abertas      = charges.filter(c => OPEN_STATUSES.includes(c.status));
+                const emitidasMes  = charges.filter(c => c.created_at.startsWith(mes));
+                const alunosAtivos = new Set(abertas.map(c => c.student_id).filter(Boolean)).size;
+                const aprovadas    = abertas.filter(c => c.status === "CONFIRMED");
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <KpiCard
+                      icon={Wallet}
+                      label="Recebido no mês"
+                      value={isAtivo ? fmtBRL(recebidasMes.reduce((s, c) => s + Number(c.amount), 0)) : "—"}
+                      sub={isAtivo ? (recebidasMes.length ? `${recebidasMes.length} cobrança(s) liquidada(s)` : "Nenhuma cobrança liquidada") : "Disponível após ativação"}
+                      color="green"
+                    />
+                    <KpiCard
+                      icon={Clock}
+                      label="Aguardando pagamento"
+                      value={isAtivo ? fmtBRL(abertas.reduce((s, c) => s + Number(c.amount), 0)) : "—"}
+                      sub={isAtivo
+                        ? `${abertas.length} em aberto${aprovadas.length ? ` · ${aprovadas.length} aguardando liquidação` : ""}`
+                        : "Disponível após ativação"}
+                      color="blue"
+                    />
+                    <KpiCard
+                      icon={TrendingUp}
+                      label="Cobranças emitidas"
+                      value={isAtivo ? String(emitidasMes.length) : "—"}
+                      sub={isAtivo ? "Este mês" : "Disponível após ativação"}
+                    />
+                    <KpiCard
+                      icon={Users}
+                      label="Alunos com cobrança"
+                      value={isAtivo ? String(alunosAtivos) : "—"}
+                      sub={isAtivo ? (alunosAtivos ? "Com cobrança em aberto" : "Nenhum") : "Disponível após ativação"}
+                    />
+                  </div>
+                );
+              })()}
 
-              {/* Lista de cobranças vazia */}
+              {/* Cobranças recentes */}
               <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
                   <h2 className="text-sm font-bold text-gray-900">Cobranças recentes</h2>
                   {isAtivo && (
-                    <button className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    <button onClick={loadCharges} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
                       <RefreshCcw className="w-3 h-3" /> Atualizar
                     </button>
                   )}
                 </div>
 
-                {/* Empty state */}
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-8">
-                  {isAtivo ? (
-                    <>
-                      <div className="flex gap-2">
-                        <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                          <QrCode className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
-                          <CreditCard className="w-5 h-5 text-purple-600" />
-                        </div>
-                      </div>
-                      <p className="text-sm font-bold text-gray-700">Nenhuma cobrança emitida ainda</p>
-                      <p className="text-xs text-gray-400 max-w-xs">
-                        Quando você emitir cobranças por Pix, boleto ou cartão, elas aparecerão aqui.
-                      </p>
-                      <button
-                        onClick={() => navigate("/app/gofit-pay/cobrancas")}
-                        className="mt-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors">
-                        Emitir primeira cobrança
+                {isAtivo && charges.length > 0 ? (
+                  <div>
+                    {charges.slice(0, 6).map(c => {
+                      const sb = CHARGE_STATUS_BADGE[c.status] ?? { label: c.status, cls: "bg-gray-100 text-gray-500" };
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => navigate("/app/gofit-pay/cobrancas")}
+                          className="w-full flex items-center gap-4 px-5 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            c.billing_type === "PIX" ? "bg-green-100" : c.billing_type === "BOLETO" ? "bg-blue-100" : "bg-purple-100"}`}>
+                            {c.billing_type === "PIX" ? <QrCode className="w-4 h-4 text-green-600" />
+                              : c.billing_type === "BOLETO" ? <FileText className="w-4 h-4 text-blue-600" />
+                              : <CreditCard className="w-4 h-4 text-purple-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                              {(c.student_id && studentNames[c.student_id]) ?? "Aluno"}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                              {c.charge_mode === "tokenized_card" && c.card_last4 && ` · ${c.card_brand ?? ""} **** ${c.card_last4}`}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtBRL(c.amount)}</span>
+                          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${sb.cls}`}>
+                            {sb.label}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                        </button>
+                      );
+                    })}
+                    <div className="px-5 py-3 bg-gray-50/50">
+                      <button onClick={() => navigate("/app/gofit-pay/cobrancas")}
+                        className="text-xs font-bold text-primary hover:underline">
+                        Ver todas as cobranças →
                       </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center">
-                        <CreditCard className="w-6 h-6 text-gray-400" />
-                      </div>
-                      <p className="text-sm font-bold text-gray-600">Módulo ainda não ativo</p>
-                      <p className="text-xs text-gray-400 max-w-xs">
-                        {onboardingStatus === "enviado" || onboardingStatus === "em_analise"
-                          ? "Suas cobranças aparecerão aqui assim que o GoFit Pay for aprovado."
-                          : "Complete a ativação para começar a emitir cobranças."}
-                      </p>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-8">
+                    {isAtivo ? (
+                      <>
+                        <div className="flex gap-2">
+                          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                            <QrCode className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                            <CreditCard className="w-5 h-5 text-purple-600" />
+                          </div>
+                        </div>
+                        <p className="text-sm font-bold text-gray-700">Nenhuma cobrança emitida ainda</p>
+                        <p className="text-xs text-gray-400 max-w-xs">
+                          Quando você emitir cobranças por Pix, boleto ou cartão, elas aparecerão aqui.
+                        </p>
+                        <button
+                          onClick={() => navigate("/app/gofit-pay/cobrancas")}
+                          className="mt-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors">
+                          Emitir primeira cobrança
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center">
+                          <CreditCard className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-600">Módulo ainda não ativo</p>
+                        <p className="text-xs text-gray-400 max-w-xs">
+                          {onboardingStatus === "enviado" || onboardingStatus === "em_analise"
+                            ? "Suas cobranças aparecerão aqui assim que o GoFit Pay for aprovado."
+                            : "Complete a ativação para começar a emitir cobranças."}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Acesso rápido */}
