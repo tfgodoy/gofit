@@ -8,6 +8,7 @@ import {
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { GoFitPayService } from "@/services/gofit-pay";
 import { toast } from "sonner";
 
 /* ── Types ──────────────────────────────────────────────────── */
@@ -597,8 +598,44 @@ export default function VendaWizardPage() {
         };
       });
 
-      const { error: recErr } = await supabase.from("receivables").insert(parcelas);
+      const { data: parcelasCriadas, error: recErr } = await supabase
+        .from("receivables").insert(parcelas).select("id, vencimento");
       if (recErr) { toast.error("Contrato criado, erro ao gerar cobranças: " + recErr.message); return; }
+
+      // "Vender e receber agora": venda no cartão dispara a cobrança da PRIMEIRA
+      // parcela no cartão principal tokenizado do aluno (Fase 15.3). A venda nunca
+      // é desfeita se a cobrança falhar; a baixa segue exclusiva via webhook RECEIVED.
+      if (formaPagamento === "cartao_credito" && parcelasCriadas?.length) {
+        const primeira = [...parcelasCriadas]
+          .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)))[0];
+
+        const cardsRes = await GoFitPayService.listStudentCards(studentId!);
+        const cartaoPrincipal = cardsRes.success && cardsRes.data
+          ? cardsRes.data.cards.find(c => c.is_default && c.status === "active") ?? null
+          : null;
+
+        if (!cartaoPrincipal) {
+          toast.warning(
+            "Venda criada, mas não foi possível cobrar no cartão porque o aluno não possui cartão principal cadastrado.",
+            { description: "Cadastre em Cliente → Mais Ações → Cartões, ou gere o link de cadastro para o aluno.", duration: 10000 }
+          );
+        } else {
+          const cobranca = await GoFitPayService.chargeReceivableWithDefaultCard(primeira.id);
+          if (cobranca.success && cobranca.data) {
+            toast.success(
+              cobranca.data.already_existed
+                ? "Primeira parcela já possuía cobrança ativa no gateway."
+                : `Primeira parcela enviada ao Asaas no cartão ${cobranca.data.card_brand ?? ""} **** ${cobranca.data.card_last4 ?? ""}. Status: ${cobranca.data.status ?? "—"}.`,
+              { description: "A baixa financeira ocorrerá quando o pagamento for recebido/liquidado.", duration: 10000 }
+            );
+          } else {
+            toast.error(
+              "Venda criada, mas a cobrança no cartão falhou.",
+              { description: cobranca.error ?? "Tente novamente em GoFit Pay → Cobranças → Cobrar no cartão cadastrado.", duration: 10000 }
+            );
+          }
+        }
+      }
 
       if (cupomAplicado) {
         await supabase.from("cupons")
