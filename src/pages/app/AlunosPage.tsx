@@ -474,9 +474,9 @@ export default function ClientesPage() {
                       <div className="flex items-center gap-1">
                         {!isRemovedView && (
                           <button
-                            onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
+                            onClick={() => window.open(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`, "_blank")}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
-                            title="Visualizar perfil"
+                            title="Abrir em nova aba"
                           >
                             <ExternalLink className="w-4 h-4" />
                           </button>
