@@ -226,7 +226,13 @@ export default function ResumoSection({ staffId }: Props) {
             <TrendingUp className="w-4 h-4 text-primary" /> Insights para decisão
           </h4>
           <Insights dados={dados} custoTotal={custoTotal} salario={salario} encargos={encargos.total}
-            incluirEncargos={incluirEncargos} valorHoraTotal={valorHoraTotal} valorHoraSalario={valorHoraSalario} />
+            incluirEncargos={incluirEncargos} valorHoraTotal={valorHoraTotal} valorHoraSalario={valorHoraSalario}
+            ganhoOculto={calcularGanhoOculto({
+              salarioAntes: dados.salarioAnterior?.valor,
+              salarioAgora: dados.salario?.valor,
+              horasAntes: dados.cargaAnterior ? Number(dados.cargaAnterior.horas_semanais) : null,
+              horasAgora: dados.carga ? Number(dados.carga.horas_semanais) : null,
+            })} />
         </div>
       </div>
 
@@ -397,9 +403,10 @@ function CardCusto({ icone, titulo, valor, encargos }: {
   );
 }
 
-function Insights({ dados, custoTotal, salario, encargos, incluirEncargos, valorHoraTotal, valorHoraSalario }: {
+function Insights({ dados, custoTotal, salario, encargos, incluirEncargos, valorHoraTotal, valorHoraSalario, ganhoOculto }: {
   dados: any; custoTotal: number; salario: number; encargos: number;
   incluirEncargos: boolean; valorHoraTotal: number; valorHoraSalario: number;
+  ganhoOculto: import("./useDadosAnalise").GanhoOculto | null;
 }) {
   const items: { tipo: "ok" | "warn" | "info"; texto: string }[] = [];
 
@@ -410,17 +417,18 @@ function Insights({ dados, custoTotal, salario, encargos, incluirEncargos, valor
       texto: `Salário ${varSal.pct >= 0 ? "subiu" : "caiu"} ${fmtPct(varSal.pct)} (${fmtBRL(varSal.delta)}) vs vigência anterior.`,
     });
   }
+
   const varCarga = variacao(
     dados.carga ? Number(dados.carga.horas_semanais) : null,
     dados.cargaAnterior ? Number(dados.cargaAnterior.horas_semanais) : null,
   );
-  if (varCarga && varSal && Math.abs(varSal.pct) < 0.01 && varCarga.pct < 0) {
+
+  if (ganhoOculto && ganhoOculto.deltaPct > 0.5 && ganhoOculto.ganhoMensal > 0) {
     items.push({
       tipo: "ok",
-      texto: `Carga caiu ${fmtPct(varCarga.pct)} sem mudança de salário — valor da hora aumentou.`,
+      texto: `Com a redução de ${ganhoOculto.horasAntes}h → ${ganhoOculto.horasAgora}h/sem, o valor da hora subiu ${fmtBRL(ganhoOculto.valorHoraAntes)} → ${fmtBRL(ganhoOculto.valorHoraAgora)} (${fmtPct(ganhoOculto.pctVariacaoHora)}), gerando um ganho embutido de ${fmtBRL(ganhoOculto.ganhoMensal)}/mês (${fmtBRL(ganhoOculto.ganhoAnual)}/ano).`,
     });
-  }
-  if (varCarga && (!varSal || Math.abs(varSal.pct) < 0.01)) {
+  } else if (varCarga) {
     items.push({
       tipo: "info",
       texto: `Carga ${varCarga.pct >= 0 ? "aumentou" : "diminuiu"} ${fmtPct(varCarga.pct)} (${varCarga.delta >= 0 ? "+" : ""}${varCarga.delta.toFixed(1)} h/sem).`,
