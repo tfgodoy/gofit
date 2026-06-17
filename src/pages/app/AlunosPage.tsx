@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { UserPlus, Search, Send, ExternalLink, MoreVertical, SlidersHorizontal } from "lucide-react";
+import { UserPlus, Search, Send, ExternalLink, MoreVertical, SlidersHorizontal, Trash2, RotateCcw } from "lucide-react";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +20,7 @@ interface Student {
   created_at: string;
   objetivo: string | null;
   origem: string | null;
+  deleted_at: string | null;
 }
 
 const OBJETIVOS = [
@@ -93,7 +94,10 @@ export default function ClientesPage() {
   const [sexoFilter, setSexoFilter] = useState("");
   const [objetivoFilter, setObjetivoFilter] = useState("");
   const [origemFilter, setOrigemFilter] = useState("");
+  const [removeConfirm, setRemoveConfirm] = useState<Student | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  const isRemovedView = situacaoFilter === "removido";
 
   useEffect(() => {
     function h(e: MouseEvent) {
@@ -108,21 +112,22 @@ export default function ClientesPage() {
     async function load() {
       const { data } = await supabase
         .from("students")
-        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo, origem")
+        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo, origem, deleted_at")
         .eq("contractor_id", user!.contractorId!)
         .order("nome_completo", { ascending: true });
 
       const list = (data ?? []) as Student[];
-      const nonLeads = list.filter(s => s.status !== "lead");
+      const active = list.filter(s => !s.deleted_at);
+      const nonLeads = active.filter(s => s.status !== "lead");
       setStudents(list);
       setFiltered(nonLeads);
       setCounts({
         total:     nonLeads.length,
-        ativo:     list.filter(s => s.status === "ativo").length,
-        bloqueado: list.filter(s => s.status === "bloqueado").length,
-        inativo:   list.filter(s => s.status === "inativo").length,
-        cancelado: list.filter(s => s.status === "cancelado").length,
-        lead:      list.filter(s => s.status === "lead").length,
+        ativo:     active.filter(s => s.status === "ativo").length,
+        bloqueado: active.filter(s => s.status === "bloqueado").length,
+        inativo:   active.filter(s => s.status === "inativo").length,
+        cancelado: active.filter(s => s.status === "cancelado").length,
+        lead:      active.filter(s => s.status === "lead").length,
       });
       setLoading(false);
     }
@@ -130,23 +135,29 @@ export default function ClientesPage() {
   }, [user]);
 
   useEffect(() => {
-    const effectiveStatus = situacaoFilter || statusFilter;
     let list: Student[];
-    if (situacaoFilter) {
-      // Dropdown situação selecionado: filtra exatamente pelo status escolhido
-      list = students.filter(s => s.status === situacaoFilter);
-    } else if (effectiveStatus === "lead") {
-      list = students.filter(s => s.status === "lead");
-    } else if (effectiveStatus === "todos") {
-      // Pill "Todos" sem dropdown: exclui leads (comportamento padrão da aba)
-      // MAS se há filtro de origem ativo, inclui todos os status
-      list = origemFilter ? [...students] : students.filter(s => s.status !== "lead");
+
+    if (situacaoFilter === "removido") {
+      list = students.filter(s => s.deleted_at !== null);
     } else {
-      list = students.filter(s => s.status === effectiveStatus);
+      // Always exclude removed in normal views
+      const active = students.filter(s => s.deleted_at === null);
+
+      if (situacaoFilter) {
+        list = active.filter(s => s.status === situacaoFilter);
+      } else if (statusFilter === "lead") {
+        list = active.filter(s => s.status === "lead");
+      } else if (statusFilter === "todos") {
+        list = origemFilter ? [...active] : active.filter(s => s.status !== "lead");
+      } else {
+        list = active.filter(s => s.status === statusFilter);
+      }
+
+      if (sexoFilter) list = list.filter(s => s.sexo === sexoFilter);
+      if (objetivoFilter) list = list.filter(s => s.objetivo === objetivoFilter);
+      if (origemFilter) list = list.filter(s => s.origem === origemFilter);
     }
-    if (sexoFilter) list = list.filter(s => s.sexo === sexoFilter);
-    if (objetivoFilter) list = list.filter(s => s.objetivo === objetivoFilter);
-    if (origemFilter) list = list.filter(s => s.origem === origemFilter);
+
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(s =>
@@ -158,6 +169,30 @@ export default function ClientesPage() {
     setFiltered(list);
   }, [search, statusFilter, situacaoFilter, sexoFilter, objetivoFilter, origemFilter, students]);
 
+  async function handleRemove(student: Student) {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("students")
+      .update({ deleted_at: now })
+      .eq("id", student.id);
+    if (!error) {
+      setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: now } : s));
+    }
+    setRemoveConfirm(null);
+    setMenuOpen(null);
+  }
+
+  async function handleRestore(student: Student) {
+    const { error } = await supabase
+      .from("students")
+      .update({ deleted_at: null })
+      .eq("id", student.id);
+    if (!error) {
+      setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: null } : s));
+    }
+    setMenuOpen(null);
+  }
+
   const activeFilterCount = [situacaoFilter, sexoFilter, objetivoFilter, origemFilter].filter(Boolean).length;
   const hasActiveFilters = activeFilterCount > 0;
 
@@ -166,7 +201,7 @@ export default function ClientesPage() {
     <AppLayout>
       <div className="flex flex-col h-full">
 
-        {/* Top toolbar — matches NextFit Clientes header */}
+        {/* Top toolbar */}
         <div className="bg-white border-b border-gray-100 px-8 py-4">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold text-gray-900 flex-shrink-0">Clientes</h1>
@@ -184,7 +219,7 @@ export default function ClientesPage() {
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
-              {canCreate("clientes") && (
+              {canCreate("clientes") && !isRemovedView && (
                 <Link
                   to="/app/clientes/novo"
                   className="inline-flex items-center gap-2 bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
@@ -192,7 +227,7 @@ export default function ClientesPage() {
                   <UserPlus className="w-4 h-4" /> CLIENTE
                 </Link>
               )}
-              {canCreate("clientes") && (
+              {canCreate("clientes") && !isRemovedView && (
                 <button
                   onClick={() => setShowInvite(true)}
                   className="inline-flex items-center gap-2 border border-primary text-primary text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/5 transition-colors"
@@ -246,49 +281,56 @@ export default function ClientesPage() {
                         <option value="inativo">Inativo</option>
                         <option value="cancelado">Cancelado</option>
                         <option value="lead">Lead</option>
+                        <option value="removido">Apenas removidos</option>
                       </select>
                     </div>
 
-                    {/* Sexo */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Sexo</label>
-                      <select
-                        value={sexoFilter}
-                        onChange={e => setSexoFilter(e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                      >
-                        <option value="">Todos os sexos</option>
-                        <option value="masculino">Masculino</option>
-                        <option value="feminino">Feminino</option>
-                        <option value="outro">Outro</option>
-                      </select>
-                    </div>
+                    {/* Sexo — oculto na view de removidos */}
+                    {!isRemovedView && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Sexo</label>
+                        <select
+                          value={sexoFilter}
+                          onChange={e => setSexoFilter(e.target.value)}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                        >
+                          <option value="">Todos os sexos</option>
+                          <option value="masculino">Masculino</option>
+                          <option value="feminino">Feminino</option>
+                          <option value="outro">Outro</option>
+                        </select>
+                      </div>
+                    )}
 
-                    {/* Objetivo */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Objetivo</label>
-                      <select
-                        value={objetivoFilter}
-                        onChange={e => setObjetivoFilter(e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                      >
-                        <option value="">Todos os objetivos</option>
-                        {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </div>
+                    {/* Objetivo — oculto na view de removidos */}
+                    {!isRemovedView && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Objetivo</label>
+                        <select
+                          value={objetivoFilter}
+                          onChange={e => setObjetivoFilter(e.target.value)}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                        >
+                          <option value="">Todos os objetivos</option>
+                          {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    )}
 
-                    {/* Origem */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Origem</label>
-                      <select
-                        value={origemFilter}
-                        onChange={e => setOrigemFilter(e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                      >
-                        <option value="">Todas as origens</option>
-                        {ORIGENS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
+                    {/* Origem — oculto na view de removidos */}
+                    {!isRemovedView && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Origem</label>
+                        <select
+                          value={origemFilter}
+                          onChange={e => setOrigemFilter(e.target.value)}
+                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                        >
+                          <option value="">Todas as origens</option>
+                          {ORIGENS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    )}
 
                     <button
                       onClick={() => setShowFilters(false)}
@@ -302,23 +344,33 @@ export default function ClientesPage() {
             </div>
           </div>
 
-          {/* Status filter pills */}
-          <div className="flex items-center gap-2 mt-3">
-            {ALL_STATUS.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setStatusFilter(value)}
-                className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
-                  statusFilter === value
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {label} {value !== "todos" && <span className="opacity-60">({counts[value as StudentStatus] ?? 0})</span>}
-                {value === "todos" && <span className="opacity-60">({counts.total})</span>}
-              </button>
-            ))}
-          </div>
+          {/* Status filter pills — oculto na view de removidos */}
+          {!isRemovedView && (
+            <div className="flex items-center gap-2 mt-3">
+              {ALL_STATUS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setStatusFilter(value)}
+                  className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                    statusFilter === value
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {label} {value !== "todos" && <span className="opacity-60">({counts[value as StudentStatus] ?? 0})</span>}
+                  {value === "todos" && <span className="opacity-60">({counts.total})</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Banner de view de removidos */}
+          {isRemovedView && (
+            <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
+              <Trash2 className="w-4 h-4 flex-shrink-0" />
+              Exibindo clientes removidos. Restaure um cliente para reativá-lo.
+            </div>
+          )}
         </div>
 
         {/* Table area */}
@@ -331,9 +383,13 @@ export default function ClientesPage() {
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <UserPlus className="w-12 h-12 text-gray-200" />
               <p className="text-sm text-gray-400">
-                {students.length === 0 ? "Nenhum cliente cadastrado ainda." : "Nenhum resultado para o filtro aplicado."}
+                {isRemovedView
+                  ? "Nenhum cliente removido."
+                  : students.filter(s => !s.deleted_at).length === 0
+                    ? "Nenhum cliente cadastrado ainda."
+                    : "Nenhum resultado para o filtro aplicado."}
               </p>
-              {students.length === 0 && (
+              {!isRemovedView && students.filter(s => !s.deleted_at).length === 0 && (
                 <Link to="/app/clientes/novo" className="text-xs font-semibold text-primary hover:underline">
                   Cadastrar primeiro cliente →
                 </Link>
@@ -358,14 +414,20 @@ export default function ClientesPage() {
                 {filtered.map(s => (
                   <tr
                     key={s.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
+                    className={`transition-colors ${isRemovedView ? "opacity-60 cursor-default" : "hover:bg-gray-50 cursor-pointer"}`}
+                    onClick={() => {
+                      if (isRemovedView) return;
+                      navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`);
+                    }}
                   >
                     {/* Avatar + Nome */}
                     <td className="px-6 py-3" onClick={e => e.stopPropagation()}>
                       <div
-                        className="flex items-center gap-3 cursor-pointer"
-                        onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
+                        className={`flex items-center gap-3 ${isRemovedView ? "cursor-default" : "cursor-pointer"}`}
+                        onClick={() => {
+                          if (isRemovedView) return;
+                          navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`);
+                        }}
                       >
                         {s.foto_url ? (
                           <img
@@ -378,7 +440,7 @@ export default function ClientesPage() {
                             {getInitials(s.nome_completo)}
                           </div>
                         )}
-                        <span className="font-medium text-gray-900 hover:text-primary transition-colors">
+                        <span className={`font-medium text-gray-900 ${isRemovedView ? "" : "hover:text-primary transition-colors"}`}>
                           {s.nome_completo}
                         </span>
                       </div>
@@ -386,9 +448,15 @@ export default function ClientesPage() {
 
                     {/* Status */}
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLE[s.status]}`}>
-                        {STATUS_LABEL[s.status]}
-                      </span>
+                      {isRemovedView ? (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-600">
+                          Removido
+                        </span>
+                      ) : (
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLE[s.status]}`}>
+                          {STATUS_LABEL[s.status]}
+                        </span>
+                      )}
                     </td>
 
                     {/* Idade */}
@@ -404,13 +472,15 @@ export default function ClientesPage() {
                     {/* Actions */}
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
-                          title="Visualizar perfil"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </button>
+                        {!isRemovedView && (
+                          <button
+                            onClick={() => navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                            title="Visualizar perfil"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        )}
                         <div className="relative">
                           <button
                             onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}
@@ -420,19 +490,41 @@ export default function ClientesPage() {
                           </button>
                           {menuOpen === s.id && (
                             <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
-                              <button
-                                onClick={() => { navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`); setMenuOpen(null); }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                Visualizar perfil
-                              </button>
-                              {canEdit("clientes") && (
+                              {isRemovedView ? (
                                 <button
-                                  onClick={() => { navigate(`/app/clientes/${s.id}/cadastro`); setMenuOpen(null); }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                  onClick={() => handleRestore(s)}
+                                  className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
                                 >
-                                  Editar cadastro
+                                  <RotateCcw className="w-4 h-4" /> Restaurar
                                 </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => { navigate(s.status === "lead" ? `/app/crm/leads/${s.id}` : `/app/clientes/${s.id}/dashboard`); setMenuOpen(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                  >
+                                    Visualizar perfil
+                                  </button>
+                                  {canEdit("clientes") && (
+                                    <button
+                                      onClick={() => { navigate(`/app/clientes/${s.id}/cadastro`); setMenuOpen(null); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                    >
+                                      Editar cadastro
+                                    </button>
+                                  )}
+                                  {canDelete("clientes") && (
+                                    <>
+                                      <div className="my-1 border-t border-gray-100" />
+                                      <button
+                                        onClick={() => { setRemoveConfirm(s); setMenuOpen(null); }}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                      >
+                                        <Trash2 className="w-4 h-4" /> Remover cliente
+                                      </button>
+                                    </>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
@@ -447,9 +539,43 @@ export default function ClientesPage() {
         </div>
       </div>
     </AppLayout>
+
     {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
+
     {menuOpen && (
       <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(null)} />
+    )}
+
+    {/* Modal de confirmação de remoção */}
+    {removeConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mx-auto mb-4">
+            <Trash2 className="w-6 h-6 text-red-600" />
+          </div>
+          <h2 className="text-base font-bold text-gray-900 text-center mb-2">Remover cliente</h2>
+          <p className="text-sm text-gray-600 text-center mb-6">
+            Tem certeza que deseja remover o cliente{" "}
+            <span className="font-semibold text-gray-900">"{removeConfirm.nome_completo}"</span>?
+            <br />
+            <span className="text-xs text-gray-400 mt-1 block">O cliente ficará guardado e poderá ser restaurado.</span>
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setRemoveConfirm(null)}
+              className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => handleRemove(removeConfirm)}
+              className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors"
+            >
+              Sim, remover
+            </button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );
