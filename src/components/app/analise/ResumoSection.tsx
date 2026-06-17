@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useDadosAnalise, calcularEncargos, fmtBRL, fmtPct, variacao } from "./useDadosAnalise";
+import { useDadosAnalise, calcularEncargos, fmtBRL, fmtPct, variacao, parseGrade, descricaoGrade } from "./useDadosAnalise";
 import {
   Loader2, Calendar, TrendingUp, TrendingDown, DollarSign, Clock, Bus, Gift, HandCoins, Calculator,
   PieChart as PieIcon, BarChart3, AlertCircle,
@@ -153,7 +153,7 @@ export default function ResumoSection({ staffId }: Props) {
         <CardValor icone={<Gift className="w-4 h-4" />} cor="text-violet-600" titulo="Bonificação" valor={bonif} variacao={varBonif} dataVigencia={dados.bonificacao?.data_vigencia} />
         <CardHoras icone={<Clock className="w-4 h-4" />} cor="text-blue-600" titulo="Carga horária"
           horas={horas} variacao={varCarga} dataVigencia={dados.carga?.data_vigencia}
-          grade={dados.carga?.grade ?? null} />
+          gradeDesc={descricaoGrade(parseGrade((dados.carga as any)?.grade))} />
         <CardCusto icone={<Calculator className="w-4 h-4" />} titulo="Custo total / mês" valor={custoTotal}
           encargos={incluirEncargos ? encargos.total : null} />
       </div>
@@ -302,9 +302,9 @@ function CardValor({ icone, cor, titulo, valor, variacao, dataVigencia }: {
   );
 }
 
-function CardHoras({ icone, cor, titulo, horas, variacao, dataVigencia, grade }: {
+function CardHoras({ icone, cor, titulo, horas, variacao, dataVigencia, gradeDesc }: {
   icone: React.ReactNode; cor: string; titulo: string; horas: number;
-  variacao: { delta: number; pct: number } | null; dataVigencia?: string; grade: string | null;
+  variacao: { delta: number; pct: number } | null; dataVigencia?: string; gradeDesc: string;
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3">
@@ -322,7 +322,7 @@ function CardHoras({ icone, cor, titulo, horas, variacao, dataVigencia, grade }:
         <p className="text-xs text-gray-400">Sem comparativo anterior</p>
       )}
       {dataVigencia && <p className="text-[10px] text-gray-400 mt-0.5">Vig: {fmtDateBR(dataVigencia)}</p>}
-      {grade && <p className="text-[10px] text-gray-500 mt-0.5 truncate" title={grade}>{grade}</p>}
+      {gradeDesc && <p className="text-[10px] text-gray-500 mt-0.5 truncate" title={gradeDesc}>{gradeDesc}</p>}
     </div>
   );
 }

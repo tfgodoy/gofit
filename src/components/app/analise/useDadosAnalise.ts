@@ -97,6 +97,47 @@ export function fmtBRL(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+export interface Periodo {
+  id: string;
+  dias: string[];
+  hora_inicio: string;
+  hora_fim: string;
+}
+
+const DIAS_LABELS: Record<string, string> = {
+  mon: "Seg", tue: "Ter", wed: "Qua", thu: "Qui", fri: "Sex", sat: "Sáb", sun: "Dom",
+};
+const DOW_ORDER: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+export function parseGrade(raw: unknown): Periodo[] {
+  if (!raw) return [];
+  let arr: any = raw;
+  if (typeof raw === "string") {
+    try { arr = JSON.parse(raw); } catch { return []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter(p => p && typeof p === "object")
+    .map(p => ({
+      id: typeof p.id === "string" ? p.id : "",
+      dias: Array.isArray(p.dias) ? p.dias.filter((d: any) => typeof d === "string") : [],
+      hora_inicio: typeof p.hora_inicio === "string" ? p.hora_inicio : "00:00",
+      hora_fim: typeof p.hora_fim === "string" ? p.hora_fim : "00:00",
+    }));
+}
+
+export function descricaoGrade(periodos: Periodo[]): string {
+  if (!periodos || periodos.length === 0) return "";
+  return periodos
+    .filter(p => p.dias.length > 0)
+    .map(p => {
+      const dias = [...p.dias]
+        .sort((a, b) => (DOW_ORDER[a] ?? 99) - (DOW_ORDER[b] ?? 99))
+        .map(d => DIAS_LABELS[d] ?? d).join("/");
+      return `${dias} ${p.hora_inicio}–${p.hora_fim}`;
+    }).join("; ");
+}
+
 export function fmtPct(v: number, digits = 2) {
   return `${v >= 0 ? "+" : ""}${v.toFixed(digits)}%`;
 }
