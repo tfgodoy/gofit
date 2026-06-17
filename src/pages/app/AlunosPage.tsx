@@ -97,6 +97,7 @@ export default function ClientesPage() {
   const [origemFilter, setOrigemFilter] = useState("");
   const [removeConfirm, setRemoveConfirm] = useState<Student | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isRemovedView = situacaoFilter === "removido";
 
@@ -107,6 +108,15 @@ export default function ClientesPage() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function h(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null);
+    }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menuOpen]);
 
   async function loadStudents() {
     if (!user?.contractorId) return;
@@ -492,7 +502,7 @@ export default function ClientesPage() {
                             <ExternalLink className="w-4 h-4" />
                           </button>
                         )}
-                        <div className="relative">
+                        <div className="relative" ref={menuOpen === s.id ? menuRef : undefined}>
                           <button
                             onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
@@ -500,7 +510,7 @@ export default function ClientesPage() {
                             <MoreVertical className="w-4 h-4" />
                           </button>
                           {menuOpen === s.id && (
-                            <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
+                            <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
                               {isRemovedView ? (
                                 <button
                                   onClick={() => handleRestore(s)}
@@ -553,9 +563,6 @@ export default function ClientesPage() {
 
     {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
 
-    {menuOpen && (
-      <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(null)} />
-    )}
 
     {/* Modal de confirmação de remoção */}
     {removeConfirm && (
