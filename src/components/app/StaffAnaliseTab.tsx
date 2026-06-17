@@ -22,7 +22,7 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
 ];
 
 export default function StaffAnaliseTab({ staffId, contractorId }: Props) {
-  const [sub, setSub] = useState<SubTab>("resumo");
+  const [sub, setSub] = useState<SubTab>("salario");
 
   return (
     <div className="space-y-4">

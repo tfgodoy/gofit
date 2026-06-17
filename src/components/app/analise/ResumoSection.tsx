@@ -7,7 +7,7 @@ import {
   PieChart as PieIcon, BarChart3, AlertCircle,
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  PieChart, Pie, Cell, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Legend,
 } from "recharts";
 
@@ -183,15 +183,15 @@ export default function ResumoSection({ staffId }: Props) {
           {composicao.length === 0 ? (
             <p className="text-xs text-gray-400 py-8 text-center">Sem dados para compor o custo.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
+            <div className="flex justify-center">
+              <PieChart width={360} height={220}>
                 <Pie data={composicao} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={45} paddingAngle={2}>
                   {composicao.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
                 <Tooltip formatter={(v: number) => fmtBRL(v)} />
                 <Legend wrapperStyle={{ fontSize: "11px" }} />
               </PieChart>
-            </ResponsiveContainer>
+            </div>
           )}
           <div className="space-y-1.5 mt-2">
             {composicao.map((c, i) => {
@@ -227,15 +227,15 @@ export default function ResumoSection({ staffId }: Props) {
           {timelineSalario.length < 2 ? (
             <p className="text-xs text-gray-400 py-8 text-center">Sem histórico suficiente.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={timelineSalario}>
+            <div className="flex justify-center">
+              <LineChart width={420} height={180} data={timelineSalario}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="data" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$ ${(v/1000).toFixed(1)}k`} />
                 <Tooltip formatter={(v: number) => fmtBRL(v)} />
                 <Line type="monotone" dataKey="salario" stroke={CORES.salario} strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
-            </ResponsiveContainer>
+            </div>
           )}
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -245,15 +245,15 @@ export default function ResumoSection({ staffId }: Props) {
           {timelineCarga.length < 2 ? (
             <p className="text-xs text-gray-400 py-8 text-center">Sem histórico suficiente.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={timelineCarga}>
+            <div className="flex justify-center">
+              <LineChart width={420} height={180} data={timelineCarga}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="data" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v: number) => `${v} h/sem`} />
                 <Line type="monotone" dataKey="horas" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
-            </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>
