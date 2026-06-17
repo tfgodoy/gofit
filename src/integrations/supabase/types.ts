@@ -4881,6 +4881,7 @@ export type Database = {
           cpf: string | null
           created_at: string
           data_nascimento: string | null
+          deleted_at: string | null
           email: string | null
           foto_url: string | null
           id: string
@@ -4911,6 +4912,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
+          deleted_at?: string | null
           email?: string | null
           foto_url?: string | null
           id?: string
@@ -4941,6 +4943,7 @@ export type Database = {
           cpf?: string | null
           created_at?: string
           data_nascimento?: string | null
+          deleted_at?: string | null
           email?: string | null
           foto_url?: string | null
           id?: string

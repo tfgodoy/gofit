@@ -171,31 +171,37 @@ export default function ClientesPage() {
   }, [search, statusFilter, situacaoFilter, sexoFilter, objetivoFilter, origemFilter, students]);
 
   async function handleRemove(student: Student) {
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("students")
-      .update({ deleted_at: now })
-      .eq("id", student.id);
-    if (!error) {
-      await loadStudents();
-      toast.success(`Cliente "${student.nome_completo}" removido.`);
-    } else {
-      toast.error("Erro ao remover cliente. Tente novamente.");
-    }
     setRemoveConfirm(null);
     setMenuOpen(null);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from("students")
+        .update({ deleted_at: now })
+        .eq("id", student.id);
+      if (error) throw error;
+      await loadStudents();
+      toast.success(`Cliente "${student.nome_completo}" removido.`);
+    } catch (err) {
+      console.error("Erro ao remover:", err);
+      toast.error("Erro ao remover cliente. Tente novamente.");
+    }
   }
 
   async function handleRestore(student: Student) {
-    const { error } = await supabase.rpc("restore_student", { student_id: student.id });
-    if (!error) {
+    setMenuOpen(null);
+    try {
+      const { error } = await supabase
+        .from("students")
+        .update({ deleted_at: null })
+        .eq("id", student.id);
+      if (error) throw error;
       await loadStudents();
       toast.success(`Cliente "${student.nome_completo}" restaurado com sucesso.`);
-    } else {
+    } catch (err) {
+      console.error("Erro ao restaurar:", err);
       toast.error("Erro ao restaurar cliente. Tente novamente.");
-      console.error("Erro restore_student:", error);
     }
-    setMenuOpen(null);
   }
 
   const activeFilterCount = [situacaoFilter, sexoFilter, objetivoFilter, origemFilter].filter(Boolean).length;
