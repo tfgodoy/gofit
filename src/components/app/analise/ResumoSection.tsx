@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useDadosAnalise, calcularEncargos, fmtBRL, fmtPct, variacao, parseGrade, descricaoGrade } from "./useDadosAnalise";
+import { useDadosAnalise, calcularEncargos, calcularGanhoOculto, type GanhoOculto, fmtBRL, fmtPct, variacao, parseGrade, descricaoGrade } from "./useDadosAnalise";
 import {
   Loader2, Calendar, TrendingUp, TrendingDown, DollarSign, Clock, Bus, Gift, HandCoins, Calculator,
-  PieChart as PieIcon, BarChart3, AlertCircle,
+  PieChart as PieIcon, BarChart3, AlertCircle, Sparkles,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip,
@@ -174,6 +174,18 @@ export default function ResumoSection({ staffId }: Props) {
         </div>
       </div>
 
+      {/* Ganho Oculto */}
+      {(() => {
+        const ganho = calcularGanhoOculto({
+          salarioAntes: dados.salarioAnterior?.valor,
+          salarioAgora: dados.salario?.valor,
+          horasAntes: dados.cargaAnterior ? Number(dados.cargaAnterior.horas_semanais) : null,
+          horasAgora: dados.carga ? Number(dados.carga.horas_semanais) : null,
+        });
+        if (!ganho || ganho.deltaPct <= 0.5 || ganho.ganhoMensal <= 0) return null;
+        return <BannerGanhoOculto ganho={ganho} />;
+      })()}
+
       {/* Composição do custo + insights */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -257,6 +269,45 @@ export default function ResumoSection({ staffId }: Props) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function BannerGanhoOculto({ ganho }: { ganho: GanhoOculto }) {
+  return (
+    <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <Sparkles className="w-4 h-4 text-amber-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-amber-900">Ganho Oculto Detectado</p>
+          <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+            O salário-base manteve <strong>{fmtBRL(ganho.salarioAgora)}</strong> ({fmtPct(ganho.pctVariacaoSalario, 0)}),
+            mas a carga caiu de <strong>{ganho.horasAntes}h → {ganho.horasAgora}h/sem</strong>, elevando o valor-hora
+            de <strong>{fmtBRL(ganho.valorHoraAntes)}</strong> para <strong>{fmtBRL(ganho.valorHoraAgora)}</strong>{" "}
+            (<span className="text-amber-800 font-semibold">{fmtPct(ganho.pctVariacaoHora)}</span>).
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-white rounded border border-amber-200 p-3 text-center">
+          <p className="text-[10px] text-amber-600 uppercase font-semibold tracking-wide">Ganho / mês</p>
+          <p className="text-base font-bold text-amber-900 mt-0.5">{fmtBRL(ganho.ganhoMensal)}</p>
+        </div>
+        <div className="bg-white rounded border border-amber-200 p-3 text-center">
+          <p className="text-[10px] text-amber-600 uppercase font-semibold tracking-wide">Ganho / ano</p>
+          <p className="text-base font-bold text-amber-900 mt-0.5">{fmtBRL(ganho.ganhoAnual)}</p>
+        </div>
+        <div className="bg-white rounded border border-amber-200 p-3 text-center">
+          <p className="text-[10px] text-amber-600 uppercase font-semibold tracking-wide">Aumento implícito</p>
+          <p className="text-base font-bold text-amber-900 mt-0.5">{fmtPct(ganho.deltaPct)}</p>
+        </div>
+      </div>
+      <p className="text-[10px] text-amber-600 italic">
+        Para manter o mesmo valor-hora de {fmtBRL(ganho.valorHoraAntes)}, o salário deveria ser {fmtBRL(ganho.salarioEquivalente)}.
+        Os {fmtBRL(ganho.ganhoMensal)} restantes representam um aumento embutido na redução de carga.
+      </p>
     </div>
   );
 }

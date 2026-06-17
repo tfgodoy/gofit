@@ -3,22 +3,24 @@ import HistoricoMonetarioSection from "./analise/HistoricoMonetarioSection";
 import CargaHorariaSection from "./analise/CargaHorariaSection";
 import CustosSection from "./analise/CustosSection";
 import ResumoSection from "./analise/ResumoSection";
+import ComparativoSection from "./analise/ComparativoSection";
 
 interface Props {
   staffId: string;
   contractorId: string;
 }
 
-type SubTab = "salario" | "passagem" | "ajuda" | "bonificacao" | "carga" | "custos" | "resumo";
+type SubTab = "salario" | "passagem" | "ajuda" | "bonificacao" | "carga" | "comparativo" | "custos" | "resumo";
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
-  { id: "salario",     label: "Histórico Salarial" },
-  { id: "passagem",    label: "Passagem" },
-  { id: "ajuda",       label: "Ajuda de Custo" },
-  { id: "bonificacao", label: "Bonificação" },
-  { id: "carga",       label: "Carga Horária" },
-  { id: "custos",      label: "Custos" },
-  { id: "resumo",      label: "Resumo" },
+  { id: "salario",      label: "Histórico Salarial" },
+  { id: "passagem",     label: "Passagem" },
+  { id: "ajuda",        label: "Ajuda de Custo" },
+  { id: "bonificacao",  label: "Bonificação" },
+  { id: "carga",        label: "Carga Horária" },
+  { id: "comparativo",  label: "Comparativo" },
+  { id: "custos",       label: "Custos" },
+  { id: "resumo",       label: "Resumo" },
 ];
 
 export default function StaffAnaliseTab({ staffId, contractorId }: Props) {
@@ -63,6 +65,9 @@ export default function StaffAnaliseTab({ staffId, contractorId }: Props) {
         )}
         {sub === "carga" && (
           <CargaHorariaSection staffId={staffId} contractorId={contractorId} />
+        )}
+        {sub === "comparativo" && (
+          <ComparativoSection staffId={staffId} />
         )}
         {sub === "custos" && (
           <CustosSection staffId={staffId} contractorId={contractorId} />
