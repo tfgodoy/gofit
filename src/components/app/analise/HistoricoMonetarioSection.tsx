@@ -19,7 +19,7 @@ interface Props {
   tituloAtual: string;
 }
 
-interface Record {
+interface Registro {
   id: string;
   data_vigencia: string;
   valor: number;
@@ -78,7 +78,7 @@ function parseCurrency(v: string): number | null {
   return isNaN(n) || n < 0 ? null : n;
 }
 
-function recordToForm(r: Record): Form {
+function recordToForm(r: Registro): Form {
   return {
     data_vigencia: r.data_vigencia,
     valor: r.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -150,7 +150,7 @@ export default function HistoricoMonetarioSection({ staffId, contractorId, table
   function setAdd<K extends keyof Form>(k: K, v: Form[K]) { setAddForm(f => ({ ...f, [k]: v })); }
   function setEdit<K extends keyof Form>(k: K, v: Form[K]) { setEditForm(f => ({ ...f, [k]: v })); }
 
-  function startEdit(r: Record) {
+  function startEdit(r: Registro) {
     setEditingId(r.id); setEditForm(recordToForm(r)); setShowAddForm(false);
   }
   function cancelEdit() { setEditingId(null); setEditForm(EMPTY); }
@@ -161,7 +161,7 @@ export default function HistoricoMonetarioSection({ staffId, contractorId, table
       const { data, error } = await (supabase as any).from(table)
         .select("*").eq("staff_id", staffId).order("data_vigencia", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Record[];
+      return (data ?? []) as Registro[];
     },
   });
 
