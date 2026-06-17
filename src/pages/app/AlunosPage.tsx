@@ -108,31 +108,31 @@ export default function ClientesPage() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  useEffect(() => {
+  async function loadStudents() {
     if (!user?.contractorId) return;
-    async function load() {
-      const { data } = await supabase
-        .from("students")
-        .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo, origem, deleted_at")
-        .eq("contractor_id", user!.contractorId!)
-        .order("nome_completo", { ascending: true });
+    const { data } = await supabase
+      .from("students")
+      .select("id, nome_completo, telefone, email, status, data_nascimento, sexo, foto_url, created_at, objetivo, origem, deleted_at")
+      .eq("contractor_id", user!.contractorId!)
+      .order("nome_completo", { ascending: true });
 
-      const list = (data ?? []) as Student[];
-      const active = list.filter(s => !s.deleted_at);
-      const nonLeads = active.filter(s => s.status !== "lead");
-      setStudents(list);
-      setFiltered(nonLeads);
-      setCounts({
-        total:     nonLeads.length,
-        ativo:     active.filter(s => s.status === "ativo").length,
-        bloqueado: active.filter(s => s.status === "bloqueado").length,
-        inativo:   active.filter(s => s.status === "inativo").length,
-        cancelado: active.filter(s => s.status === "cancelado").length,
-        lead:      active.filter(s => s.status === "lead").length,
-      });
-      setLoading(false);
-    }
-    load();
+    const list = (data ?? []) as Student[];
+    const active = list.filter(s => !s.deleted_at);
+    const nonLeads = active.filter(s => s.status !== "lead");
+    setStudents(list);
+    setCounts({
+      total:     nonLeads.length,
+      ativo:     active.filter(s => s.status === "ativo").length,
+      bloqueado: active.filter(s => s.status === "bloqueado").length,
+      inativo:   active.filter(s => s.status === "inativo").length,
+      cancelado: active.filter(s => s.status === "cancelado").length,
+      lead:      active.filter(s => s.status === "lead").length,
+    });
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadStudents();
   }, [user]);
 
   useEffect(() => {
@@ -177,7 +177,7 @@ export default function ClientesPage() {
       .update({ deleted_at: now })
       .eq("id", student.id);
     if (!error) {
-      setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: now } : s));
+      await loadStudents();
       toast.success(`Cliente "${student.nome_completo}" removido.`);
     } else {
       toast.error("Erro ao remover cliente. Tente novamente.");
@@ -187,10 +187,9 @@ export default function ClientesPage() {
   }
 
   async function handleRestore(student: Student) {
-    // Usa RPC para garantir que o NULL seja gravado corretamente no banco
     const { error } = await supabase.rpc("restore_student", { student_id: student.id });
     if (!error) {
-      setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: null } : s));
+      await loadStudents();
       toast.success(`Cliente "${student.nome_completo}" restaurado com sucesso.`);
     } else {
       toast.error("Erro ao restaurar cliente. Tente novamente.");
