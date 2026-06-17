@@ -148,3 +148,46 @@ export function variacao(atual: number | undefined | null, anterior: number | un
   const pct = (delta / anterior) * 100;
   return { delta, pct };
 }
+
+export const SEMANAS_MES = 4.33;
+
+export interface GanhoOculto {
+  salarioAntes: number;
+  salarioAgora: number;
+  horasAntes: number;
+  horasAgora: number;
+  valorHoraAntes: number;
+  valorHoraAgora: number;
+  salarioEquivalente: number;       // salário que manteria o mesmo valor/hora com a nova carga
+  ganhoMensal: number;              // salarioAgora - salarioEquivalente
+  ganhoAnual: number;
+  pctVariacaoHora: number;          // variação % do valor/hora
+  pctVariacaoSalario: number;       // variação % do salário base
+  deltaPct: number;                 // (pctHora - pctSalario): "aumento implícito"
+}
+
+export function calcularGanhoOculto(params: {
+  salarioAntes: number | null | undefined;
+  salarioAgora: number | null | undefined;
+  horasAntes: number | null | undefined;
+  horasAgora: number | null | undefined;
+}): GanhoOculto | null {
+  const sa = Number(params.salarioAntes ?? 0);
+  const sn = Number(params.salarioAgora ?? 0);
+  const ha = Number(params.horasAntes ?? 0);
+  const hn = Number(params.horasAgora ?? 0);
+  if (sa <= 0 || sn <= 0 || ha <= 0 || hn <= 0) return null;
+  const valorHoraAntes = sa / (ha * SEMANAS_MES);
+  const valorHoraAgora = sn / (hn * SEMANAS_MES);
+  const salarioEquivalente = valorHoraAntes * hn * SEMANAS_MES;
+  const ganhoMensal = sn - salarioEquivalente;
+  const ganhoAnual = ganhoMensal * 12;
+  const pctVariacaoHora = ((valorHoraAgora - valorHoraAntes) / valorHoraAntes) * 100;
+  const pctVariacaoSalario = ((sn - sa) / sa) * 100;
+  const deltaPct = pctVariacaoHora - pctVariacaoSalario;
+  return {
+    salarioAntes: sa, salarioAgora: sn, horasAntes: ha, horasAgora: hn,
+    valorHoraAntes, valorHoraAgora, salarioEquivalente,
+    ganhoMensal, ganhoAnual, pctVariacaoHora, pctVariacaoSalario, deltaPct,
+  };
+}
