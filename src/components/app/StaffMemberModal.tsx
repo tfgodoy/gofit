@@ -10,10 +10,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { StaffRole } from "@/integrations/supabase/types";
 import ChangePasswordModal from "@/components/app/ChangePasswordModal";
-import StaffSalarioTab from "@/components/app/StaffSalarioTab";
 import StaffFeriasTab from "@/components/app/StaffFeriasTab";
 import StaffOcorrenciasTab from "@/components/app/StaffOcorrenciasTab";
 import StaffDocumentosSection from "@/components/app/StaffDocumentosSection";
+import StaffAnaliseTab from "@/components/app/StaffAnaliseTab";
 
 interface Props {
   editId: string | null;
@@ -54,6 +54,8 @@ interface FormState {
   carga_horaria_semanal: string;
   salario_inicial: string;
   valor_passagem: string;
+  valor_ajuda_custo: string;
+  valor_bonificacao: string;
   pis_pasep: string;
   ctps_numero: string;
   ctps_serie: string;
@@ -76,7 +78,7 @@ interface FormState {
 }
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
-type TabId = "pessoal" | "profissional" | "sistema" | "ferias" | "ocorrencias";
+type TabId = "pessoal" | "profissional" | "sistema" | "ferias" | "ocorrencias" | "analise";
 
 const DIAS_SEMANA = [
   { key: "seg", label: "Seg" }, { key: "ter", label: "Ter" },
@@ -241,6 +243,7 @@ const EMPTY: FormState = {
   blocked: false, role: "",
   data_admissao: "", data_demissao: "", tipo_contrato: "", cargo_descricao: "",
   carga_horaria_semanal: "", salario_inicial: "", valor_passagem: "",
+  valor_ajuda_custo: "", valor_bonificacao: "",
   pis_pasep: "", ctps_numero: "", ctps_serie: "",
   banco: "", agencia: "", conta: "", tipo_conta: "", chave_pix: "",
   cep: "", logradouro: "", numero_endereco: "", cidade: "", uf: "", bairro: "", complemento: "",
@@ -321,6 +324,8 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
 
     const vp = (staffData as Record<string, unknown>).valor_passagem as number | null;
     const ch = (staffData as Record<string, unknown>).carga_horaria_semanal as number | null;
+    const va = (staffData as Record<string, unknown>).valor_ajuda_custo as number | null;
+    const vb = (staffData as Record<string, unknown>).valor_bonificacao as number | null;
 
     setForm({
       name:            staffData.name ?? "",
@@ -343,6 +348,8 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
       carga_horaria_semanal: ch != null ? String(ch) : "",
       salario_inicial: "",
       valor_passagem:  vp != null ? vp.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
+      valor_ajuda_custo:  va != null ? va.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
+      valor_bonificacao:  vb != null ? vb.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "",
       pis_pasep:       (staffData as Record<string, unknown>).pis_pasep
                          ? maskPIS(String((staffData as Record<string, unknown>).pis_pasep))
                          : "",
@@ -468,6 +475,8 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
         cargo_descricao:       form.cargo_descricao.trim() || null,
         carga_horaria_semanal: form.carga_horaria_semanal ? parseInt(form.carga_horaria_semanal, 10) : null,
         valor_passagem:        parseCurrency(form.valor_passagem),
+        valor_ajuda_custo:     parseCurrency(form.valor_ajuda_custo) ?? 0,
+        valor_bonificacao:     parseCurrency(form.valor_bonificacao) ?? 0,
         pis_pasep:             form.pis_pasep.replace(/\D/g, "") || null,
         ctps_numero:           form.ctps_numero.trim() || null,
         ctps_serie:            form.ctps_serie.trim() || null,
@@ -530,10 +539,11 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
   const editTabs: { id: TabId; label: string }[] = [
     { id: "ferias",       label: "Férias" },
     { id: "ocorrencias",  label: "Ocorrências" },
+    { id: "analise",      label: "Análise" },
   ];
   const tabs = isEdit ? [...baseTabs, ...editTabs] : baseTabs;
 
-  const isRelationalTab = activeTab === "ferias" || activeTab === "ocorrencias";
+  const isRelationalTab = activeTab === "ferias" || activeTab === "ocorrencias" || activeTab === "analise";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -542,7 +552,7 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className={`relative bg-white rounded-xl shadow-2xl w-full ${activeTab === "analise" ? "max-w-5xl" : "max-w-2xl"} max-h-[90vh] flex flex-col`}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
@@ -844,7 +854,7 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                       ) : (
                         <div>
                           <label className={LBL}>Salário atual</label>
-                          <p className="text-sm text-gray-500 py-2">Ver aba <strong>Salário</strong></p>
+                          <p className="text-sm text-gray-500 py-2">Ver aba <strong>Análise</strong></p>
                         </div>
                       )}
                       <div>
@@ -857,6 +867,32 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                         />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={LBL}>Ajuda de custo (R$/mês)</label>
+                        <CurrencyInput
+                          className={INP}
+                          placeholder="0,00"
+                          value={form.valor_ajuda_custo}
+                          onChange={v => set("valor_ajuda_custo", v)}
+                        />
+                      </div>
+                      <div>
+                        <label className={LBL}>Bonificação (R$/mês)</label>
+                        <CurrencyInput
+                          className={INP}
+                          placeholder="0,00"
+                          value={form.valor_bonificacao}
+                          onChange={v => set("valor_bonificacao", v)}
+                        />
+                      </div>
+                    </div>
+                    {isEdit && (
+                      <p className="text-xs text-gray-500 -mt-2">
+                        Histórico e ajustes detalhados (salário, passagem, ajuda, bonificação, carga horária, custos e resumo)
+                        estão na aba <strong>Análise</strong>.
+                      </p>
+                    )}
                   </SectionBlock>
 
                   <SectionBlock title="Dados bancários">
@@ -892,9 +928,6 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
                     </div>
                   </SectionBlock>
 
-                  {isEdit && editId && user?.contractorId && (
-                    <StaffSalarioTab staffId={editId} contractorId={user.contractorId} />
-                  )}
                 </>
               )}
 
@@ -1013,6 +1046,9 @@ export default function StaffMemberModal({ editId, onClose, onSaved }: Props) {
               )}
               {activeTab === "ocorrencias" && editId && user?.contractorId && (
                 <StaffOcorrenciasTab staffId={editId} contractorId={user.contractorId} />
+              )}
+              {activeTab === "analise" && editId && user?.contractorId && (
+                <StaffAnaliseTab staffId={editId} contractorId={user.contractorId} />
               )}
 
             </div>
