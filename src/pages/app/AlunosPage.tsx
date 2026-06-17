@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserPlus, Search, Send, ExternalLink, MoreVertical, SlidersHorizontal, Trash2, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 import AppLayout from "@/components/app/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -177,18 +178,23 @@ export default function ClientesPage() {
       .eq("id", student.id);
     if (!error) {
       setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: now } : s));
+      toast.success(`Cliente "${student.nome_completo}" removido.`);
+    } else {
+      toast.error("Erro ao remover cliente. Tente novamente.");
     }
     setRemoveConfirm(null);
     setMenuOpen(null);
   }
 
   async function handleRestore(student: Student) {
-    const { error } = await supabase
-      .from("students")
-      .update({ deleted_at: null })
-      .eq("id", student.id);
+    // Usa RPC para garantir que o NULL seja gravado corretamente no banco
+    const { error } = await supabase.rpc("restore_student", { student_id: student.id });
     if (!error) {
       setStudents(prev => prev.map(s => s.id === student.id ? { ...s, deleted_at: null } : s));
+      toast.success(`Cliente "${student.nome_completo}" restaurado com sucesso.`);
+    } else {
+      toast.error("Erro ao restaurar cliente. Tente novamente.");
+      console.error("Erro restore_student:", error);
     }
     setMenuOpen(null);
   }
