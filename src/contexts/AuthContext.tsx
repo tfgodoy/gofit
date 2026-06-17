@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: contractor } = isCNPJ
       ? await contractorQuery.eq("cnpj", credential.replace(/\D/g, "")).maybeSingle()
-      : await contractorQuery.eq("email", credential).maybeSingle();
+      : await contractorQuery.eq("email", credential.trim().toLowerCase()).maybeSingle();
 
     if (contractor) {
       const { data: authData } = await supabase
