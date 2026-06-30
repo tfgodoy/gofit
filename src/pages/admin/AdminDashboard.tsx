@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Users, Settings, LogOut, ShieldCheck,
-  TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
+  TrendingUp, AlertTriangle, CheckCircle2,
   Dumbbell, CreditCard, UserPlus, Clock, ChevronRight,
-  Activity, DollarSign, FileText, Package
+  Activity, DollarSign, FileText, Package, Layers,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -34,26 +34,7 @@ interface Stats {
   avgTicket: number;
 }
 
-// TODO Fase 3: substituir por dados reais da tabela saas_subscriptions (MRR histórico)
-const mrrHistory = [
-  { mes: "Dez", mrr: 4200 }, { mes: "Jan", mrr: 6800 },
-  { mes: "Fev", mrr: 9100 }, { mes: "Mar", mrr: 11400 },
-  { mes: "Abr", mrr: 14200 }, { mes: "Mai", mrr: 0 },
-];
-
-// TODO Fase 3: substituir por dados reais de saas_subscription_events (novos cadastros e churn)
-const signupsHistory = [
-  { mes: "Dez", novos: 3, churn: 0 }, { mes: "Jan", novos: 8, churn: 1 },
-  { mes: "Fev", novos: 12, churn: 2 }, { mes: "Mar", novos: 15, churn: 3 },
-  { mes: "Abr", novos: 18, churn: 2 }, { mes: "Mai", novos: 0, churn: 0 },
-];
-
 const PIE_COLORS = ["#7c3aed", "#a78bfa", "#c4b5fd", "#ede9fe"];
-
-const PLAN_LABELS: Record<string, string> = {
-  trial: "Trial", starter: "Starter",
-  profissional: "Profissional", empresarial: "Empresarial",
-};
 
 const STATUS_STYLE: Record<string, string> = {
   active:    "bg-green-50 text-green-700",
@@ -66,17 +47,19 @@ const STATUS_LABEL: Record<string, string> = {
   active: "Ativo", trial: "Trial", inactive: "Inativo", suspended: "Suspenso",
 };
 
-const PLAN_PRICE: Record<string, number> = {
-  trial: 0, starter: 89, profissional: 179, empresarial: 299,
+const PLAN_LABELS: Record<string, string> = {
+  trial: "Trial", starter: "Starter",
+  profissional: "Profissional", empresarial: "Empresarial",
 };
 
 const navItems = [
-  { icon: BarChart2,  label: "Dashboard",      to: "/admin/dashboard",       active: true  },
-  { icon: Building2,  label: "Empresas",        to: "/admin/companies",       active: true  },
-  { icon: Package,    label: "Planos",           to: "/admin/plans",           active: false },
-  { icon: CreditCard, label: "Financeiro",      to: "/admin/billing",         active: false },
-  { icon: FileText,   label: "Auditoria",       to: "/admin/audit",           active: false },
-  { icon: Settings,   label: "Configurações",   to: "/admin/settings",        active: false },
+  { icon: BarChart2,  label: "Dashboard",    to: "/admin/dashboard",       active: true  },
+  { icon: Building2,  label: "Empresas",     to: "/admin/companies",       active: true  },
+  { icon: Package,    label: "Planos",       to: "/admin/plans",           active: true  },
+  { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",   active: true  },
+  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",         active: false },
+  { icon: FileText,   label: "Auditoria",    to: "/admin/audit",           active: false },
+  { icon: Settings,   label: "Configurações",to: "/admin/settings",        active: false },
 ];
 
 function KpiCard({
@@ -94,7 +77,7 @@ function KpiCard({
         </div>
         {trend && (
           <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${trendUp ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
-            {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            <TrendingUp className="w-3 h-3" />
             {trend}
           </span>
         )}
@@ -116,42 +99,98 @@ export default function AdminDashboard() {
     mrr: 0, activeCompanies: 0, newThisMonth: 0,
     trialCompanies: 0, totalStudents: 0, avgTicket: 0,
   });
-  const [companies, setCompanies]   = useState<ContractorRow[]>([]);
-  const [planDist, setPlanDist]     = useState<{ name: string; value: number }[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [companies, setCompanies]       = useState<ContractorRow[]>([]);
+  const [planDist, setPlanDist]         = useState<{ name: string; value: number }[]>([]);
+  const [mrrHistory, setMrrHistory]     = useState<{ mes: string; mrr: number }[]>([]);
+  const [signupsHistory, setSignupsHistory] = useState<{ mes: string; novos: number; churn: number }[]>([]);
+  const [dataLoading, setDataLoading]   = useState(true);
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase
-        .from("contractors")
-        .select("id, nome_fantasia, email, plan, status, cidade, uf, trial_ends_at, created_at")
-        .order("created_at", { ascending: false });
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-      if (error || !data) { setDataLoading(false); return; }
+      const [
+        { data: contractorsData, error: cErr },
+        { data: subsData },
+        { data: eventsData },
+      ] = await Promise.all([
+        supabase
+          .from("contractors")
+          .select("id, nome_fantasia, email, plan, status, cidade, uf, trial_ends_at, created_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("saas_subscriptions")
+          .select("id, contractor_id, status, plan_id, created_at, saas_plans(name, slug, price_monthly)"),
+        supabase
+          .from("saas_subscription_events")
+          .select("event_type, created_at")
+          .in("event_type", ["SUBSCRIPTION_CREATED", "SUBSCRIPTION_CANCELLED"])
+          .gte("created_at", sixMonthsAgo.toISOString()),
+      ]);
 
-      const now = new Date();
+      if (cErr || !contractorsData) { setDataLoading(false); return; }
+
+      const now         = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const active   = data.filter(c => c.status === "active");
-      const trial    = data.filter(c => c.status === "trial");
-      const newMonth = data.filter(c => new Date(c.created_at) >= startOfMonth);
-      const mrr      = active.reduce((sum, c) => sum + (PLAN_PRICE[c.plan] ?? 0), 0);
+      const active       = contractorsData.filter(c => c.status === "active");
+      const newMonth     = contractorsData.filter(c => new Date(c.created_at) >= startOfMonth);
 
+      // MRR real: soma dos preços mensais das assinaturas ativas
+      const activeSubs = (subsData ?? []).filter(s => s.status === "active");
+      const trialSubs  = (subsData ?? []).filter(s => s.status === "trialing");
+      const mrr = activeSubs.reduce((sum, s) => {
+        const plan = s.saas_plans as { price_monthly: number } | null;
+        return sum + (plan?.price_monthly ?? 0);
+      }, 0);
+
+      // Distribuição por plano (via assinaturas)
       const planCount: Record<string, number> = {};
-      data.forEach(c => { planCount[c.plan] = (planCount[c.plan] ?? 0) + 1; });
-      const dist = Object.entries(planCount).map(([k, v]) => ({
-        name: PLAN_LABELS[k] ?? k, value: v,
-      }));
+      (subsData ?? []).forEach(s => {
+        const planName = (s.saas_plans as { name: string } | null)?.name ?? "Sem plano";
+        planCount[planName] = (planCount[planName] ?? 0) + 1;
+      });
+      const dist = Object.entries(planCount).map(([name, value]) => ({ name, value }));
+
+      // Histórico dos últimos 6 meses
+      const months = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (5 - i));
+        return {
+          mes: d.toLocaleString("pt-BR", { month: "short" }).replace(".", ""),
+          _month: d.getMonth(),
+          _year: d.getFullYear(),
+          mrr: 0,
+          novos: 0,
+          churn: 0,
+        };
+      });
+      // Mês atual recebe MRR real
+      months[5].mrr = mrr;
+      // Outros meses: novos e churn dos eventos
+      months.forEach(m => {
+        m.novos = (eventsData ?? []).filter(e => {
+          const d = new Date(e.created_at);
+          return d.getMonth() === m._month && d.getFullYear() === m._year && e.event_type === "SUBSCRIPTION_CREATED";
+        }).length;
+        m.churn = (eventsData ?? []).filter(e => {
+          const d = new Date(e.created_at);
+          return d.getMonth() === m._month && d.getFullYear() === m._year && e.event_type === "SUBSCRIPTION_CANCELLED";
+        }).length;
+      });
 
       setStats({
         mrr,
         activeCompanies: active.length,
         newThisMonth: newMonth.length,
-        trialCompanies: trial.length,
-        totalStudents: active.length * 120, // TODO Fase 3: usar contagem real de students por contractor
-        avgTicket: active.length ? mrr / active.length : 0,
+        trialCompanies: trialSubs.length,
+        totalStudents: active.length * 120,
+        avgTicket: activeSubs.length ? mrr / activeSubs.length : 0,
       });
-      setCompanies(data.slice(0, 8));
+      setCompanies(contractorsData.slice(0, 8));
       setPlanDist(dist);
+      setMrrHistory(months.map(({ mes, mrr: m }) => ({ mes, mrr: m })));
+      setSignupsHistory(months.map(({ mes, novos, churn }) => ({ mes, novos, churn })));
       setDataLoading(false);
     }
     load();
@@ -266,8 +305,6 @@ export default function AdminDashboard() {
             sub={`Ticket médio: R$ ${stats.avgTicket.toFixed(0)}`}
             icon={DollarSign}
             iconClass="bg-primary/10 text-primary"
-            trend="+18%" /* TODO Fase 3: calcular variação real de MRR mês a mês */
-            trendUp
           />
           <KpiCard
             label="Empresas ativas"
@@ -275,7 +312,7 @@ export default function AdminDashboard() {
             sub={`+${stats.newThisMonth} este mês`}
             icon={Building2}
             iconClass="bg-blue-50 text-blue-600"
-            trend={`+${stats.newThisMonth}`}
+            trend={stats.newThisMonth > 0 ? `+${stats.newThisMonth}` : undefined}
             trendUp
           />
           <KpiCard
@@ -288,11 +325,9 @@ export default function AdminDashboard() {
           <KpiCard
             label="Alunos gerenciados"
             value={stats.totalStudents.toLocaleString("pt-BR")}
-            sub="estimativa via planos ativos"
+            sub="estimativa via empresas ativas"
             icon={Users}
             iconClass="bg-green-50 text-green-600"
-            trend="+12%" /* TODO Fase 3: calcular variação real de alunos mês a mês */
-            trendUp
           />
         </div>
 
@@ -302,11 +337,13 @@ export default function AdminDashboard() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="font-semibold text-gray-900">Crescimento MRR</h2>
-                <p className="text-xs text-gray-400">Últimos 6 meses</p>
+                <p className="text-xs text-gray-400">Últimos 6 meses — mês atual com dados reais</p>
               </div>
-              <span className="text-xs font-semibold text-green-600 bg-green-50 px-2.5 py-1 rounded-full flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" /> +18% mês a mês
-              </span>
+              {stats.mrr > 0 && (
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" /> R$ {stats.mrr.toLocaleString("pt-BR")}
+                </span>
+              )}
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={mrrHistory}>
@@ -321,7 +358,7 @@ export default function AdminDashboard() {
 
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
             <h2 className="font-semibold text-gray-900 mb-1">Distribuição por plano</h2>
-            <p className="text-xs text-gray-400 mb-4">Empresas por tipo</p>
+            <p className="text-xs text-gray-400 mb-4">Assinaturas por tipo</p>
             {planDist.length > 0 ? (
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
@@ -344,7 +381,7 @@ export default function AdminDashboard() {
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
             <h2 className="font-semibold text-gray-900 mb-1">Novos cadastros vs Churn</h2>
-            <p className="text-xs text-gray-400 mb-5">Últimos 6 meses</p>
+            <p className="text-xs text-gray-400 mb-5">Últimos 6 meses — via saas_subscription_events</p>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={signupsHistory} barSize={14} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />

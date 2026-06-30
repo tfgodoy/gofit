@@ -4,7 +4,7 @@ import {
   Building2, BarChart2, Package, CreditCard, FileText,
   Settings, LogOut, ShieldCheck, Dumbbell, ArrowLeft,
   Users, Clock, Globe, Phone, Mail, MapPin, Hash,
-  CheckCircle2, XCircle, AlertTriangle, Loader2,
+  CheckCircle2, XCircle, AlertTriangle, Loader2, Layers,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,13 +69,49 @@ const MODULE_STATUS_LABEL: Record<string, string> = {
   in_review: "Em análise", cancelled: "Cancelado", coming_soon: "Em breve",
 };
 
+interface SaasSubscriptionRow {
+  id: string;
+  plan_id: string;
+  status: string;
+  trial_start: string | null;
+  trial_end: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  saas_plans: { name: string; slug: string; price_monthly: number } | null;
+}
+
+interface SubEventRow {
+  id: string;
+  event_type: string;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  created_at: string;
+}
+
+const SUB_STATUS_LABEL: Record<string, string> = {
+  trialing: "Trial", active: "Ativo", past_due: "Em atraso",
+  paused: "Pausado", blocked: "Bloqueado", cancelled: "Cancelado", expired: "Expirado",
+};
+const SUB_STATUS_STYLE: Record<string, string> = {
+  trialing: "bg-yellow-50 text-yellow-700",
+  active: "bg-green-50 text-green-700",
+  past_due: "bg-orange-50 text-orange-700",
+  paused: "bg-blue-50 text-blue-700",
+  blocked: "bg-red-50 text-red-600",
+  cancelled: "bg-gray-100 text-gray-500",
+  expired: "bg-gray-100 text-gray-400",
+};
+
 const navItems = [
-  { icon: BarChart2,  label: "Dashboard",    to: "/admin/dashboard",  active: true },
-  { icon: Building2,  label: "Empresas",     to: "/admin/companies",  active: true },
-  { icon: Package,    label: "Planos",       to: "/admin/plans",      active: false },
-  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",    active: false },
-  { icon: FileText,   label: "Auditoria",    to: "/admin/audit",      active: false },
-  { icon: Settings,   label: "Configurações",to: "/admin/settings",   active: false },
+  { icon: BarChart2,  label: "Dashboard",    to: "/admin/dashboard",      active: true },
+  { icon: Building2,  label: "Empresas",     to: "/admin/companies",      active: true },
+  { icon: Package,    label: "Planos",       to: "/admin/plans",          active: true },
+  { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
+  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: false },
+  { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
+  { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];
 
 export default function AdminCompanyDetailsPage() {
@@ -83,12 +119,14 @@ export default function AdminCompanyDetailsPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  const [company, setCompany]         = useState<ContractorDetail | null>(null);
-  const [staff, setStaff]             = useState<StaffRow[]>([]);
-  const [modules, setModules]         = useState<CompanyModuleRow[]>([]);
-  const [loading, setLoading]         = useState(true);
+  const [company, setCompany]           = useState<ContractorDetail | null>(null);
+  const [staff, setStaff]               = useState<StaffRow[]>([]);
+  const [modules, setModules]           = useState<CompanyModuleRow[]>([]);
+  const [subscription, setSubscription] = useState<SaasSubscriptionRow | null>(null);
+  const [subEvents, setSubEvents]       = useState<SubEventRow[]>([]);
+  const [loading, setLoading]           = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [error, setError]             = useState<string | null>(null);
+  const [error, setError]               = useState<string | null>(null);
   const viewedLogged = useRef(false);
 
   useEffect(() => {
@@ -98,6 +136,7 @@ export default function AdminCompanyDetailsPage() {
         { data: contractor, error: e1 },
         { data: staffData },
         { data: modulesData },
+        { data: subData },
       ] = await Promise.all([
         supabase.from("contractors").select("*").eq("id", id).single(),
         supabase.from("staff")
@@ -108,6 +147,10 @@ export default function AdminCompanyDetailsPage() {
         supabase.from("company_modules")
           .select("id, module_id, status, activated_at, modules(name, slug, icon)")
           .eq("contractor_id", id),
+        supabase.from("saas_subscriptions")
+          .select("id, plan_id, status, trial_start, trial_end, current_period_start, current_period_end, cancelled_at, created_at, saas_plans(name, slug, price_monthly)")
+          .eq("contractor_id", id)
+          .maybeSingle(),
       ]);
 
       if (e1 || !contractor) { setError("Empresa não encontrada."); setLoading(false); return; }
@@ -115,6 +158,17 @@ export default function AdminCompanyDetailsPage() {
       setCompany(contractor);
       setStaff(staffData ?? []);
       setModules(modulesData ?? []);
+
+      if (subData) {
+        setSubscription(subData as unknown as SaasSubscriptionRow);
+        const { data: evtsData } = await supabase
+          .from("saas_subscription_events")
+          .select("id, event_type, old_value, new_value, created_at")
+          .eq("subscription_id", subData.id)
+          .order("created_at", { ascending: false })
+          .limit(6);
+        setSubEvents((evtsData ?? []) as SubEventRow[]);
+      }
       setLoading(false);
 
       // Auditoria de visualização — useRef evita duplo disparo se user mudar referência
@@ -420,6 +474,76 @@ export default function AdminCompanyDetailsPage() {
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+
+                {/* Assinatura SaaS */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-bold text-gray-900">Assinatura SaaS</h2>
+                    <button
+                      onClick={() => navigate("/admin/subscriptions")}
+                      className="text-xs font-semibold text-primary hover:underline">
+                      Gerenciar →
+                    </button>
+                  </div>
+                  {subscription ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${SUB_STATUS_STYLE[subscription.status] ?? "bg-gray-100 text-gray-500"}`}>
+                          {SUB_STATUS_LABEL[subscription.status] ?? subscription.status}
+                        </span>
+                        <span className="text-sm font-semibold text-primary">
+                          {subscription.saas_plans?.name ?? "—"}
+                        </span>
+                        {subscription.saas_plans && subscription.saas_plans.price_monthly > 0 && (
+                          <span className="text-xs text-gray-400">
+                            R$ {subscription.saas_plans.price_monthly.toLocaleString("pt-BR")}/mês
+                          </span>
+                        )}
+                      </div>
+                      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-600">
+                        {subscription.trial_start && (
+                          <div>
+                            <dt className="text-gray-400 mb-0.5">Início do trial</dt>
+                            <dd>{new Date(subscription.trial_start).toLocaleDateString("pt-BR")}</dd>
+                          </div>
+                        )}
+                        {subscription.trial_end && (
+                          <div>
+                            <dt className="text-gray-400 mb-0.5">Fim do trial</dt>
+                            <dd>{new Date(subscription.trial_end).toLocaleDateString("pt-BR")}</dd>
+                          </div>
+                        )}
+                        {subscription.current_period_start && (
+                          <div>
+                            <dt className="text-gray-400 mb-0.5">Período atual</dt>
+                            <dd>{new Date(subscription.current_period_start).toLocaleDateString("pt-BR")}</dd>
+                          </div>
+                        )}
+                        {subscription.cancelled_at && (
+                          <div>
+                            <dt className="text-gray-400 mb-0.5">Cancelada em</dt>
+                            <dd className="text-red-500">{new Date(subscription.cancelled_at).toLocaleDateString("pt-BR")}</dd>
+                          </div>
+                        )}
+                      </dl>
+                      {subEvents.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-2">Últimos eventos</p>
+                          <ul className="space-y-1.5">
+                            {subEvents.map(e => (
+                              <li key={e.id} className="flex items-center justify-between text-xs">
+                                <span className="font-mono text-gray-600 bg-gray-50 px-2 py-0.5 rounded">{e.event_type}</span>
+                                <span className="text-gray-400">{new Date(e.created_at).toLocaleDateString("pt-BR")}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-4">Nenhuma assinatura encontrada.</p>
                   )}
                 </div>
               </div>

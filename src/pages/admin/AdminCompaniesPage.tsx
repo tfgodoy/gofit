@@ -3,7 +3,7 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, Search, BarChart2, Package, CreditCard,
   FileText, Settings, LogOut, ShieldCheck, Dumbbell,
-  Filter, X, Users,
+  Filter, X, Users, Layers,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,12 +38,13 @@ const PLAN_LABEL: Record<string, string> = {
 };
 
 const navItems = [
-  { icon: BarChart2,  label: "Dashboard",    to: "/admin/dashboard",  active: true },
-  { icon: Building2,  label: "Empresas",     to: "/admin/companies",  active: true },
-  { icon: Package,    label: "Planos",       to: "/admin/plans",      active: false },
-  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",    active: false },
-  { icon: FileText,   label: "Auditoria",    to: "/admin/audit",      active: false },
-  { icon: Settings,   label: "Configurações",to: "/admin/settings",   active: false },
+  { icon: BarChart2,  label: "Dashboard",    to: "/admin/dashboard",      active: true },
+  { icon: Building2,  label: "Empresas",     to: "/admin/companies",      active: true },
+  { icon: Package,    label: "Planos",       to: "/admin/plans",          active: true },
+  { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
+  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: false },
+  { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
+  { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];
 
 export default function AdminCompaniesPage() {

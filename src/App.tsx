@@ -11,6 +11,8 @@ import AdminLoginPage            from "@/pages/admin/AdminLoginPage";
 import AdminDashboard            from "@/pages/admin/AdminDashboard";
 import AdminCompaniesPage        from "@/pages/admin/AdminCompaniesPage";
 import AdminCompanyDetailsPage   from "@/pages/admin/AdminCompanyDetailsPage";
+import AdminPlansPage            from "@/pages/admin/AdminPlansPage";
+import AdminSubscriptionsPage    from "@/pages/admin/AdminSubscriptionsPage";
 import AdminGuard                from "@/components/auth/AdminGuard";
 import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
@@ -135,7 +137,9 @@ export default function App() {
             <Route path="/admin/dashboard"      element={<AdminGuard><AdminDashboard /></AdminGuard>} />
             <Route path="/admin/companies"      element={<AdminGuard><AdminCompaniesPage /></AdminGuard>} />
             <Route path="/admin/companies/:id"  element={<AdminGuard><AdminCompanyDetailsPage /></AdminGuard>} />
-            {/* Rotas admin futuras (Fases 3-7) ficam aqui — protegidas por AdminGuard */}
+            <Route path="/admin/plans"          element={<AdminGuard><AdminPlansPage /></AdminGuard>} />
+            <Route path="/admin/subscriptions"  element={<AdminGuard><AdminSubscriptionsPage /></AdminGuard>} />
+            {/* Rotas admin futuras (Fases 4-7) ficam aqui — protegidas por AdminGuard */}
             <Route path="/admin/*"              element={<AdminGuard><Navigate to="/admin/dashboard" replace /></AdminGuard>} />
 
             {/* Owner legado — redireciona para /admin enquanto existir bookmarks antigos */}
