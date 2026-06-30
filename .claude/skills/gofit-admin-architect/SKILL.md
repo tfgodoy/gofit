@@ -48,13 +48,22 @@ Estas duas áreas são **completamente separadas** em rota, autenticação, perm
 
 ## Autenticação do Admin GoFit
 
-O Owner/Admin autentica via:
-1. Função `adminLogin(email, password)` no `AuthContext`
-2. `supabase.auth.signInWithPassword` com email e senha
-3. Consulta à tabela `platform_owners` para confirmar acesso
+O Owner/Admin autentica **exclusivamente** via:
+1. Rota `/admin/login`
+2. Função `adminLogin(email, password)` no `AuthContext`
+3. `supabase.auth.signInWithPassword` com email e senha
+4. Consulta à tabela `platform_owners` para confirmar acesso
 
-**Jamais usar `VITE_OWNER_EMAIL` ou `VITE_OWNER_PASSWORD` — essas variáveis foram removidas.**
-**Jamais expor `service_role` em variável `VITE_*`.**
+`/login` é a entrada das academias/clientes — não tem e nunca deve ter aba, modo ou lógica de acesso admin.
+
+**Regras permanentes de autenticação:**
+- Nunca recriar aba Owner em `/login`
+- Nunca usar `login()` comum para acesso administrativo
+- Nunca permitir acesso Admin por `/login`
+- Sempre usar `/admin/login` + `adminLogin()` para Admin GoFit
+- Nunca usar service role dentro de `src/`
+- Nunca usar variável `VITE_` para segredo de servidor
+- A service role, se necessária localmente ou em scripts, deve usar `SUPABASE_SERVICE_ROLE_KEY` (sem prefixo `VITE_`)
 
 Tabela central de identidade de admins:
 ```sql
@@ -66,39 +75,41 @@ platform_owners (
 
 ---
 
-## Estado atual do projeto (atualizado após Fase 1)
+## Estado atual do projeto — Fase 1 concluída
 
-### Arquivos existentes na área Admin
+### Arquivos da área Admin
 
 | Arquivo | Status |
 |---|---|
 | `src/pages/admin/AdminLoginPage.tsx` | ✅ Criado |
-| `src/pages/admin/AdminDashboard.tsx` | ✅ Criado |
+| `src/pages/admin/AdminDashboard.tsx` | ✅ Criado (dados de MRR/Churn mockados — ver pendências) |
 | `src/components/auth/AdminGuard.tsx` | ✅ Criado |
 | `src/lib/adminAudit.ts` | ✅ Criado |
 | `src/contexts/AuthContext.tsx` | ✅ Atualizado com `adminLogin()` e auditoria no logout |
 | `src/App.tsx` | ✅ Atualizado com rotas `/admin/*` e redirects `/owner/*` |
+| `src/pages/LoginPage.tsx` | ✅ Aba Owner removida — exclusivo para academias/clientes |
 | `supabase/migrations/20260630_041_admin_audit_logs.sql` | ✅ Aplicada |
-| `src/pages/OwnerDashboard.tsx` | ✅ Removido (arquivo deletado após validação Fase 1) |
-| `src/pages/LoginPage.tsx` | ✅ Aba Owner removida — apenas entrada de academias/clientes |
+| `src/pages/OwnerDashboard.tsx` | ✅ Deletado |
+| `.env.example` | ✅ `SUPABASE_SERVICE_ROLE_KEY` sem prefixo `VITE_` |
 
-### Rotas existentes
+### Rotas
 
 | Rota | Status |
 |---|---|
-| `/admin/login` | ✅ Funcional |
+| `/admin/login` | ✅ Única entrada administrativa |
 | `/admin/dashboard` | ✅ Funcional |
-| `/admin/*` (catch-all) | ✅ Redireciona para `/admin/dashboard` via AdminGuard |
-| `/owner/dashboard` | ✅ Redireciona para `/admin/dashboard` |
-| `/owner/*` | ✅ Redireciona para `/admin/dashboard` |
+| `/admin/*` (catch-all) | ✅ Protegido por `AdminGuard` → redireciona para `/admin/dashboard` |
+| `/owner/dashboard` | ✅ Redirect legado para `/admin/dashboard` |
+| `/owner/*` | ✅ Redirect legado para `/admin/dashboard` |
+| `/login` | ✅ Exclusivo para academias/clientes — sem acesso admin |
 | `/app/*` | ✅ Intacto, não alterado |
 
-### Tabelas Admin existentes no banco
+### Tabelas Admin no banco
 
 | Tabela | Status |
 |---|---|
-| `platform_owners` | ✅ Existe (criada via MCP) |
-| `admin_audit_logs` | ✅ Criada na Fase 1 com RLS + função SECURITY DEFINER |
+| `platform_owners` | ✅ Criada (via MCP) |
+| `admin_audit_logs` | ✅ Criada com RLS + função SECURITY DEFINER |
 
 ### Eventos de auditoria implementados
 
@@ -109,12 +120,25 @@ platform_owners (
 | `ADMIN_LOGOUT` | Logout de usuário com role `"owner"` |
 | `ADMIN_ACCESS_DENIED` | Usuário autenticado tenta acessar `/admin/*` sem role `"owner"` |
 
-### Pendências conhecidas do Admin Dashboard (Fase 1)
+### Pendências do AdminDashboard (a resolver na Fase 3)
 
-- Gráficos de MRR e Churn ainda usam **dados mockados** — serão substituídos na Fase 3 (assinaturas)
-- Botões "Ver todas" e "Detalhes" na tabela de empresas ainda são **stubs**
-- Sidebar: itens Planos, Financeiro, Auditoria e Configurações marcados como **"em breve"**
-- `ip_address` **não é capturado** — frontend não consegue obter o IP real de forma segura. Implementar via Edge Function em fase futura
+- Dados de MRR e Churn são **mockados** — marcados com `// TODO Fase 3` no código
+- `totalStudents` usa estimativa `active.length * 120` — marcado com `// TODO Fase 3`
+- Trends `+18%` e `+12%` nos KPIs são hardcoded — marcados com `// TODO Fase 3`
+- Botões "Ver todas" e "Detalhes" são stubs — serão implementados na Fase 2
+- `ip_address` não é capturado — implementar via Edge Function em fase futura
+
+### O que NÃO deve ser alterado nas próximas fases
+
+- Não recriar `/admin/login`
+- Não recriar `/admin/dashboard` do zero
+- Não recriar `AdminGuard`
+- Não recriar `admin_audit_logs`
+- Não recriar `logAdminAudit()`
+- Não adicionar aba Owner em `/login`
+- Não usar `login()` para acesso admin
+- Não reverter redirect `/owner/*`
+- Não quebrar `/app/*`
 
 ---
 
@@ -164,6 +188,7 @@ Antes de escrever qualquer linha de código, sempre:
 - [ ] `btoa()` não usado para hash de senha (usar bcrypt via Edge Function)
 - [ ] Lógica de autorização validada no backend (Supabase RLS/Functions), não apenas no frontend
 - [ ] `tsc --noEmit` sem erros antes do commit
+- [ ] `/login` continua sem acesso admin
 
 ---
 
@@ -181,27 +206,23 @@ Antes de escrever qualquer linha de código, sempre:
 
 ## Fases de implementação
 
-### ✅ FASE 1 — Base segura do Admin GoFit (CONCLUÍDA)
+### ✅ FASE 1 — Base segura do Admin GoFit (CONCLUÍDA DEFINITIVAMENTE)
 
-**Status:** Concluída. Pendente apenas validação manual final.
+**Status:** Concluída e validada. Inclui validação técnica e correções pós-validação.
 
 **O que foi implementado:**
-- `/admin/login` — página de login exclusiva do admin
+- `/admin/login` — única entrada administrativa, usa `adminLogin()` com auditoria
 - `/admin/dashboard` — dashboard com KPIs, gráficos e tabela de empresas
 - `AdminGuard` — protege todas as rotas `/admin/*`
-- `adminLogin()` no `AuthContext` — autenticação separada com auditoria
+- `adminLogin()` no `AuthContext` — Supabase Auth + validação em `platform_owners`
 - Tabela `admin_audit_logs` com RLS + função `SECURITY DEFINER` para logs de tentativas negadas
 - Helper `logAdminAudit()` centralizado em `src/lib/adminAudit.ts`
-- Redirect `/owner/*` → `/admin/*`
+- Eventos auditados: `ADMIN_LOGIN_SUCCESS`, `ADMIN_LOGIN_DENIED`, `ADMIN_LOGOUT`, `ADMIN_ACCESS_DENIED`
+- Redirect `/owner/*` → `/admin/dashboard`
+- Aba Owner removida de `LoginPage.tsx` — `/login` é exclusivo para academias
+- `src/pages/OwnerDashboard.tsx` deletado
+- `VITE_SUPABASE_SERVICE_ROLE_KEY` renomeado para `SUPABASE_SERVICE_ROLE_KEY`
 - `/app/*` preservado intacto
-
-**O que NÃO deve ser refeito nas próximas fases:**
-- Não recriar `/admin/login`
-- Não recriar `/admin/dashboard` do zero
-- Não recriar `AdminGuard`
-- Não recriar `admin_audit_logs` — apenas evoluir com novos eventos se necessário
-- Não mexer no fluxo `/app/*`
-- Não reverter redirect `/owner/*`
 
 ---
 
@@ -217,7 +238,7 @@ Antes de escrever qualquer linha de código, sempre:
 2. `/admin/companies/:id` — detalhe da empresa: dados, usuários, plano, módulos ativos
 3. Ações administrativas (todas com `logAdminAudit()`):
    - Visualizar empresa → `COMPANY_VIEWED`
-   - Ativar empresa → `COMPANY_UNBLOCKED` ou equivalente
+   - Ativar empresa → `COMPANY_UNBLOCKED`
    - Bloquear empresa → `COMPANY_BLOCKED`
    - Cancelar empresa → `COMPANY_CANCELLED` (se existir campo/status adequado)
    - Estender trial → `TRIAL_EXTENDED` (somente se existir estrutura de trial)
@@ -259,7 +280,7 @@ saas_subscription_events (id, subscription_id, contractor_id, event_type, metada
 **Critérios de aceite:**
 - Uma empresa tem exatamente uma assinatura ativa por vez
 - Troca de plano gera evento em `saas_subscription_events`
-- Dados reais de MRR substituem os dados mockados do Admin Dashboard
+- Dados reais de MRR substituem os mocks do AdminDashboard (remover `// TODO Fase 3`)
 
 ---
 
@@ -396,7 +417,7 @@ support_tickets (
 ## Cuidados críticos (nunca fazer)
 
 - `btoa()` para hash de senha — usar Edge Function com bcrypt
-- `service_role` em variável `VITE_*`
+- `service_role` em variável `VITE_*` — usar `SUPABASE_SERVICE_ROLE_KEY` sem prefixo
 - Policy `USING (true)` para `anon` em tabela sensível
 - Lógica de plano/módulo espalhada em vários componentes — centralizar
 - Criar tabela nova sem verificar se já existe equivalente
@@ -404,7 +425,9 @@ support_tickets (
 - Confiar apenas em bloqueio visual no frontend — validar no backend
 - Misturar autenticação de academia com autenticação admin
 - Alterar tabelas existentes sem avaliar impacto em `/app/*`
-- Recriar arquivos que já existem da Fase 1 (AdminGuard, adminAudit, etc.)
+- Recriar arquivos que já existem da Fase 1 (AdminGuard, adminAudit, AdminLoginPage, etc.)
+- Adicionar aba/modo Owner em `/login`
+- Usar `login()` para autenticar admin GoFit
 
 ---
 
