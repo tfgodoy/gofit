@@ -31,7 +31,7 @@ supabase/migrations/    # SQL de criação do banco
 
 ## Autenticação e papéis
 
-- **owner** — superadmin da plataforma (credenciais em env vars)
+- **owner** — superadmin da plataforma (autenticado via Supabase Auth + tabela `platform_owners`)
 - **contractor** — dono/gestor da academia (login por email ou CNPJ)
 - **staff** — funcionário da academia (professor, recepcionista, nutricionista, etc.)
 - **público** — aluno acessa anamnese/convite via token sem login
@@ -158,8 +158,6 @@ Toda nova funcionalidade deve ser avaliada à luz do que o NextFit oferece naque
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_SUPABASE_SERVICE_ROLE_KEY=
-VITE_OWNER_EMAIL=owner@fitcoresys.com.br
-VITE_OWNER_PASSWORD=FitCore@2025!
 ```
 
 ## Como rodar localmente

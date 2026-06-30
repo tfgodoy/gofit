@@ -30,9 +30,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const OWNER_CREDENTIAL = import.meta.env.VITE_OWNER_EMAIL    ?? "owner@fitcoresys.com.br";
-const OWNER_PASSWORD   = import.meta.env.VITE_OWNER_PASSWORD ?? "FitCore@2025!";
-
 // Permissões padrão por papel (fallback se não houver no banco)
 const DEFAULT_PERMS: Record<string, Record<string, ModulePerm>> = {
   admin: {},
@@ -124,15 +121,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(credential: string, password: string): Promise<{ error?: string }> {
-    // ── 1. Owner hardcoded ───────────────────────────────────────
-    if (credential === OWNER_CREDENTIAL && password === OWNER_PASSWORD) {
-      const ownerUser: AuthUser = {
-        id: "owner-0", name: "FitCoreSys Admin",
-        email: OWNER_CREDENTIAL, role: "owner",
-      };
-      setUser(ownerUser);
-      localStorage.setItem("fitcoresys_user", JSON.stringify(ownerUser));
-      return {};
+    // ── 1. Owner via Supabase Auth ───────────────────────────────
+    // Tenta autenticar pelo Supabase Auth e verifica role 'admin' em user_roles
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: credential.trim().toLowerCase(),
+      password,
+    });
+
+    if (!authError && authData.user) {
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (roleRow?.role === "admin") {
+        const ownerUser: AuthUser = {
+          id: authData.user.id,
+          name: "GoFit Admin",
+          email: authData.user.email ?? credential,
+          role: "owner",
+        };
+        setUser(ownerUser);
+        localStorage.setItem("fitcoresys_user", JSON.stringify(ownerUser));
+        return {};
+      }
+
+      // Autenticou no Supabase mas não é owner — encerra sessão e continua o fluxo
+      await supabase.auth.signOut();
     }
 
     // ── 2. Contractor (dono da academia) ─────────────────────────
