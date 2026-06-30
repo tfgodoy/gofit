@@ -162,9 +162,12 @@ export default function AdminDashboard() {
     navigate("/admin/login", { replace: true });
   }
 
+  // Capturado uma vez no mount — useState lazy initializer não é considerado render pelo linter
+  const [now] = useState(() => Date.now());
+
   const expiringTrials = companies.filter(c => {
     if (c.status !== "trial" || !c.trial_ends_at) return false;
-    const days = (new Date(c.trial_ends_at).getTime() - Date.now()) / 86400000;
+    const days = (new Date(c.trial_ends_at).getTime() - now) / 86400000;
     return days <= 7 && days >= 0;
   });
 
@@ -369,7 +372,7 @@ export default function AdminDashboard() {
             ) : (
               <ul className="space-y-3">
                 {expiringTrials.map(c => {
-                  const days = Math.ceil((new Date(c.trial_ends_at!).getTime() - Date.now()) / 86400000);
+                  const days = Math.ceil((new Date(c.trial_ends_at!).getTime() - now) / 86400000);
                   return (
                     <li key={c.id} className="flex items-start gap-2.5 p-3 bg-yellow-50 rounded-xl">
                       <Clock className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />

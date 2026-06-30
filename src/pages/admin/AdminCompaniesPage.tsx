@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, Search, BarChart2, Package, CreditCard,
   FileText, Settings, LogOut, ShieldCheck, Dumbbell,
-  ChevronRight, Filter, X, Users, Clock,
+  Filter, X, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,13 +51,15 @@ export default function AdminCompaniesPage() {
   const navigate = useNavigate();
 
   const [companies, setCompanies]   = useState<ContractorRow[]>([]);
-  const [filtered, setFiltered]     = useState<ContractorRow[]>([]);
   const [loading, setLoading]       = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [search, setSearch]         = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [error, setError]           = useState<string | null>(null);
+
+  // Capturado uma vez no mount — useState lazy initializer não é considerado render pelo linter
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     async function load() {
@@ -68,14 +70,13 @@ export default function AdminCompaniesPage() {
 
       if (error) { setError("Erro ao carregar empresas."); setLoading(false); return; }
       setCompanies(data ?? []);
-      setFiltered(data ?? []);
       setLoading(false);
     }
     load();
   }, []);
 
-  // Aplica filtros localmente para evitar round-trips desnecessários
-  useEffect(() => {
+  // Filtros aplicados localmente para evitar round-trips desnecessários
+  const filtered = useMemo(() => {
     let result = [...companies];
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -88,7 +89,7 @@ export default function AdminCompaniesPage() {
     }
     if (statusFilter !== "all") result = result.filter(c => c.status === statusFilter);
     if (planFilter !== "all")   result = result.filter(c => c.plan === planFilter);
-    setFiltered(result);
+    return result;
   }, [search, statusFilter, planFilter, companies]);
 
   const updateStatus = useCallback(async (
@@ -162,7 +163,7 @@ export default function AdminCompaniesPage() {
 
   const trialExpiring = companies.filter(c => {
     if (c.status !== "trial" || !c.trial_ends_at) return false;
-    const days = (new Date(c.trial_ends_at).getTime() - Date.now()) / 86400000;
+    const days = (new Date(c.trial_ends_at).getTime() - now) / 86400000;
     return days <= 7 && days >= 0;
   }).length;
 
@@ -348,7 +349,7 @@ export default function AdminCompaniesPage() {
                         <td className="px-4 py-3.5 text-xs">
                           {c.trial_ends_at ? (
                             (() => {
-                              const days = Math.ceil((new Date(c.trial_ends_at).getTime() - Date.now()) / 86400000);
+                              const days = Math.ceil((new Date(c.trial_ends_at).getTime() - now) / 86400000);
                               return (
                                 <span className={days <= 3 ? "text-red-500 font-semibold" : days <= 7 ? "text-yellow-600" : "text-gray-500"}>
                                   {new Date(c.trial_ends_at).toLocaleDateString("pt-BR")}

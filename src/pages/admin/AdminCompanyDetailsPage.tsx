@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, BarChart2, Package, CreditCard, FileText,
@@ -89,6 +89,7 @@ export default function AdminCompanyDetailsPage() {
   const [loading, setLoading]         = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError]             = useState<string | null>(null);
+  const viewedLogged = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -116,14 +117,17 @@ export default function AdminCompanyDetailsPage() {
       setModules(modulesData ?? []);
       setLoading(false);
 
-      // Auditoria de visualização
-      await logAdminAudit({
-        action: "COMPANY_VIEWED",
-        adminUserId: user?.id,
-        targetType: "contractor",
-        targetId: id,
-        metadata: { nome_fantasia: contractor.nome_fantasia },
-      });
+      // Auditoria de visualização — useRef evita duplo disparo se user mudar referência
+      if (!viewedLogged.current) {
+        viewedLogged.current = true;
+        await logAdminAudit({
+          action: "COMPANY_VIEWED",
+          adminUserId: user?.id,
+          targetType: "contractor",
+          targetId: id,
+          metadata: { nome_fantasia: contractor.nome_fantasia },
+        });
+      }
     }
     load();
   }, [id, user]);
@@ -187,6 +191,9 @@ export default function AdminCompanyDetailsPage() {
   }
 
   function handleLogout() { logout(); navigate("/admin/login", { replace: true }); }
+
+  // Capturado uma vez no mount — useState lazy initializer não é considerado render pelo linter
+  const [now] = useState(() => Date.now());
 
   const activeStaff = staff.filter(s => !s.blocked);
 
@@ -344,7 +351,7 @@ export default function AdminCompanyDetailsPage() {
                         <dd className="text-gray-700">{new Date(company.created_at).toLocaleDateString("pt-BR")}</dd>
                       </div>
                     </div>
-                    {company.trial_ends_at && (
+                    {company.status === "trial" && company.trial_ends_at && (
                       <div className="flex items-start gap-3 col-span-2">
                         <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                         <div>
@@ -352,7 +359,7 @@ export default function AdminCompanyDetailsPage() {
                           <dd className="text-gray-700 font-semibold">
                             {new Date(company.trial_ends_at).toLocaleDateString("pt-BR")}{" "}
                             {(() => {
-                              const days = Math.ceil((new Date(company.trial_ends_at!).getTime() - Date.now()) / 86400000);
+                              const days = Math.ceil((new Date(company.trial_ends_at!).getTime() - now) / 86400000);
                               return days >= 0
                                 ? <span className={`text-xs ${days <= 3 ? "text-red-500" : "text-yellow-600"}`}>({days} dias)</span>
                                 : <span className="text-xs text-red-500">(expirado)</span>;
