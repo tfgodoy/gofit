@@ -79,7 +79,8 @@ platform_owners (
 | `src/contexts/AuthContext.tsx` | ✅ Atualizado com `adminLogin()` e auditoria no logout |
 | `src/App.tsx` | ✅ Atualizado com rotas `/admin/*` e redirects `/owner/*` |
 | `supabase/migrations/20260630_041_admin_audit_logs.sql` | ✅ Aplicada |
-| `src/pages/OwnerDashboard.tsx` | ⚠️ Ainda existe — pode ser removido em fase futura |
+| `src/pages/OwnerDashboard.tsx` | ✅ Removido (arquivo deletado após validação Fase 1) |
+| `src/pages/LoginPage.tsx` | ✅ Aba Owner removida — apenas entrada de academias/clientes |
 
 ### Rotas existentes
 
