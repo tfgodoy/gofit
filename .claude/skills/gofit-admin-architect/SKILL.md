@@ -262,7 +262,28 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### FASE 3 — Planos, Assinaturas e Trials
+### ✅ FASE 3 — Planos, Assinaturas e Trials (CONCLUÍDA DEFINITIVAMENTE)
+
+**Status:** Concluída e validada. tsc: OK. build: OK. lint nos arquivos admin: OK (565 erros pré-existentes em supabase/functions/gofit-pay-base/ não são desta fase).
+
+**O que foi implementado:**
+- Migrations: `20260701_043_saas_plans.sql`, `20260701_044_saas_subscriptions.sql`, `20260701_045_saas_seed.sql` (aplicadas)
+- Tabelas: `saas_plans`, `saas_plan_features`, `saas_subscriptions`, `saas_subscription_events` com RLS platform_owners
+- Seed: 4 planos padrão (trial/starter/profissional/empresarial) + migração de contractors existentes
+- `AdminPlansPage.tsx` (`/admin/plans`): CRUD de planos, create/edit modal, toggle ativo/inativo
+- `AdminSubscriptionsPage.tsx` (`/admin/subscriptions`): lista com filtros + busca, troca de plano, status change, trial extend, cancel, reactivate
+- `AdminCompanyDetailsPage.tsx`: seção "Assinatura SaaS" com plan, status badge, datas e últimos 6 eventos
+- `AdminDashboard.tsx`: MRR e distribuição de planos via `saas_subscriptions` (dados reais, TODOs Fase 3 removidos)
+- `adminAudit.ts`: 12 novos tipos de ação (PLAN_*, SUBSCRIPTION_*, TRIAL_*)
+- Sidebar de todos os pages admin atualizado com Planos e Assinaturas
+- Rotas `/admin/plans` e `/admin/subscriptions` com AdminGuard no App.tsx
+- Commit: `c1cfa1939`
+
+**O que NÃO deve ser alterado nas próximas fases:**
+- Não recriar AdminPlansPage ou AdminSubscriptionsPage
+- Não recriar as migrations 043/044/045
+- Não recriar os novos tipos de auditoria
+- Não remover as seções de Assinatura SaaS do AdminCompanyDetailsPage
 
 **Objetivo:** Controle SaaS comercial da GoFit.
 
