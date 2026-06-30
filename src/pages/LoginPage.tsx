@@ -1,15 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Dumbbell, Eye, EyeOff, ShieldCheck, Building2 } from "lucide-react";
+import { Dumbbell, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-
-type LoginMode = "contractor" | "owner";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [mode, setMode] = useState<LoginMode>("contractor");
   const [credential, setCredential] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +26,7 @@ export default function LoginPage() {
       return;
     }
 
-    navigate(mode === "owner" ? "/owner/dashboard" : "/app/dashboard");
+    navigate("/app/dashboard");
   }
 
   return (
@@ -53,44 +50,16 @@ export default function LoginPage() {
             <h1 className="text-2xl font-extrabold text-gray-900 mb-1">Bem-vindo de volta</h1>
             <p className="text-gray-500 text-sm mb-6">Faça login para acessar o sistema</p>
 
-            {/* Mode Tabs */}
-            <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => { setMode("contractor"); setError(""); setCredential(""); setPassword(""); }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  mode === "contractor"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <Building2 className="w-4 h-4" />
-                Empresa
-              </button>
-              <button
-                type="button"
-                onClick={() => { setMode("owner"); setError(""); setCredential(""); setPassword(""); }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  mode === "owner"
-                    ? "bg-white text-primary shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                Owner
-              </button>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  {mode === "contractor" ? "CNPJ ou E-mail" : "E-mail"}
+                  CNPJ ou E-mail
                 </label>
                 <input
-                  type={mode === "contractor" ? "text" : "email"}
+                  type="text"
                   value={credential}
                   onChange={(e) => setCredential(e.target.value)}
-                  placeholder={mode === "contractor" ? "00.000.000/0000-00 ou email@empresa.com" : "admin@fitcoresys.com.br"}
+                  placeholder="00.000.000/0000-00 ou email@empresa.com"
                   required
                   autoComplete="username"
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
@@ -136,21 +105,12 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {mode === "contractor" && (
-              <div className="mt-5 pt-5 border-t border-gray-100 text-center text-sm text-gray-500">
-                Ainda não tem conta?{" "}
-                <Link to="/cadastro" className="text-primary font-semibold hover:underline">
-                  Criar conta grátis
-                </Link>
-              </div>
-            )}
-
-            {mode === "owner" && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>Acesso restrito ao administrador do sistema FitCoreSys.</span>
-              </div>
-            )}
+            <div className="mt-5 pt-5 border-t border-gray-100 text-center text-sm text-gray-500">
+              Ainda não tem conta?{" "}
+              <Link to="/cadastro" className="text-primary font-semibold hover:underline">
+                Criar conta grátis
+              </Link>
+            </div>
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-6">

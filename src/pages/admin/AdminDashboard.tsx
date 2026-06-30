@@ -34,12 +34,14 @@ interface Stats {
   avgTicket: number;
 }
 
+// TODO Fase 3: substituir por dados reais da tabela saas_subscriptions (MRR histórico)
 const mrrHistory = [
   { mes: "Dez", mrr: 4200 }, { mes: "Jan", mrr: 6800 },
   { mes: "Fev", mrr: 9100 }, { mes: "Mar", mrr: 11400 },
   { mes: "Abr", mrr: 14200 }, { mes: "Mai", mrr: 0 },
 ];
 
+// TODO Fase 3: substituir por dados reais de saas_subscription_events (novos cadastros e churn)
 const signupsHistory = [
   { mes: "Dez", novos: 3, churn: 0 }, { mes: "Jan", novos: 8, churn: 1 },
   { mes: "Fev", novos: 12, churn: 2 }, { mes: "Mar", novos: 15, churn: 3 },
@@ -145,7 +147,7 @@ export default function AdminDashboard() {
         activeCompanies: active.length,
         newThisMonth: newMonth.length,
         trialCompanies: trial.length,
-        totalStudents: active.length * 120,
+        totalStudents: active.length * 120, // TODO Fase 3: usar contagem real de students por contractor
         avgTicket: active.length ? mrr / active.length : 0,
       });
       setCompanies(data.slice(0, 8));
@@ -261,7 +263,7 @@ export default function AdminDashboard() {
             sub={`Ticket médio: R$ ${stats.avgTicket.toFixed(0)}`}
             icon={DollarSign}
             iconClass="bg-primary/10 text-primary"
-            trend="+18%"
+            trend="+18%" /* TODO Fase 3: calcular variação real de MRR mês a mês */
             trendUp
           />
           <KpiCard
@@ -286,7 +288,7 @@ export default function AdminDashboard() {
             sub="estimativa via planos ativos"
             icon={Users}
             iconClass="bg-green-50 text-green-600"
-            trend="+12%"
+            trend="+12%" /* TODO Fase 3: calcular variação real de alunos mês a mês */
             trendUp
           />
         </div>

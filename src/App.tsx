@@ -7,7 +7,6 @@ import AuthGuard from "@/components/auth/AuthGuard";
 import LandingPage            from "@/pages/LandingPage";
 import LoginPage              from "@/pages/LoginPage";
 import ContractorRegisterPage from "@/pages/ContractorRegisterPage";
-import OwnerDashboard         from "@/pages/OwnerDashboard";
 import AdminLoginPage         from "@/pages/admin/AdminLoginPage";
 import AdminDashboard         from "@/pages/admin/AdminDashboard";
 import AdminGuard             from "@/components/auth/AdminGuard";
