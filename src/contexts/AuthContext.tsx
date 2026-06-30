@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logAdminAudit } from "@/lib/adminAudit";
 
 export type UserRole = "owner" | "contractor" | "teacher" | "receptionist" | "sales" | "nutritionist" | "physiotherapist" | "evaluator" | "admin";
 
@@ -21,6 +22,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   login: (credential: string, password: string) => Promise<{ error?: string }>;
+  adminLogin: (email: string, password: string) => Promise<{ error?: string }>;
   logout: () => void;
   canView:   (module: string) => boolean;
   canCreate: (module: string) => boolean;
@@ -244,7 +246,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }
 
+  // Admin-specific login: only allows platform owners. Logs every attempt.
+  async function adminLogin(email: string, password: string): Promise<{ error?: string }> {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (authError || !authData.user) {
+      await logAdminAudit({
+        action: "ADMIN_LOGIN_DENIED",
+        metadata: { reason: "invalid_credentials" },
+      });
+      return { error: "Credenciais inválidas." };
+    }
+
+    const { data: ownerRow } = await supabase
+      .from("platform_owners")
+      .select("user_id")
+      .eq("user_id", authData.user.id)
+      .maybeSingle();
+
+    if (!ownerRow?.user_id) {
+      await supabase.auth.signOut();
+      await logAdminAudit({
+        action: "ADMIN_LOGIN_DENIED",
+        adminUserId: authData.user.id,
+        metadata: { reason: "not_platform_owner" },
+      });
+      return { error: "Acesso não autorizado para esta área." };
+    }
+
+    const ownerUser: AuthUser = {
+      id:    authData.user.id,
+      name:  "GoFit Admin",
+      email: authData.user.email ?? email,
+      role:  "owner",
+    };
+    setUser(ownerUser);
+    localStorage.setItem("fitcoresys_user", JSON.stringify(ownerUser));
+
+    await logAdminAudit({
+      action: "ADMIN_LOGIN_SUCCESS",
+      adminUserId: authData.user.id,
+      metadata: { email: authData.user.email },
+    });
+
+    return {};
+  }
+
   function logout() {
+    if (user?.role === "owner") {
+      logAdminAudit({ action: "ADMIN_LOGOUT", adminUserId: user.id });
+    }
     setUser(null);
     localStorage.removeItem("fitcoresys_user");
     supabase.auth.signOut();
@@ -260,7 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function canDelete(module: string) { return isFullAccess() || (user?.permissions?.[module]?.can_delete ?? false); }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, canView, canCreate, canEdit, canDelete }}>
+    <AuthContext.Provider value={{ user, loading, login, adminLogin, logout, canView, canCreate, canEdit, canDelete }}>
       {children}
     </AuthContext.Provider>
   );

@@ -8,6 +8,9 @@ import LandingPage            from "@/pages/LandingPage";
 import LoginPage              from "@/pages/LoginPage";
 import ContractorRegisterPage from "@/pages/ContractorRegisterPage";
 import OwnerDashboard         from "@/pages/OwnerDashboard";
+import AdminLoginPage         from "@/pages/admin/AdminLoginPage";
+import AdminDashboard         from "@/pages/admin/AdminDashboard";
+import AdminGuard             from "@/components/auth/AdminGuard";
 import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
@@ -126,10 +129,15 @@ export default function App() {
             <Route path="/recibo/:token"    element={<PublicReciboPage />} />
             <Route path="/aluno/cartao/:token" element={<CardRegistrationPage />} />
 
-            {/* Owner */}
-            <Route path="/owner/dashboard" element={
-              <AuthGuard allowedRoles={["owner"]}><OwnerDashboard /></AuthGuard>
-            } />
+            {/* Admin GoFit — área administrativa da plataforma */}
+            <Route path="/admin/login"     element={<AdminLoginPage />} />
+            <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
+            {/* Rotas admin futuras (Fases 2-7) ficam aqui — protegidas por AdminGuard */}
+            <Route path="/admin/*"         element={<AdminGuard><Navigate to="/admin/dashboard" replace /></AdminGuard>} />
+
+            {/* Owner legado — redireciona para /admin enquanto existir bookmarks antigos */}
+            <Route path="/owner/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/owner/*"         element={<Navigate to="/admin/dashboard" replace />} />
 
             {/* App — empresa contratante */}
             <Route path="/app/dashboard"                   element={<AppGuard><ContractorDashboard /></AppGuard>} />
