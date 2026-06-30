@@ -75,20 +75,23 @@ platform_owners (
 
 ---
 
-## Estado atual do projeto — Fase 1 concluída
+## Estado atual do projeto — Fases 1 e 2 concluídas
 
 ### Arquivos da área Admin
 
 | Arquivo | Status |
 |---|---|
-| `src/pages/admin/AdminLoginPage.tsx` | ✅ Criado |
-| `src/pages/admin/AdminDashboard.tsx` | ✅ Criado (dados de MRR/Churn mockados — ver pendências) |
-| `src/components/auth/AdminGuard.tsx` | ✅ Criado |
-| `src/lib/adminAudit.ts` | ✅ Criado |
+| `src/pages/admin/AdminLoginPage.tsx` | ✅ Criado (Fase 1) |
+| `src/pages/admin/AdminDashboard.tsx` | ✅ Criado — dados de MRR/Churn mockados com `// TODO Fase 3` |
+| `src/pages/admin/AdminCompaniesPage.tsx` | ✅ Criado (Fase 2) |
+| `src/pages/admin/AdminCompanyDetailsPage.tsx` | ✅ Criado (Fase 2) |
+| `src/components/auth/AdminGuard.tsx` | ✅ Criado (Fase 1) |
+| `src/lib/adminAudit.ts` | ✅ Criado (Fase 1) |
 | `src/contexts/AuthContext.tsx` | ✅ Atualizado com `adminLogin()` e auditoria no logout |
-| `src/App.tsx` | ✅ Atualizado com rotas `/admin/*` e redirects `/owner/*` |
+| `src/App.tsx` | ✅ Atualizado com rotas `/admin/*` incluindo companies |
 | `src/pages/LoginPage.tsx` | ✅ Aba Owner removida — exclusivo para academias/clientes |
-| `supabase/migrations/20260630_041_admin_audit_logs.sql` | ✅ Aplicada |
+| `supabase/migrations/20260630_041_admin_audit_logs.sql` | ✅ Aplicada (Fase 1) |
+| `supabase/migrations/20260630_042_admin_platform_policies.sql` | ✅ Aplicada (Fase 2) |
 | `src/pages/OwnerDashboard.tsx` | ✅ Deletado |
 | `.env.example` | ✅ `SUPABASE_SERVICE_ROLE_KEY` sem prefixo `VITE_` |
 
@@ -97,7 +100,9 @@ platform_owners (
 | Rota | Status |
 |---|---|
 | `/admin/login` | ✅ Única entrada administrativa |
-| `/admin/dashboard` | ✅ Funcional |
+| `/admin/dashboard` | ✅ Funcional (KPIs, alertas trial, tabela com link Detalhes) |
+| `/admin/companies` | ✅ Lista com busca, filtros status/plano, ações inline |
+| `/admin/companies/:id` | ✅ Detalhe: dados, staff, módulos, ações administrativas |
 | `/admin/*` (catch-all) | ✅ Protegido por `AdminGuard` → redireciona para `/admin/dashboard` |
 | `/owner/dashboard` | ✅ Redirect legado para `/admin/dashboard` |
 | `/owner/*` | ✅ Redirect legado para `/admin/dashboard` |
@@ -108,8 +113,11 @@ platform_owners (
 
 | Tabela | Status |
 |---|---|
-| `platform_owners` | ✅ Criada (via MCP) |
-| `admin_audit_logs` | ✅ Criada com RLS + função SECURITY DEFINER |
+| `platform_owners` | ✅ Criada (Fase 1) |
+| `admin_audit_logs` | ✅ Criada com RLS + função SECURITY DEFINER (Fase 1) |
+| `contractors` | ✅ UPDATE liberado para platform_owners (Fase 2) |
+| `company_modules` | ✅ SELECT liberado para platform_owners (Fase 2) |
+| `staff` | ✅ SELECT liberado para platform_owners (Fase 2) |
 
 ### Eventos de auditoria implementados
 
@@ -119,26 +127,33 @@ platform_owners (
 | `ADMIN_LOGIN_DENIED` | Credenciais inválidas ou usuário não está em `platform_owners` |
 | `ADMIN_LOGOUT` | Logout de usuário com role `"owner"` |
 | `ADMIN_ACCESS_DENIED` | Usuário autenticado tenta acessar `/admin/*` sem role `"owner"` |
+| `COMPANY_VIEWED` | Ao abrir `/admin/companies/:id` (1x por visita, via `useRef`) |
+| `COMPANY_BLOCKED` | Ao bloquear empresa → status `suspended` |
+| `COMPANY_UNBLOCKED` | Ao reativar empresa → status `active` |
+| `COMPANY_CANCELLED` | Ao cancelar conta → status `inactive` |
+| `TRIAL_EXTENDED` | Ao estender trial por +14 dias |
 
 ### Pendências do AdminDashboard (a resolver na Fase 3)
 
 - Dados de MRR e Churn são **mockados** — marcados com `// TODO Fase 3` no código
 - `totalStudents` usa estimativa `active.length * 120` — marcado com `// TODO Fase 3`
 - Trends `+18%` e `+12%` nos KPIs são hardcoded — marcados com `// TODO Fase 3`
-- Botões "Ver todas" e "Detalhes" são stubs — serão implementados na Fase 2
 - `ip_address` não é capturado — implementar via Edge Function em fase futura
+
+### Pendências conhecidas para fases futuras
+
+- **`suspended` não bloqueia `/app/*`** — o AuthGuard não verifica `contractor.status`. Uma empresa suspensa ainda acessa o sistema. O bloqueio real deve ser implementado na Fase 3 via `AuthContext` (checar status no login ou em cada requisição protegida).
+- **UPDATE policy em `contractors` não é column-restricted** — platform_owners podem atualizar qualquer campo. O código só usa `status` e `trial_ends_at`, mas a policy é ampla. Restringir colunas na Fase 3 se necessário.
 
 ### O que NÃO deve ser alterado nas próximas fases
 
-- Não recriar `/admin/login`
-- Não recriar `/admin/dashboard` do zero
-- Não recriar `AdminGuard`
-- Não recriar `admin_audit_logs`
-- Não recriar `logAdminAudit()`
+- Não recriar `/admin/login`, `AdminGuard`, `admin_audit_logs`, `logAdminAudit()`
+- Não recriar `AdminCompaniesPage` ou `AdminCompanyDetailsPage` do zero
 - Não adicionar aba Owner em `/login`
 - Não usar `login()` para acesso admin
 - Não reverter redirect `/owner/*`
 - Não quebrar `/app/*`
+- Não remover policies RLS criadas em `20260630_042` (apenas adicionar novas se necessário)
 
 ---
 
@@ -226,37 +241,24 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### 🔜 FASE 2 — Gestão de Empresas/Academias (PRÓXIMA)
+### ✅ FASE 2 — Gestão de Empresas/Academias (CONCLUÍDA DEFINITIVAMENTE)
 
-**Objetivo:** Admin GoFit controla todos os contractors com ações administrativas.
+**Status:** Concluída, validada e corrigida pós-validação.
 
-**Pré-requisito obrigatório:** Diagnosticar a estrutura real da tabela `contractors` antes de codar.
+**O que foi implementado:**
+- `/admin/companies` — lista paginável com busca (nome, email, CNPJ), filtros por status e plano, ações inline (bloquear, reativar, cancelar, estender trial), contador por status
+- `/admin/companies/:id` — detalhe completo: dados cadastrais, staff, módulos, painel de ações administrativas, resumo KPIs
+- `supabase/migrations/20260630_042_admin_platform_policies.sql` — 4 novas RLS policies (UPDATE contractors, SELECT company_modules, SELECT staff para platform_owners) + índice `idx_contractors_nome_fantasia`
+- Botão "Ver todas" e coluna "Detalhes" no AdminDashboard conectados
+- Sidebar: navItem Empresas ativado em todas as páginas admin
+- 5 eventos de auditoria: `COMPANY_VIEWED`, `COMPANY_BLOCKED`, `COMPANY_UNBLOCKED`, `COMPANY_CANCELLED`, `TRIAL_EXTENDED`
+- Correções pós-validação: imports mortos removidos, filtro local convertido para `useMemo`, `Date.now()` movido para `useState lazy initializer`, `useRef viewedLogged` para evitar duplo audit, `trial_ends_at` condicionado a `status === "trial"`
 
-**O que implementar:**
-
-1. `/admin/companies` — lista de contractors com busca por nome, email, status, plano
-2. `/admin/companies/:id` — detalhe da empresa: dados, usuários, plano, módulos ativos
-3. Ações administrativas (todas com `logAdminAudit()`):
-   - Visualizar empresa → `COMPANY_VIEWED`
-   - Ativar empresa → `COMPANY_UNBLOCKED`
-   - Bloquear empresa → `COMPANY_BLOCKED`
-   - Cancelar empresa → `COMPANY_CANCELLED` (se existir campo/status adequado)
-   - Estender trial → `TRIAL_EXTENDED` (somente se existir estrutura de trial)
-4. Reaproveitamento de `modules` e `company_modules` para mostrar módulos ativos
-
-**Regras para Fase 2:**
-- Verificar campos existentes em `contractors` antes de criar novos
-- Não criar assinatura SaaS completa — isso é Fase 3
-- Não criar financeiro SaaS — isso é Fase 5
-- Não criar RBAC completo — isso é Fase 6
-- Não criar suporte/impersonação — isso é Fase 7
-- Toda alteração respeita RLS
-
-**Critérios de aceite:**
-- Owner vê todas as empresas (sem filtro de `contractor_id`)
-- Cada ação sensível gera entrada em `admin_audit_logs`
-- Isolamento por `contractor_id` não é afetado nas outras empresas
-- `/app/*` continua funcionando normalmente
+**Padrões técnicos relevantes desta fase:**
+- Filtros locais (client-side) com `useMemo` para evitar round-trips e o erro `react-hooks/set-state-in-effect`
+- Tempo de referência capturado via `const [now] = useState(() => Date.now())` — único padrão aceito pelo `react-hooks/purity`
+- Auditoria one-shot com `useRef` (como `AdminGuard` usa `deniedLogged`)
+- Confirmação `window.confirm()` obrigatória antes de qualquer ação destrutiva
 
 ---
 
