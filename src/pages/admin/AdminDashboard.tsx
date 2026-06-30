@@ -72,7 +72,7 @@ const PLAN_PRICE: Record<string, number> = {
 
 const navItems = [
   { icon: BarChart2,  label: "Dashboard",      to: "/admin/dashboard",       active: true  },
-  { icon: Building2,  label: "Empresas",        to: "/admin/companies",       active: false },
+  { icon: Building2,  label: "Empresas",        to: "/admin/companies",       active: true  },
   { icon: Package,    label: "Planos",           to: "/admin/plans",           active: false },
   { icon: CreditCard, label: "Financeiro",      to: "/admin/billing",         active: false },
   { icon: FileText,   label: "Auditoria",       to: "/admin/audit",           active: false },
@@ -393,9 +393,8 @@ export default function AdminDashboard() {
               <p className="text-xs text-gray-400 mt-0.5">Últimas {companies.length} — ordenadas por data de cadastro</p>
             </div>
             <button
-              className="flex items-center gap-1.5 text-xs font-semibold text-gray-300 cursor-not-allowed"
-              disabled
-              title="Disponível na Fase 2"
+              className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              onClick={() => navigate("/admin/companies")}
             >
               Ver todas <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -424,6 +423,7 @@ export default function AdminDashboard() {
                     <th className="text-left px-4 py-3">Cidade</th>
                     <th className="text-left px-4 py-3">Cadastro</th>
                     <th className="text-left px-4 py-3">Trial até</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -453,6 +453,14 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-4 py-3.5 text-gray-500 text-xs">
                         {c.trial_ends_at ? new Date(c.trial_ends_at).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <button
+                          onClick={() => navigate(`/admin/companies/${c.id}`)}
+                          className="text-xs font-semibold text-primary hover:underline"
+                        >
+                          Detalhes
+                        </button>
                       </td>
                     </tr>
                   ))}

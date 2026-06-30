@@ -7,9 +7,11 @@ import AuthGuard from "@/components/auth/AuthGuard";
 import LandingPage            from "@/pages/LandingPage";
 import LoginPage              from "@/pages/LoginPage";
 import ContractorRegisterPage from "@/pages/ContractorRegisterPage";
-import AdminLoginPage         from "@/pages/admin/AdminLoginPage";
-import AdminDashboard         from "@/pages/admin/AdminDashboard";
-import AdminGuard             from "@/components/auth/AdminGuard";
+import AdminLoginPage            from "@/pages/admin/AdminLoginPage";
+import AdminDashboard            from "@/pages/admin/AdminDashboard";
+import AdminCompaniesPage        from "@/pages/admin/AdminCompaniesPage";
+import AdminCompanyDetailsPage   from "@/pages/admin/AdminCompanyDetailsPage";
+import AdminGuard                from "@/components/auth/AdminGuard";
 import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
@@ -130,9 +132,11 @@ export default function App() {
 
             {/* Admin GoFit — área administrativa da plataforma */}
             <Route path="/admin/login"     element={<AdminLoginPage />} />
-            <Route path="/admin/dashboard" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
-            {/* Rotas admin futuras (Fases 2-7) ficam aqui — protegidas por AdminGuard */}
-            <Route path="/admin/*"         element={<AdminGuard><Navigate to="/admin/dashboard" replace /></AdminGuard>} />
+            <Route path="/admin/dashboard"      element={<AdminGuard><AdminDashboard /></AdminGuard>} />
+            <Route path="/admin/companies"      element={<AdminGuard><AdminCompaniesPage /></AdminGuard>} />
+            <Route path="/admin/companies/:id"  element={<AdminGuard><AdminCompanyDetailsPage /></AdminGuard>} />
+            {/* Rotas admin futuras (Fases 3-7) ficam aqui — protegidas por AdminGuard */}
+            <Route path="/admin/*"              element={<AdminGuard><Navigate to="/admin/dashboard" replace /></AdminGuard>} />
 
             {/* Owner legado — redireciona para /admin enquanto existir bookmarks antigos */}
             <Route path="/owner/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
