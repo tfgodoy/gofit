@@ -129,13 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!authError && authData.user) {
-      const { data: roleRow } = await supabase
-        .from("user_roles")
-        .select("role")
+      const { data: ownerRow } = await supabase
+        .from("platform_owners")
+        .select("user_id")
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
-      if (roleRow?.role === "admin") {
+      if (ownerRow?.user_id) {
         const ownerUser: AuthUser = {
           id: authData.user.id,
           name: "GoFit Admin",
