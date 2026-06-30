@@ -49,18 +49,71 @@ Estas duas áreas são **completamente separadas** em rota, autenticação, perm
 ## Autenticação do Admin GoFit
 
 O Owner/Admin autentica via:
-1. `supabase.auth.signInWithPassword` com email e senha
-2. Consulta à tabela `platform_owners` para confirmar acesso
+1. Função `adminLogin(email, password)` no `AuthContext`
+2. `supabase.auth.signInWithPassword` com email e senha
+3. Consulta à tabela `platform_owners` para confirmar acesso
 
-**Jamais usar `VITE_OWNER_EMAIL` ou `VITE_OWNER_PASSWORD` — essas variáveis foram removidas.**  
+**Jamais usar `VITE_OWNER_EMAIL` ou `VITE_OWNER_PASSWORD` — essas variáveis foram removidas.**
 **Jamais expor `service_role` em variável `VITE_*`.**
 
 Tabela central de identidade de admins:
 ```sql
 platform_owners (
-  user_id UUID PRIMARY KEY REFERENCES auth.users(id)
+  user_id   UUID PRIMARY KEY REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now()
 )
 ```
+
+---
+
+## Estado atual do projeto (atualizado após Fase 1)
+
+### Arquivos existentes na área Admin
+
+| Arquivo | Status |
+|---|---|
+| `src/pages/admin/AdminLoginPage.tsx` | ✅ Criado |
+| `src/pages/admin/AdminDashboard.tsx` | ✅ Criado |
+| `src/components/auth/AdminGuard.tsx` | ✅ Criado |
+| `src/lib/adminAudit.ts` | ✅ Criado |
+| `src/contexts/AuthContext.tsx` | ✅ Atualizado com `adminLogin()` e auditoria no logout |
+| `src/App.tsx` | ✅ Atualizado com rotas `/admin/*` e redirects `/owner/*` |
+| `supabase/migrations/20260630_041_admin_audit_logs.sql` | ✅ Aplicada |
+| `src/pages/OwnerDashboard.tsx` | ⚠️ Ainda existe — pode ser removido em fase futura |
+
+### Rotas existentes
+
+| Rota | Status |
+|---|---|
+| `/admin/login` | ✅ Funcional |
+| `/admin/dashboard` | ✅ Funcional |
+| `/admin/*` (catch-all) | ✅ Redireciona para `/admin/dashboard` via AdminGuard |
+| `/owner/dashboard` | ✅ Redireciona para `/admin/dashboard` |
+| `/owner/*` | ✅ Redireciona para `/admin/dashboard` |
+| `/app/*` | ✅ Intacto, não alterado |
+
+### Tabelas Admin existentes no banco
+
+| Tabela | Status |
+|---|---|
+| `platform_owners` | ✅ Existe (criada via MCP) |
+| `admin_audit_logs` | ✅ Criada na Fase 1 com RLS + função SECURITY DEFINER |
+
+### Eventos de auditoria implementados
+
+| Evento | Quando é registrado |
+|---|---|
+| `ADMIN_LOGIN_SUCCESS` | Login aprovado via `adminLogin()` |
+| `ADMIN_LOGIN_DENIED` | Credenciais inválidas ou usuário não está em `platform_owners` |
+| `ADMIN_LOGOUT` | Logout de usuário com role `"owner"` |
+| `ADMIN_ACCESS_DENIED` | Usuário autenticado tenta acessar `/admin/*` sem role `"owner"` |
+
+### Pendências conhecidas do Admin Dashboard (Fase 1)
+
+- Gráficos de MRR e Churn ainda usam **dados mockados** — serão substituídos na Fase 3 (assinaturas)
+- Botões "Ver todas" e "Detalhes" na tabela de empresas ainda são **stubs**
+- Sidebar: itens Planos, Financeiro, Auditoria e Configurações marcados como **"em breve"**
+- `ip_address` **não é capturado** — frontend não consegue obter o IP real de forma segura. Implementar via Edge Function em fase futura
 
 ---
 
@@ -68,20 +121,20 @@ platform_owners (
 
 Antes de escrever qualquer linha de código, sempre:
 
-1. **Identificar a fase** solicitada (ver seção Fases)
-2. **Verificar arquivos existentes** relevantes (lista abaixo)
+1. **Ler esta skill** e identificar a fase solicitada
+2. **Verificar arquivos existentes** relevantes (lista acima e no projeto)
 3. **Verificar migrations existentes** em `supabase/migrations/`
 4. **Avaliar impacto em `/app/*`** — nunca quebrar o fluxo das academias
-5. **Criar migration segura e idempotente**
-6. **Criar tipos TypeScript** atualizando `src/integrations/supabase/types.ts`
-7. **Criar serviços/hooks** de acesso a dados
-8. **Criar componentes/telas**
-9. **Criar proteção de rota e validação de permissão**
-10. **Criar registro de auditoria** para toda ação sensível
-11. **Verificar fluxo feliz**
-12. **Verificar acesso negado** (usuário não autenticado, não autorizado, de outra empresa)
-13. **Confirmar que outro contractor não é afetado**
-14. **Documentar o que foi alterado**
+5. **Verificar se já existe tabela/campo equivalente** antes de criar algo novo
+6. **Criar migration segura e idempotente** se necessário
+7. **Criar tipos TypeScript** atualizando `src/integrations/supabase/types.ts`
+8. **Criar serviços/hooks** de acesso a dados
+9. **Criar componentes/telas**
+10. **Criar proteção de rota e validação de permissão**
+11. **Criar registro de auditoria** para toda ação sensível usando `logAdminAudit()`
+12. **Rodar `tsc --noEmit`** e corrigir erros antes do commit
+13. **Confirmar que `/app/*` não quebrou**
+14. **Documentar o que foi alterado** ao final
 
 ---
 
@@ -89,90 +142,99 @@ Antes de escrever qualquer linha de código, sempre:
 
 - `src/App.tsx` — rotas e guards
 - `src/contexts/AuthContext.tsx` — autenticação e roles
-- `src/pages/owner/` — painel owner legado (manter ou redirecionar para `/admin`)
-- `src/pages/admin/` — nova área admin (criar se não existir)
-- `src/components/auth/AuthGuard.tsx` — proteção de rotas
+- `src/lib/adminAudit.ts` — helper de auditoria (usar sempre, não recriar)
+- `src/components/auth/AdminGuard.tsx` — guard admin (não recriar)
+- `src/pages/admin/` — páginas admin existentes
 - `src/hooks/` — hooks existentes
 - `supabase/migrations/` — histórico do banco
-- Tabelas: `contractors`, `staff`, `role_permissions`, `modules`, `company_modules`, `platform_owners`
+- Tabelas: `contractors`, `staff`, `role_permissions`, `modules`, `company_modules`, `platform_owners`, `admin_audit_logs`
 
 ---
 
-## Checklist de segurança (sempre verificar)
+## Checklist de segurança (verificar antes de cada entrega)
 
 - [ ] Nenhuma credencial ou `service_role` exposta em variável `VITE_*`
-- [ ] Toda rota `/admin/*` protegida por `AuthGuard` com role `"owner"`
+- [ ] Toda rota `/admin/*` protegida por `AdminGuard`
 - [ ] Toda query admin valida sessão Supabase ativa
-- [ ] Toda ação sensível registrada em `admin_audit_logs`
+- [ ] Toda ação sensível registrada via `logAdminAudit()` de `src/lib/adminAudit.ts`
 - [ ] RLS ativa em todas as tabelas novas
 - [ ] Nenhuma policy `USING (true)` para `anon` em tabela sensível
 - [ ] Migrations idempotentes (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`)
 - [ ] `btoa()` não usado para hash de senha (usar bcrypt via Edge Function)
 - [ ] Lógica de autorização validada no backend (Supabase RLS/Functions), não apenas no frontend
-- [ ] Impersonação rastreada com início, fim e motivo
+- [ ] `tsc --noEmit` sem erros antes do commit
+
+---
+
+## Checklist pós-implementação (entregar sempre)
+
+1. Confirmar rotas criadas e funcionando
+2. Confirmar guards/permissões ativos
+3. Confirmar eventos de auditoria registrados
+4. Confirmar RLS nas tabelas novas/alteradas
+5. Confirmar que `/app/*` não quebrou
+6. Confirmar que build TypeScript passa
+7. Listar pendências para a próxima fase
 
 ---
 
 ## Fases de implementação
 
-### FASE 1 — Base segura do Admin GoFit
+### ✅ FASE 1 — Base segura do Admin GoFit (CONCLUÍDA)
 
-**Objetivo:** Fundação segura da área administrativa.
+**Status:** Concluída. Pendente apenas validação manual final.
 
-**O que implementar:**
-1. Estrutura de rotas `/admin/*` no `App.tsx`
-2. Página de login `/admin/login` (ou redirecionar do login principal)
-3. `AdminGuard` — protege rotas admin, verifica `platform_owners`
-4. Revisar/criar tabela `platform_owners`
-5. Criar tabela `admin_audit_logs`
-6. Registrar: `ADMIN_LOGIN`, `ADMIN_LOGOUT`, `ADMIN_ACCESS_DENIED`
-7. Dashboard inicial `/admin/dashboard` com cards de resumo
-8. Redirecionar `/owner/*` para `/admin/*` (manter temporariamente como alias)
+**O que foi implementado:**
+- `/admin/login` — página de login exclusiva do admin
+- `/admin/dashboard` — dashboard com KPIs, gráficos e tabela de empresas
+- `AdminGuard` — protege todas as rotas `/admin/*`
+- `adminLogin()` no `AuthContext` — autenticação separada com auditoria
+- Tabela `admin_audit_logs` com RLS + função `SECURITY DEFINER` para logs de tentativas negadas
+- Helper `logAdminAudit()` centralizado em `src/lib/adminAudit.ts`
+- Redirect `/owner/*` → `/admin/*`
+- `/app/*` preservado intacto
 
-**Schema de auditoria:**
-```sql
-CREATE TABLE admin_audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  admin_user_id UUID REFERENCES auth.users(id),
-  action TEXT NOT NULL,        -- ex: 'ADMIN_LOGIN', 'COMPANY_BLOCKED'
-  target_type TEXT,            -- ex: 'contractor', 'subscription'
-  target_id UUID,
-  contractor_id UUID,          -- empresa afetada (se houver)
-  metadata JSONB DEFAULT '{}',
-  ip_address TEXT,
-  user_agent TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**Critérios de aceite:**
-- Não autenticado → redireciona para login
-- Autenticado mas não em `platform_owners` → acesso negado + log
-- Owner em `platform_owners` → acessa `/admin/dashboard`
-- Login e logout registrados em auditoria
-- `/app/*` continua funcionando normalmente
+**O que NÃO deve ser refeito nas próximas fases:**
+- Não recriar `/admin/login`
+- Não recriar `/admin/dashboard` do zero
+- Não recriar `AdminGuard`
+- Não recriar `admin_audit_logs` — apenas evoluir com novos eventos se necessário
+- Não mexer no fluxo `/app/*`
+- Não reverter redirect `/owner/*`
 
 ---
 
-### FASE 2 — Gestão de Empresas/Academias
+### 🔜 FASE 2 — Gestão de Empresas/Academias (PRÓXIMA)
 
-**Objetivo:** Admin GoFit controla todos os contractors.
+**Objetivo:** Admin GoFit controla todos os contractors com ações administrativas.
 
-**Telas:**
-- `/admin/companies` — lista com busca por nome, email, status, plano
-- `/admin/companies/:id` — detalhe: dados, usuários, plano, módulos
+**Pré-requisito obrigatório:** Diagnosticar a estrutura real da tabela `contractors` antes de codar.
 
-**Ações (todas com log):**
-- Ativar empresa
-- Bloquear empresa
-- Cancelar empresa
-- Estender trial
-- Adicionar observações internas
+**O que implementar:**
+
+1. `/admin/companies` — lista de contractors com busca por nome, email, status, plano
+2. `/admin/companies/:id` — detalhe da empresa: dados, usuários, plano, módulos ativos
+3. Ações administrativas (todas com `logAdminAudit()`):
+   - Visualizar empresa → `COMPANY_VIEWED`
+   - Ativar empresa → `COMPANY_UNBLOCKED` ou equivalente
+   - Bloquear empresa → `COMPANY_BLOCKED`
+   - Cancelar empresa → `COMPANY_CANCELLED` (se existir campo/status adequado)
+   - Estender trial → `TRIAL_EXTENDED` (somente se existir estrutura de trial)
+4. Reaproveitamento de `modules` e `company_modules` para mostrar módulos ativos
+
+**Regras para Fase 2:**
+- Verificar campos existentes em `contractors` antes de criar novos
+- Não criar assinatura SaaS completa — isso é Fase 3
+- Não criar financeiro SaaS — isso é Fase 5
+- Não criar RBAC completo — isso é Fase 6
+- Não criar suporte/impersonação — isso é Fase 7
+- Toda alteração respeita RLS
 
 **Critérios de aceite:**
 - Owner vê todas as empresas (sem filtro de `contractor_id`)
 - Cada ação sensível gera entrada em `admin_audit_logs`
 - Isolamento por `contractor_id` não é afetado nas outras empresas
+- `/app/*` continua funcionando normalmente
 
 ---
 
@@ -180,7 +242,7 @@ CREATE TABLE admin_audit_logs (
 
 **Objetivo:** Controle SaaS comercial da GoFit.
 
-**Tabelas:**
+**Tabelas a criar:**
 ```sql
 saas_plans (id, name, slug, price_monthly, price_yearly, max_students, max_staff, features JSONB, active, created_at)
 saas_subscriptions (id, contractor_id, plan_id, status, trial_ends_at, current_period_start, current_period_end, cancelled_at, created_at)
@@ -196,7 +258,7 @@ saas_subscription_events (id, subscription_id, contractor_id, event_type, metada
 **Critérios de aceite:**
 - Uma empresa tem exatamente uma assinatura ativa por vez
 - Troca de plano gera evento em `saas_subscription_events`
-- Admin vê situação comercial de cada empresa
+- Dados reais de MRR substituem os dados mockados do Admin Dashboard
 
 ---
 
@@ -204,7 +266,7 @@ saas_subscription_events (id, subscription_id, contractor_id, event_type, metada
 
 **Objetivo:** Controlar quais recursos cada empresa pode usar.
 
-**Tabelas existentes a reaproveitar:** `modules`, `company_modules`  
+**Tabelas existentes a reaproveitar:** `modules`, `company_modules`
 **Criar se não existir:** `feature_flags`, `company_feature_flags`
 
 **Módulos sugeridos:** Agenda, Alunos, Contratos, Financeiro, Contas a Pagar/Receber, GoFit Pay, Relatórios, Avaliação Física, WhatsApp, IA, Multiunidade
@@ -260,7 +322,7 @@ saas_payments (id, invoice_id, contractor_id, amount, method, status, processed_
 ```sql
 admin_users (id, user_id UUID REFERENCES auth.users, name, email, role_id, active, created_at)
 admin_roles (id, name, slug, description, created_at)
-admin_permissions (id, key TEXT UNIQUE, description)  -- ex: 'companies.block'
+admin_permissions (id, key TEXT UNIQUE, description)
 admin_role_permissions (role_id, permission_key)
 ```
 
@@ -292,9 +354,8 @@ settings.update
 
 **Objetivo:** Rastreabilidade profissional e suporte seguro.
 
-**Eventos de auditoria obrigatórios:**
+**Eventos de auditoria a adicionar:**
 ```
-ADMIN_LOGIN / ADMIN_LOGOUT / ADMIN_ACCESS_DENIED
 COMPANY_VIEWED / COMPANY_UPDATED / COMPANY_BLOCKED / COMPANY_UNBLOCKED / COMPANY_CANCELLED
 PLAN_CHANGED / MODULE_ENABLED / MODULE_DISABLED
 SUBSCRIPTION_CANCELLED / TRIAL_EXTENDED
@@ -308,8 +369,8 @@ support_tickets (
   contractor_id UUID REFERENCES contractors(id),
   title TEXT NOT NULL,
   description TEXT,
-  status TEXT DEFAULT 'open',   -- open | in_progress | waiting_customer | resolved | closed
-  priority TEXT DEFAULT 'medium', -- low | medium | high | critical
+  status TEXT DEFAULT 'open',
+  priority TEXT DEFAULT 'medium',
   assigned_to UUID REFERENCES admin_users(id),
   created_by UUID REFERENCES auth.users(id),
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -322,34 +383,31 @@ support_tickets (
 - Exigir motivo textual antes de iniciar
 - Registrar `SUPPORT_IMPERSONATION_STARTED` com motivo e timestamp
 - Registrar `SUPPORT_IMPERSONATION_ENDED` ao sair
-- Mostrar banner visual enquanto ativo: "Você está acessando esta empresa como suporte GoFit"
+- Mostrar banner visual: "Você está acessando esta empresa como suporte GoFit"
 - Nunca exibir ou usar senha do cliente
-- Não permitir ações sensíveis sem confirmação adicional
 
 **Critérios de aceite:**
 - Toda impersonação rastreada com motivo, admin, empresa, início e fim
 - Banner sempre visível durante impersonação
-- Logs completos permitem auditoria de qualquer ação
 
 ---
 
 ## Cuidados críticos (nunca fazer)
 
-- `btoa()` para hash de senha — use Edge Function com bcrypt
+- `btoa()` para hash de senha — usar Edge Function com bcrypt
 - `service_role` em variável `VITE_*`
 - Policy `USING (true)` para `anon` em tabela sensível
 - Lógica de plano/módulo espalhada em vários componentes — centralizar
 - Criar tabela nova sem verificar se já existe equivalente
-- Migration não idempotente (use `IF NOT EXISTS`, `ON CONFLICT DO NOTHING`)
+- Migration não idempotente (usar `IF NOT EXISTS`, `ON CONFLICT DO NOTHING`)
 - Confiar apenas em bloqueio visual no frontend — validar no backend
 - Misturar autenticação de academia com autenticação admin
 - Alterar tabelas existentes sem avaliar impacto em `/app/*`
+- Recriar arquivos que já existem da Fase 1 (AdminGuard, adminAudit, etc.)
 
 ---
 
 ## O que reportar ao final de cada implementação
-
-Ao concluir qualquer fase ou funcionalidade, sempre informe:
 
 1. **Migrations criadas** — nome e o que fazem
 2. **Tabelas novas ou alteradas**
