@@ -5,6 +5,7 @@ import {
   Settings, LogOut, ShieldCheck, Dumbbell, ArrowLeft,
   Users, Clock, Globe, Phone, Mail, MapPin, Hash,
   CheckCircle2, XCircle, AlertTriangle, Loader2, Layers,
+  Boxes, ToggleLeft, ToggleRight, Plus,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,13 @@ interface CompanyModuleRow {
   status: string;
   activated_at: string | null;
   modules: { name: string; slug: string; icon: string | null } | null;
+}
+
+interface GlobalModuleRow {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -109,6 +117,7 @@ const navItems = [
   { icon: Building2,  label: "Empresas",     to: "/admin/companies",      active: true },
   { icon: Package,    label: "Planos",       to: "/admin/plans",          active: true },
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
+  { icon: Boxes,      label: "Módulos",      to: "/admin/modules",        active: true },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: false },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
@@ -122,6 +131,7 @@ export default function AdminCompanyDetailsPage() {
   const [company, setCompany]           = useState<ContractorDetail | null>(null);
   const [staff, setStaff]               = useState<StaffRow[]>([]);
   const [modules, setModules]           = useState<CompanyModuleRow[]>([]);
+  const [allGlobalModules, setAllGlobalModules] = useState<GlobalModuleRow[]>([]);
   const [subscription, setSubscription] = useState<SaasSubscriptionRow | null>(null);
   const [subEvents, setSubEvents]       = useState<SubEventRow[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -137,6 +147,7 @@ export default function AdminCompanyDetailsPage() {
         { data: staffData },
         { data: modulesData },
         { data: subData },
+        { data: globalModsData },
       ] = await Promise.all([
         supabase.from("contractors").select("*").eq("id", id).single(),
         supabase.from("staff")
@@ -151,6 +162,9 @@ export default function AdminCompanyDetailsPage() {
           .select("id, plan_id, status, trial_start, trial_end, current_period_start, current_period_end, cancelled_at, created_at, saas_plans(name, slug, price_monthly)")
           .eq("contractor_id", id)
           .maybeSingle(),
+        supabase.from("modules")
+          .select("id, slug, name, status")
+          .order("sort_order", { ascending: true }),
       ]);
 
       if (e1 || !contractor) { setError("Empresa não encontrada."); setLoading(false); return; }
@@ -158,6 +172,7 @@ export default function AdminCompanyDetailsPage() {
       setCompany(contractor);
       setStaff(staffData ?? []);
       setModules(modulesData ?? []);
+      setAllGlobalModules((globalModsData ?? []) as GlobalModuleRow[]);
 
       if (subData) {
         setSubscription(subData as unknown as SaasSubscriptionRow);
@@ -185,6 +200,73 @@ export default function AdminCompanyDetailsPage() {
     }
     load();
   }, [id, user]);
+
+  /* ── Toggle override de módulo por empresa ────────────────────── */
+  async function handleToggleCompanyModule(cm: CompanyModuleRow) {
+    if (!company) return;
+    const newStatus = cm.status === "active" ? "cancelled" : "active";
+    const auditAction = newStatus === "active" ? "COMPANY_MODULE_ENABLED" : "COMPANY_MODULE_DISABLED";
+    const modName = cm.modules?.name ?? cm.module_id;
+    if (!window.confirm(
+      `${newStatus === "active" ? "Ativar" : "Desativar"} o módulo "${modName}" para esta empresa?`
+    )) return;
+
+    setActionLoading("cm_" + cm.id);
+    const { error } = await supabase
+      .from("company_modules")
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", cm.id);
+
+    if (!error) {
+      await logAdminAudit({
+        action: auditAction,
+        adminUserId: user?.id,
+        targetType: "company_module",
+        targetId: cm.id,
+        contractorId: company.id,
+        metadata: { module_slug: cm.modules?.slug, old_status: cm.status, new_status: newStatus },
+      });
+      setModules(prev => prev.map(m => m.id === cm.id ? { ...m, status: newStatus } : m));
+    }
+    setActionLoading(null);
+  }
+
+  /* ── Adicionar override de módulo para empresa ─────────────────── */
+  async function handleAddModuleOverride(globalMod: GlobalModuleRow) {
+    if (!company) return;
+    if (!window.confirm(`Ativar o módulo "${globalMod.name}" manualmente para esta empresa?`)) return;
+
+    setActionLoading("add_" + globalMod.id);
+    const { data, error } = await supabase
+      .from("company_modules")
+      .upsert({
+        contractor_id: company.id,
+        module_id:     globalMod.id,
+        status:        "active",
+        activated_at:  new Date().toISOString(),
+        config_json:   {},
+        updated_at:    new Date().toISOString(),
+      }, { onConflict: "contractor_id,module_id" })
+      .select("id, module_id, status, activated_at, modules(name, slug, icon)")
+      .single();
+
+    if (!error && data) {
+      await logAdminAudit({
+        action: "COMPANY_MODULE_OVERRIDE_CREATED",
+        adminUserId: user?.id,
+        targetType: "company_module",
+        targetId: data.id,
+        contractorId: company.id,
+        metadata: { module_slug: globalMod.slug, source: "admin_override" },
+      });
+      setModules(prev => {
+        const exists = prev.some(m => m.module_id === globalMod.id);
+        if (exists) return prev.map(m => m.module_id === globalMod.id ? { ...m, status: "active" } : m);
+        return [...prev, data as CompanyModuleRow];
+      });
+    }
+    setActionLoading(null);
+  }
 
   async function updateStatus(
     newStatus: string,
@@ -479,26 +561,86 @@ export default function AdminCompanyDetailsPage() {
 
                 {/* Módulos */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                  <h2 className="font-bold text-gray-900 mb-4">Módulos</h2>
-                  {modules.length === 0 ? (
-                    <p className="text-sm text-gray-400 py-4 text-center">Nenhum módulo configurado.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-bold text-gray-900">Módulos</h2>
+                    <span className="text-xs text-gray-400">Overrides manuais por empresa</span>
+                  </div>
+
+                  {/* Overrides existentes */}
+                  {modules.length > 0 && (
+                    <div className="space-y-2 mb-4">
                       {modules.map(m => (
-                        <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
-                          {m.status === "active"
-                            ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                            : <XCircle className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                          }
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{m.modules?.name ?? m.module_id}</p>
-                            <p className={`text-xs ${m.status === "active" ? "text-green-600" : "text-gray-400"}`}>
-                              {MODULE_STATUS_LABEL[m.status] ?? m.status}
-                            </p>
+                        <div key={m.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {m.status === "active"
+                              ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                              : <XCircle className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                            }
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">
+                                {m.modules?.name ?? m.module_id}
+                              </p>
+                              <p className={`text-xs ${m.status === "active" ? "text-green-600" : "text-gray-400"}`}>
+                                Override manual — {MODULE_STATUS_LABEL[m.status] ?? m.status}
+                              </p>
+                            </div>
                           </div>
+                          <button
+                            onClick={() => handleToggleCompanyModule(m)}
+                            disabled={!!actionLoading}
+                            className={`flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                              m.status === "active"
+                                ? "bg-red-50 text-red-600 hover:bg-red-100"
+                                : "bg-green-50 text-green-700 hover:bg-green-100"
+                            }`}
+                          >
+                            {actionLoading === "cm_" + m.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : m.status === "active"
+                                ? <ToggleRight className="w-3.5 h-3.5" />
+                                : <ToggleLeft className="w-3.5 h-3.5" />
+                            }
+                            {m.status === "active" ? "Desativar" : "Ativar"}
+                          </button>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* Adicionar override para módulo sem entrada */}
+                  {allGlobalModules.filter(gm =>
+                    gm.status === "active" && !modules.some(m => m.module_id === gm.id)
+                  ).length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">
+                        Adicionar acesso manual a módulo
+                      </p>
+                      <div className="space-y-1">
+                        {allGlobalModules
+                          .filter(gm => gm.status === "active" && !modules.some(m => m.module_id === gm.id))
+                          .map(gm => (
+                            <div key={gm.id} className="flex items-center justify-between px-3 py-2 rounded-xl border border-dashed border-gray-200">
+                              <span className="text-sm text-gray-500">{gm.name}</span>
+                              <button
+                                onClick={() => handleAddModuleOverride(gm)}
+                                disabled={!!actionLoading}
+                                className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+                              >
+                                {actionLoading === "add_" + gm.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <Plus className="w-3 h-3" />
+                                }
+                                Ativar override
+                              </button>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  )}
+
+                  {modules.length === 0 && allGlobalModules.filter(gm => gm.status === "active").length === 0 && (
+                    <p className="text-sm text-gray-400 py-4 text-center">Nenhum módulo configurado.</p>
                   )}
                 </div>
 
