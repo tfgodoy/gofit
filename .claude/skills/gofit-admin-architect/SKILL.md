@@ -104,10 +104,12 @@ Antes de iniciar qualquer fase nova ou correção, rodar mentalmente (ou via que
 - [ ] Edge Function `create-saas-payment` existe em `supabase/functions/`
 - [ ] Edge Function `asaas-saas-webhook` existe em `supabase/functions/`
 
-**Fase 6 — RBAC Administrativo (se já implementada):**
+**Fase 6 — RBAC Administrativo (concluída — validada tecnicamente):**
 - [ ] `admin_roles`, `admin_permissions`, `admin_users`, `admin_user_roles`, `admin_role_permissions` existem
 - [ ] Função `is_active_admin_user(uuid)` existe (evita recursão de RLS)
 - [ ] Owner atual está vinculado como `super_admin` em `admin_user_roles`
+- [ ] 6 roles existem: `super_admin`, `financeiro`, `comercial`, `suporte`, `operacoes`, `leitura`
+- [ ] 30 permissões seedadas existem, com keys idênticas às usadas no frontend
 
 ---
 
@@ -151,15 +153,18 @@ Se a migration existe localmente (`supabase/migrations/*.sql`) mas a tabela corr
 - ✅ Fase 1 — Base segura do Admin GoFit: concluída.
 - ✅ Fase 2 — Gestão de Empresas/Academias: concluída.
 - ✅ Fase 3 — Planos, Assinaturas e Trials: concluída.
+- ✅ Fase 3.5 — Reestruturação comercial dos planos SaaS (faixas de alunos, mensal/anual, desconto e multa parametrizáveis): concluída e validada.
 - ✅ Fase 4 — Módulos e Feature Flags: concluída.
 - ✅ Fase 5 — Financeiro SaaS da GoFit com Asaas: concluída e **restaurada** após reaplicação das migrations 049/050 (as tabelas haviam sumido do banco por causa externa à sessão).
+- ✅ Fase 6 — RBAC Administrativo: concluída **oficialmente**, com validação técnica completa (migrations 051/052/053, 5 tabelas RBAC, 6 roles, 30 permissões seedadas, Owner vinculado como `super_admin`, rotas protegidas por `AdminGuard` + `RequireAdminPermission`, ações sensíveis protegidas nos handlers, nenhuma policy `anon`, `/app/*` intacto, RBAC administrativo isolado das permissões de staff da academia).
 
-**Tarefa em andamento:**
-- 🔄 Fase 3.5 — Correção comercial dos planos SaaS, inspirada na tabela de preços da NextFit: planos por faixa de alunos, contratação mensal ou anual apenas, desconto anual parametrizável, multa/rescisão contratual parametrizável.
-- **Não avançar para Fase 6 até esta correção estar concluída e validada.**
+**Pendências opcionais registradas (não bloqueiam nenhuma fase):**
+- `AdminRolesPage` permitir edição segura de permissões por role via UI
+- Trigger de banco para impedir DELETE direto de roles/permissões de sistema
+- Limpeza técnica em `AuthContext.tsx` (`react-refresh/only-export-components`, pré-existente)
 
 **Próxima fase planejada:**
-- ⏭️ Fase 6 — RBAC Administrativo, somente depois que a correção comercial dos planos for concluída e validada.
+- ⏭️ Fase 7 — Auditoria avançada, Suporte e Impersonação.
 
 **Nota:** este resumo pode ficar desatualizado entre sessões — sempre validar contra o banco real usando o checklist de sanidade acima antes de confiar cegamente nele.
 
@@ -581,9 +586,21 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### ✅ FASE 6 — RBAC Administrativo (CONCLUÍDA DEFINITIVAMENTE)
+### ✅ FASE 6 — RBAC Administrativo (CONCLUÍDA DEFINITIVAMENTE — VALIDAÇÃO FINAL)
 
-**Status:** Concluída e validada em browser real (login, /admin/users, /admin/roles). tsc: OK. build: OK. lint: OK. Commit: `63136da9f`.
+**Status:** Concluída, validada em browser real e **revalidada tecnicamente via checklist completo** (migrations, RLS, roles, permissões, vínculo do Owner, proteção de rotas e ações, ausência de policy `anon`, isolamento de `/app/*`). tsc: OK. build: OK. lint: OK (exceto issue pré-existente não relacionada, ver Pendências). Commit: `63136da9f`.
+
+**Checkpoint final de validação (aprovado sem ajustes obrigatórios):**
+- Migrations confirmadas aplicadas no banco: `20260701_051_admin_rbac.sql`, `20260701_052_admin_rbac_helpers.sql`, `20260701_053_admin_rbac_fix_recursion.sql`
+- 5 tabelas RBAC confirmadas no banco: `admin_roles`, `admin_permissions`, `admin_users`, `admin_user_roles`, `admin_role_permissions`
+- 6 roles confirmadas: `super_admin` (30/30 permissões), `financeiro` (10), `comercial` (7), `suporte` (3), `operacoes` (5), `leitura` (11, todas `.view`)
+- 30 permissões seedadas confirmadas, com 100% de match entre as keys no banco e as keys referenciadas no frontend (`hasAdminPermission()` e `permission=` nas rotas) — nenhuma divergência de nomenclatura
+- Owner atual (`thiagoallo@icloud.com`) confirmado em `platform_owners` **e** `admin_users` (status `active`) **e** vinculado à role `super_admin` — sem divergência entre as duas tabelas
+- Todas as rotas `/admin/*` confirmadas com dupla proteção: `AdminGuard` (autenticação + revalidação de status) + `RequireAdminPermission` (autorização granular)
+- Todas as ações sensíveis confirmadas protegidas no handler (não só ocultação de botão) — defesa em profundidade
+- Nenhuma policy `anon` encontrada em nenhuma tabela RBAC
+- `/app/*` confirmado 100% intacto (`git diff --stat` do commit `63136da9f` não toca nenhum arquivo em `src/pages/app/` ou `src/pages/public/`)
+- Nenhuma mistura entre `role_permissions` (permissões de staff da academia) e o RBAC administrativo — domínios seguem completamente separados
 
 **O que foi implementado:**
 - Migration `20260701_051_admin_rbac.sql`: 5 tabelas com RLS completa
@@ -626,6 +643,11 @@ Antes de escrever qualquer linha de código, sempre:
 - Não recriar `useAdminPermissions`, `RequireAdminPermission`
 - Não reverter a checagem de `admin_users.status` no `AdminGuard`
 - Não editar permissões de `admin_roles` diretamente por UI ainda — fica para Fase 7
+
+**Pendências opcionais para fases futuras (não bloqueiam a conclusão da Fase 6):**
+- `AdminRolesPage` permitir edição segura de permissões por role via UI (hoje é só leitura; papéis geridos via seed de migration)
+- Trigger de banco para impedir `DELETE` direto de roles/permissões de sistema (`is_system_role = true`) — hoje mitigado apenas por não haver UI de delete e as policies exigirem `platform_owners`
+- Limpeza técnica em `src/contexts/AuthContext.tsx`: erro de lint pré-existente `react-refresh/only-export-components` (export de `useAuth()` no mesmo arquivo do `AuthProvider`) — não é da Fase 6, mas segue pendente
 
 ---
 
