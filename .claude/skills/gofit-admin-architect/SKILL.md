@@ -356,7 +356,7 @@ Antes de escrever qualquer linha de código, sempre:
 
 ### ✅ FASE 5 — Financeiro SaaS da GoFit (CONCLUÍDA DEFINITIVAMENTE)
 
-**Status:** Concluída. tsc: OK. build: OK. Commit: `e53fb31be`.
+**Status:** Concluída e validada. tsc: OK. build: OK. lint: OK. Commits: `e53fb31be` (implementação) + `0f0c87d2f` (ajustes pós-validação).
 
 **O que foi implementado:**
 - Migration `20260701_049_saas_billing.sql`: 4 tabelas com RLS completa
@@ -392,11 +392,26 @@ Antes de escrever qualquer linha de código, sempre:
 - `ASAAS_BASE_URL` — URL base da API Asaas
 - `ASAAS_WEBHOOK_TOKEN` — token configurado no painel Asaas para o endpoint `asaas-saas-webhook`
 
+**Regras canônicas de sincronização de assinatura (obrigatórias em todas as fases futuras):**
+- `handleMarkPaid()` DEVE: inserir `saas_payments` (payment_method=MANUAL), verificar se subscription está `past_due` ou `blocked` e, se sim, atualizar para `active` + inserir `saas_subscription_events` (SUBSCRIPTION_REACTIVATED_AFTER_PAYMENT). Não reativar `cancelled`, `expired` ou `paused`.
+- `handleMarkOverdue()` DEVE: verificar se subscription está `active` ou `trialing` e, se sim, atualizar para `past_due` + inserir `saas_subscription_events` (SUBSCRIPTION_MARKED_PAST_DUE). Não alterar `blocked`, `cancelled`, `expired` ou `paused`.
+- Toda mudança de saas_subscriptions.status DEVE registrar em `saas_subscription_events`.
+- Toda mudança financeira DEVE registrar em `saas_billing_events`.
+- Pagamentos manuais DEVEM inserir em `saas_payments` (além de `saas_billing_events`).
+- `saas_payments.asaas_payment_id` tem constraint UNIQUE (migration 050) — múltiplos NULLs permitidos para pagamentos manuais.
+
+**Padrão de estado em página com refresh manual (obrigatório):**
+- Usar `const [refreshKey, setRefreshKey] = useState(0)` + `function refresh() { setLoading(true); setRefreshKey(k => k + 1); }`
+- Definir `async function doLoad()` DENTRO do `useEffect`, com guard `let active = true`
+- `useEffect` depende de `[refreshKey]`
+- Botão de refresh chama `refresh()` diretamente — nunca `void load()` no efeito
+
 **O que NÃO deve ser alterado nas próximas fases:**
-- Não recriar as páginas billing, edge functions ou migration 049
+- Não recriar as páginas billing, edge functions ou migrations 049/050
 - Não mesclar saas_asaas_customers com payment_customers
 - Não chamar Asaas diretamente do frontend
 - Não usar VITE_ para chaves Asaas ou service role
+- Não remover a lógica de sincronização de subscription em handleMarkPaid/handleMarkOverdue
 
 ---
 
