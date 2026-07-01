@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
-  LogOut, ShieldCheck, Dumbbell, Layers, Boxes, Search, Plus,
-  RefreshCcw, CheckCircle2, XCircle, AlertTriangle, Clock, ExternalLink,
+  LogOut, ShieldCheck, Dumbbell, Layers, Boxes, Search,
+  RefreshCcw, ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ interface Invoice {
   created_at: string;
   contractors: { id: string; nome_fantasia: string; email: string } | null;
   saas_plans: { name: string } | null;
+  saas_subscriptions: { id: string; status: string } | null;
 }
 
 const navItems = [
@@ -70,20 +71,25 @@ export default function AdminBillingInvoicesPage() {
   const [statusFilter, setStatus]   = useState("");
   const [actionModal, setAction]    = useState<ActionModal>(null);
   const [saving, setSaving]         = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  async function load() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("saas_invoices")
-      .select("id, contractor_id, subscription_id, plan_id, amount, due_date, status, payment_method, asaas_payment_id, asaas_invoice_url, paid_at, cancelled_at, created_at, contractors(id, nome_fantasia, email), saas_plans(name)")
-      .order("created_at", { ascending: false })
-      .limit(200);
+  function refresh() { setLoading(true); setRefreshKey(k => k + 1); }
 
-    setInvoices((data ?? []) as unknown as Invoice[]);
-    setLoading(false);
-  }
-
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    async function doLoad() {
+      const { data } = await supabase
+        .from("saas_invoices")
+        .select("id, contractor_id, subscription_id, plan_id, amount, due_date, status, payment_method, asaas_payment_id, asaas_invoice_url, paid_at, cancelled_at, created_at, contractors(id, nome_fantasia, email), saas_plans(name), saas_subscriptions(id, status)")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (!active) return;
+      setInvoices((data ?? []) as unknown as Invoice[]);
+      setLoading(false);
+    }
+    doLoad();
+    return () => { active = false; };
+  }, [refreshKey]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -97,17 +103,35 @@ export default function AdminBillingInvoicesPage() {
   async function handleMarkPaid(invoice: Invoice) {
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como paga manualmente?`)) return;
     setSaving(true);
-    const now = new Date().toISOString();
-    const { error } = await supabase.from("saas_invoices").update({ status: "paid", paid_at: now, payment_method: "MANUAL", updated_at: now }).eq("id", invoice.id);
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from("saas_invoices").update({ status: "paid", paid_at: nowIso, payment_method: "MANUAL", updated_at: nowIso }).eq("id", invoice.id);
     if (!error) {
+      // Registra pagamento manual em saas_payments (trilha financeira)
+      await supabase.from("saas_payments").insert({
+        invoice_id: invoice.id, contractor_id: invoice.contractor_id, subscription_id: invoice.subscription_id,
+        amount: invoice.amount, payment_method: "MANUAL", status: "confirmed",
+        paid_at: nowIso, metadata: { source: "admin_manual" }, created_by: user?.id ?? null,
+      });
+      // Reativa assinatura se estava inadimplente ou bloqueada
+      const subStatus = invoice.saas_subscriptions?.status;
+      if (subStatus === "past_due" || subStatus === "blocked") {
+        await supabase.from("saas_subscriptions").update({ status: "active", updated_at: nowIso }).eq("id", invoice.subscription_id);
+        await supabase.from("saas_subscription_events").insert({
+          subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
+          event_type: "SUBSCRIPTION_REACTIVATED_AFTER_PAYMENT",
+          old_value: { status: subStatus }, new_value: { status: "active" },
+          metadata: { source: "admin_manual_payment", invoice_id: invoice.id, contractor_id: invoice.contractor_id },
+          created_by: user?.id ?? null,
+        });
+      }
       await supabase.from("saas_billing_events").insert({
         invoice_id: invoice.id, subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
         event_type: "INVOICE_PAID_MANUAL", old_value: { status: invoice.status }, new_value: { status: "paid" },
         metadata: { method: "MANUAL" }, created_by: user?.id ?? null,
       });
       await logAdminAudit({ action: "INVOICE_PAID_MANUAL", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id });
-      toast.success("Fatura marcada como paga.");
-      void load();
+      toast.success("Fatura marcada como paga." + (subStatus === "past_due" || subStatus === "blocked" ? " Assinatura reativada." : ""));
+      refresh();
     } else {
       toast.error("Erro ao atualizar fatura.");
     }
@@ -118,17 +142,29 @@ export default function AdminBillingInvoicesPage() {
   async function handleMarkOverdue(invoice: Invoice) {
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como vencida?`)) return;
     setSaving(true);
-    const now = new Date().toISOString();
-    const { error } = await supabase.from("saas_invoices").update({ status: "overdue", updated_at: now }).eq("id", invoice.id);
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from("saas_invoices").update({ status: "overdue", updated_at: nowIso }).eq("id", invoice.id);
     if (!error) {
+      // Move assinatura para past_due se ainda estava ativa (não altera blocked/cancelled/expired/paused)
+      const subStatus = invoice.saas_subscriptions?.status;
+      if (subStatus === "active" || subStatus === "trialing") {
+        await supabase.from("saas_subscriptions").update({ status: "past_due", updated_at: nowIso }).eq("id", invoice.subscription_id);
+        await supabase.from("saas_subscription_events").insert({
+          subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
+          event_type: "SUBSCRIPTION_MARKED_PAST_DUE",
+          old_value: { status: subStatus }, new_value: { status: "past_due" },
+          metadata: { source: "admin_manual_overdue", invoice_id: invoice.id, contractor_id: invoice.contractor_id },
+          created_by: user?.id ?? null,
+        });
+      }
       await supabase.from("saas_billing_events").insert({
         invoice_id: invoice.id, subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
         event_type: "INVOICE_OVERDUE", old_value: { status: invoice.status }, new_value: { status: "overdue" },
         created_by: user?.id ?? null,
       });
       await logAdminAudit({ action: "INVOICE_MARKED_OVERDUE", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id });
-      toast.success("Fatura marcada como vencida.");
-      void load();
+      toast.success("Fatura marcada como vencida." + (subStatus === "active" || subStatus === "trialing" ? " Assinatura marcada como inadimplente." : ""));
+      refresh();
     } else {
       toast.error("Erro ao atualizar fatura.");
     }
@@ -149,7 +185,7 @@ export default function AdminBillingInvoicesPage() {
       });
       await logAdminAudit({ action: "INVOICE_CANCELLED", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id });
       toast.success("Fatura cancelada.");
-      void load();
+      refresh();
     } else {
       toast.error("Erro ao cancelar fatura.");
     }
@@ -172,7 +208,7 @@ export default function AdminBillingInvoicesPage() {
       if (json.success) {
         await logAdminAudit({ action: "SAAS_ASAAS_PAYMENT_REQUESTED", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id, metadata: { billing_type: billingType } });
         toast.success("Cobrança Asaas criada com sucesso.");
-        void load();
+        refresh();
       } else {
         toast.error(json.error ?? "Erro ao criar cobrança Asaas.");
       }
@@ -259,7 +295,7 @@ export default function AdminBillingInvoicesPage() {
             >
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
-            <button onClick={() => void load()} className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
+            <button onClick={refresh} className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
               <RefreshCcw className="w-4 h-4" />
             </button>
           </div>

@@ -41,8 +41,8 @@ function fmt(v: number) {
 function fmtDate(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
 }
-function daysOverdue(due: string) {
-  const diff = Date.now() - new Date(due + "T00:00:00").getTime();
+function daysOverdue(due: string, now: number) {
+  const diff = now - new Date(due + "T00:00:00").getTime();
   return Math.max(0, Math.floor(diff / 86400000));
 }
 
@@ -53,37 +53,51 @@ export default function AdminBillingOverduePage() {
   const [invoices, setInvoices] = useState<OverdueInvoice[]>([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
+  const [now]                   = useState(() => Date.now());
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  async function load() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("saas_invoices")
-      .select("id, contractor_id, subscription_id, amount, due_date, status, asaas_payment_id, created_at, contractors(id, nome_fantasia, email), saas_plans(name), saas_subscriptions(id, status)")
-      .eq("status", "overdue")
-      .order("due_date", { ascending: true });
+  function refresh() { setLoading(true); setRefreshKey(k => k + 1); }
 
-    setInvoices((data ?? []) as unknown as OverdueInvoice[]);
-    setLoading(false);
-  }
-
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    async function doLoad() {
+      const { data } = await supabase
+        .from("saas_invoices")
+        .select("id, contractor_id, subscription_id, amount, due_date, status, asaas_payment_id, created_at, contractors(id, nome_fantasia, email), saas_plans(name), saas_subscriptions(id, status)")
+        .eq("status", "overdue")
+        .order("due_date", { ascending: true });
+      if (!active) return;
+      setInvoices((data ?? []) as unknown as OverdueInvoice[]);
+      setLoading(false);
+    }
+    doLoad();
+    return () => { active = false; };
+  }, [refreshKey]);
 
   const totalOverdue = useMemo(() => invoices.reduce((s, i) => s + Number(i.amount), 0), [invoices]);
 
   async function handleMarkPaid(invoice: OverdueInvoice) {
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como paga manualmente?`)) return;
     setSaving(true);
-    const now = new Date().toISOString();
-    const { error } = await supabase.from("saas_invoices").update({ status: "paid", paid_at: now, payment_method: "MANUAL", updated_at: now }).eq("id", invoice.id);
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.from("saas_invoices").update({ status: "paid", paid_at: nowIso, payment_method: "MANUAL", updated_at: nowIso }).eq("id", invoice.id);
     if (!error) {
-      // Reativar assinatura se estava bloqueada
-      if (invoice.saas_subscriptions?.status === "blocked" || invoice.saas_subscriptions?.status === "past_due") {
-        await supabase.from("saas_subscriptions").update({ status: "active", updated_at: now }).eq("id", invoice.subscription_id);
+      // Registra pagamento manual em saas_payments (trilha financeira)
+      await supabase.from("saas_payments").insert({
+        invoice_id: invoice.id, contractor_id: invoice.contractor_id, subscription_id: invoice.subscription_id,
+        amount: invoice.amount, payment_method: "MANUAL", status: "confirmed",
+        paid_at: nowIso, metadata: { source: "admin_manual" }, created_by: user?.id ?? null,
+      });
+      // Reativa assinatura se estava bloqueada ou inadimplente
+      const subStatus = invoice.saas_subscriptions?.status;
+      if (subStatus === "blocked" || subStatus === "past_due") {
+        await supabase.from("saas_subscriptions").update({ status: "active", updated_at: nowIso }).eq("id", invoice.subscription_id);
         await supabase.from("saas_subscription_events").insert({
           subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
           event_type: "SUBSCRIPTION_REACTIVATED_AFTER_PAYMENT",
-          old_value: { status: invoice.saas_subscriptions.status }, new_value: { status: "active" },
-          metadata: { source: "manual_payment", invoice_id: invoice.id }, created_by: user?.id ?? null,
+          old_value: { status: subStatus }, new_value: { status: "active" },
+          metadata: { source: "admin_manual_payment", invoice_id: invoice.id, contractor_id: invoice.contractor_id },
+          created_by: user?.id ?? null,
         });
       }
       await supabase.from("saas_billing_events").insert({
@@ -92,8 +106,8 @@ export default function AdminBillingOverduePage() {
         metadata: { method: "MANUAL" }, created_by: user?.id ?? null,
       });
       await logAdminAudit({ action: "INVOICE_PAID_MANUAL", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id });
-      toast.success("Fatura marcada como paga e assinatura reativada.");
-      void load();
+      toast.success("Fatura marcada como paga." + (subStatus === "blocked" || subStatus === "past_due" ? " Assinatura reativada." : ""));
+      refresh();
     } else {
       toast.error("Erro ao atualizar fatura.");
     }
@@ -112,11 +126,11 @@ export default function AdminBillingOverduePage() {
         subscription_id: invoice.subscription_id, contractor_id: invoice.contractor_id,
         event_type: "SUBSCRIPTION_BLOCKED_FOR_NON_PAYMENT",
         old_value: { status: currentStatus }, new_value: { status: "blocked" },
-        metadata: { invoice_id: invoice.id, days_overdue: daysOverdue(invoice.due_date) }, created_by: user?.id ?? null,
+        metadata: { invoice_id: invoice.id, days_overdue: daysOverdue(invoice.due_date, now) }, created_by: user?.id ?? null,
       });
       await logAdminAudit({ action: "SUBSCRIPTION_BLOCKED_NON_PAYMENT", adminUserId: user?.id, targetType: "subscription", targetId: invoice.subscription_id, contractorId: invoice.contractor_id, metadata: { invoice_id: invoice.id } });
       toast.success("Assinatura bloqueada.");
-      void load();
+      refresh();
     } else {
       toast.error("Erro ao bloquear assinatura.");
     }
@@ -138,7 +152,7 @@ export default function AdminBillingOverduePage() {
       });
       await logAdminAudit({ action: "SUBSCRIPTION_REACTIVATED_AFTER_PAYMENT", adminUserId: user?.id, targetType: "subscription", targetId: invoice.subscription_id, contractorId: invoice.contractor_id });
       toast.success("Assinatura reativada.");
-      void load();
+      refresh();
     } else {
       toast.error("Erro ao reativar assinatura.");
     }
@@ -160,7 +174,7 @@ export default function AdminBillingOverduePage() {
       if (json.success) {
         await logAdminAudit({ action: "SAAS_ASAAS_PAYMENT_REQUESTED", adminUserId: user?.id, targetType: "invoice", targetId: invoice.id, contractorId: invoice.contractor_id });
         toast.success("Cobrança Asaas criada.");
-        void load();
+        refresh();
       } else {
         toast.error(json.error ?? "Erro ao criar cobrança.");
       }
@@ -230,7 +244,7 @@ export default function AdminBillingOverduePage() {
                 {invoices.length} fatura{invoices.length !== 1 ? "s" : ""} vencida{invoices.length !== 1 ? "s" : ""} — {fmt(totalOverdue)} em aberto
               </p>
             </div>
-            <button onClick={() => void load()} className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
+            <button onClick={refresh} className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors">
               <RefreshCcw className="w-4 h-4" />
             </button>
           </div>
@@ -246,7 +260,7 @@ export default function AdminBillingOverduePage() {
           ) : (
             <div className="space-y-3">
               {invoices.map(inv => {
-                const days = daysOverdue(inv.due_date);
+                const days = daysOverdue(inv.due_date, now);
                 const isBlocked = inv.saas_subscriptions?.status === "blocked";
                 return (
                   <div key={inv.id} className="bg-gray-900 border border-red-800/30 rounded-xl p-5">
