@@ -354,34 +354,49 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### 🔜 FASE 5 — Financeiro SaaS da GoFit (PRÓXIMA FASE OFICIAL)
+### ✅ FASE 5 — Financeiro SaaS da GoFit (CONCLUÍDA DEFINITIVAMENTE)
 
-**Objetivo:** Financeiro da GoFit separado do financeiro das academias clientes.
+**Status:** Concluída. tsc: OK. build: OK. Commit: `e53fb31be`.
 
-**Tabelas:**
-```sql
-saas_invoices (id, contractor_id, subscription_id, amount, due_date, status, paid_at, created_at)
-saas_payments (id, invoice_id, contractor_id, amount, method, status, processed_at, created_at)
-```
+**O que foi implementado:**
+- Migration `20260701_049_saas_billing.sql`: 4 tabelas com RLS completa
+  - `saas_asaas_customers` — contractor → Asaas customer na conta PRINCIPAL GoFit (não subconta)
+  - `saas_invoices` — faturas SaaS (draft→pending→paid/overdue/failed/cancelled/refunded); `asaas_payment_id UNIQUE`
+  - `saas_payments` — pagamentos confirmados imutáveis (auditoria financeira)
+  - `saas_billing_events` — log imutável de todos os eventos de billing
+- Edge Function `create-saas-payment`: cria customer + cobrança Asaas para invoice; auth via platform_owner; idempotente
+- Edge Function `asaas-saas-webhook`: webhook Asaas SaaS separado do gofit-pay; filtra por `externalReference gofit:saas-invoice:*`; valida token em constant-time; idempotente via saas_billing_events
+- `/admin/billing` — dashboard: receita recebida, prevista, inadimplência, resumo por status, faturas recentes
+- `/admin/billing/invoices` — lista com filtros, ações: cobrar Asaas, marcar pago manual, vencer, cancelar
+- `/admin/billing/overdue` — faturas vencidas com dias em atraso; bloquear/reativar assinatura; criar cobrança Asaas
+- `AdminCompanyDetailsPage` — seção de faturas recentes por empresa
+- `AdminSubscriptionsPage` — link para Financeiro SaaS no header
+- navItem "Financeiro" ativado (`active: true`) em todas as páginas admin
+- `adminAudit.ts` — 7 novos tipos: `INVOICE_CREATED`, `INVOICE_CANCELLED`, `INVOICE_PAID_MANUAL`, `INVOICE_MARKED_OVERDUE`, `SAAS_ASAAS_PAYMENT_REQUESTED`, `SUBSCRIPTION_BLOCKED_NON_PAYMENT`, `SUBSCRIPTION_REACTIVATED_AFTER_PAYMENT`
 
-**Status de fatura:** `pending` | `paid` | `overdue` | `failed` | `cancelled` | `refunded`
+**Separação de contextos (regra canônica — obrigatória em todas as fases futuras):**
+- `payment_customers` / `payment_charges` → academias cobrando **alunos** via GoFit Pay (subconta Asaas)
+- `saas_asaas_customers` / `saas_invoices` → GoFit cobrando **academias** pela assinatura SaaS (conta principal Asaas)
+- `externalReference` dos pagamentos SaaS = `gofit:saas-invoice:{invoice_id}` — prefixo obrigatório para roteamento do webhook
+- `externalReference` dos pagamentos GoFit Pay = diferente → webhook SaaS ignora silenciosamente
 
-**Telas:**
-- `/admin/billing` — MRR, ARR, inadimplência
-- `/admin/billing/invoices` — faturas com filtro
-- `/admin/billing/overdue` — cobranças vencidas + ação de bloqueio
+**Regras de webhook (obrigatórias):**
+- `asaas-saas-webhook` valida `ASAAS_WEBHOOK_TOKEN` em constant-time antes de processar qualquer dado
+- Webhook registra evento bruto em `saas_billing_events` ANTES de tentar processar, mesmo se fatura não encontrada
+- Webhook é idempotente: checa `saas_billing_events` para evento duplicado antes de processar
+- `saas_payments` só é inserido quando `newInvoiceStatus === "paid"` — nunca duplica
+- Assinatura SaaS volta a `active` automaticamente quando fatura é paga (via webhook ou manual)
 
-**Régua de cobrança sugerida:**
-- D+1: status `past_due`
-- D+5: alerta interno
-- D+10: bloquear módulos premium
-- D+15: bloquear acesso (exceto tela de pagamento)
-- Após pagamento: reativar automaticamente
+**Segredos necessários (Supabase Secrets — nunca VITE_):**
+- `ASAAS_API_KEY` — conta principal GoFit (NÃO subconta de academia)
+- `ASAAS_BASE_URL` — URL base da API Asaas
+- `ASAAS_WEBHOOK_TOKEN` — token configurado no painel Asaas para o endpoint `asaas-saas-webhook`
 
-**Critérios de aceite:**
-- Financeiro GoFit não se mistura com financeiro dos clientes
-- Admin vê MRR, ARR e inadimplência
-- Todas as mudanças geram auditoria
+**O que NÃO deve ser alterado nas próximas fases:**
+- Não recriar as páginas billing, edge functions ou migration 049
+- Não mesclar saas_asaas_customers com payment_customers
+- Não chamar Asaas diretamente do frontend
+- Não usar VITE_ para chaves Asaas ou service role
 
 ---
 
