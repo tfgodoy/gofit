@@ -316,7 +316,7 @@ Antes de escrever qualquer linha de código, sempre:
 
 ### ✅ FASE 4 — Módulos e Feature Flags (CONCLUÍDA DEFINITIVAMENTE)
 
-**Status:** Concluída. tsc: OK. build: OK. lint: OK. Commit: `432b2aa11`.
+**Status:** Concluída. tsc: OK. build: OK. lint: OK. Commits: `432b2aa11` (implementação) + ajuste de segurança (migration 048).
 
 **O que foi implementado:**
 - Migrations: `20260701_046_modules_admin_policies.sql` (write RLS para platform_owners em modules e company_modules), `20260701_047_modules_seed.sql` (10 módulos padrão + features por plano seed)
@@ -500,6 +500,14 @@ Estas regras foram estabelecidas ao longo das Fases 1–3 e são obrigatórias e
 - Nunca alterar financeiro interno das academias clientes
 - Financeiro SaaS da GoFit (Fase 5+) é completamente separado do financeiro das academias
 
+### Módulos globais (tabela `modules`) — regras permanentes (Fase 4+)
+- **Nunca DELETE físico em `modules`** — módulos são registros estruturais referenciados por `company_modules`, `saas_plan_features`, auditorias e feature flags
+- Para "remover" um módulo: usar `status = 'deprecated'` ou `status = 'coming_soon'` + `is_visible = false`
+- Módulo global com `status != 'active'` bloqueia acesso de qualquer empresa, mesmo que exista override positivo em `company_modules`
+- Override positivo em `company_modules` só libera acesso se o módulo global estiver `status = 'active'`
+- A policy de banco NUNCA deve incluir `FOR ALL` ou `FOR DELETE` em `modules` — apenas `FOR INSERT` e `FOR UPDATE` para platform_owners
+- DELETE poderá ser reavaliado no futuro apenas com: verificação de integridade referencial, cascata explícita e aprovação explícita nesta skill
+
 ### Padrões React
 - Estado de loading inicializado como `true`; nunca chamar `setLoading(true)` sincronamente no corpo do `useEffect`
 - Async data loading: definir função async dentro do `useEffect`, chamar sem `await`, setar estado apenas dentro da função (após pelo menos um `await`)
@@ -522,6 +530,8 @@ Estas regras foram estabelecidas ao longo das Fases 1–3 e são obrigatórias e
 - Recriar arquivos que já existem da Fase 1 (AdminGuard, adminAudit, AdminLoginPage, etc.)
 - Adicionar aba/modo Owner em `/login`
 - Usar `login()` para autenticar admin GoFit
+- Criar policy `FOR ALL` ou `FOR DELETE` em `modules` — usar apenas `FOR INSERT` + `FOR UPDATE`
+- Deletar registro de `modules` fisicamente — usar `status = 'deprecated'` ou `is_visible = false`
 
 ---
 
