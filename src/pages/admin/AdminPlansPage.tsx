@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
+import { computePlanPricing, fmtBRL } from "@/lib/saasPlanPricing";
 
 interface SaasPlan {
   id: string;
@@ -18,11 +19,17 @@ interface SaasPlan {
   price_monthly: number;
   price_yearly: number | null;
   status: "active" | "inactive" | "archived";
+  min_students: number;
   max_students: number | null;
   max_staff: number | null;
   max_units: number;
   trial_days: number;
   sort_order: number;
+  annual_discount_percent: number;
+  contract_term_months: number;
+  early_termination_fee_type: string;
+  early_termination_fee_percent: number;
+  early_termination_notes: string | null;
   created_at: string;
 }
 
@@ -31,21 +38,27 @@ interface PlanFormData {
   slug: string;
   description: string;
   price_monthly: string;
-  price_yearly: string;
+  min_students: string;
   max_students: string;
   max_staff: string;
   max_units: string;
   trial_days: string;
   sort_order: string;
   status: "active" | "inactive";
+  annual_discount_percent: string;
+  contract_term_months: string;
+  early_termination_fee_percent: string;
+  early_termination_notes: string;
 }
 
 const EMPTY_FORM: PlanFormData = {
   name: "", slug: "", description: "",
-  price_monthly: "0", price_yearly: "",
-  max_students: "", max_staff: "",
+  price_monthly: "0",
+  min_students: "0", max_students: "", max_staff: "",
   max_units: "1", trial_days: "14", sort_order: "0",
   status: "active",
+  annual_discount_percent: "10", contract_term_months: "12",
+  early_termination_fee_percent: "20", early_termination_notes: "",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -117,13 +130,17 @@ export default function AdminPlansPage() {
       slug: plan.slug,
       description: plan.description ?? "",
       price_monthly: String(plan.price_monthly),
-      price_yearly: plan.price_yearly != null ? String(plan.price_yearly) : "",
+      min_students: String(plan.min_students),
       max_students: plan.max_students != null ? String(plan.max_students) : "",
       max_staff: plan.max_staff != null ? String(plan.max_staff) : "",
       max_units: String(plan.max_units),
       trial_days: String(plan.trial_days),
       sort_order: String(plan.sort_order),
       status: plan.status === "archived" ? "inactive" : plan.status,
+      annual_discount_percent: String(plan.annual_discount_percent),
+      contract_term_months: String(plan.contract_term_months),
+      early_termination_fee_percent: String(plan.early_termination_fee_percent),
+      early_termination_notes: plan.early_termination_notes ?? "",
     });
     setError(null);
     setShowModal(true);
@@ -143,21 +160,38 @@ export default function AdminPlansPage() {
       setError("Nome e slug são obrigatórios.");
       return;
     }
+    const minStudents = parseInt(form.min_students) || 0;
+    const maxStudents = form.max_students ? parseInt(form.max_students) : null;
+    if (maxStudents != null && maxStudents < minStudents) {
+      setError("Máx. de alunos não pode ser menor que a faixa mínima.");
+      return;
+    }
     setSaving(true);
     setError(null);
+
+    const priceMonthly = parseFloat(form.price_monthly) || 0;
+    const annualDiscountPercent = parseFloat(form.annual_discount_percent) || 0;
+    // price_yearly é apenas cache de compatibilidade — sempre recalculado
+    // dinamicamente a partir de price_monthly + annual_discount_percent.
+    const priceYearly = Math.round(priceMonthly * 12 * (1 - annualDiscountPercent / 100) * 100) / 100;
 
     const payload = {
       name: form.name.trim(),
       slug: form.slug.trim(),
       description: form.description.trim() || null,
-      price_monthly: parseFloat(form.price_monthly) || 0,
-      price_yearly: form.price_yearly ? parseFloat(form.price_yearly) : null,
-      max_students: form.max_students ? parseInt(form.max_students) : null,
+      price_monthly: priceMonthly,
+      price_yearly: priceYearly,
+      min_students: minStudents,
+      max_students: maxStudents,
       max_staff: form.max_staff ? parseInt(form.max_staff) : null,
       max_units: parseInt(form.max_units) || 1,
       trial_days: parseInt(form.trial_days) || 14,
       sort_order: parseInt(form.sort_order) || 0,
       status: form.status,
+      annual_discount_percent: annualDiscountPercent,
+      contract_term_months: parseInt(form.contract_term_months) || 12,
+      early_termination_fee_percent: parseFloat(form.early_termination_fee_percent) || 0,
+      early_termination_notes: form.early_termination_notes.trim() || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -319,22 +353,29 @@ export default function AdminPlansPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-extrabold text-gray-900">
-                      {plan.price_monthly === 0 ? "Grátis" : `R$ ${plan.price_monthly.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`}
+                      {plan.price_monthly === 0 ? "Grátis" : fmtBRL(plan.price_monthly)}
                     </span>
                     {plan.price_monthly > 0 && <span className="text-xs text-gray-400">/mês</span>}
                   </div>
-                  {plan.price_yearly != null && (
-                    <p className="text-xs text-green-600 font-medium">
-                      R$ {plan.price_yearly.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}/ano
-                    </p>
-                  )}
+                  {plan.price_monthly > 0 && plan.annual_discount_percent > 0 && (() => {
+                    const pricing = computePlanPricing(plan);
+                    return (
+                      <p className="text-xs text-green-600 font-medium">
+                        Anual: {fmtBRL(pricing.annualPriceWithDiscount)} ({plan.annual_discount_percent}% off) — equiv. {fmtBRL(pricing.annualMonthlyEquivalent)}/mês
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 <ul className="space-y-1 text-xs text-gray-600">
-                  <li>👥 Alunos: {plan.max_students != null ? plan.max_students : "Ilimitado"}</li>
+                  <li>🎯 Faixa: {plan.min_students} a {plan.max_students != null ? plan.max_students : "∞"} alunos</li>
+                  <li>👥 Máx. alunos: {plan.max_students != null ? plan.max_students : "Ilimitado"}</li>
                   <li>🧑‍💼 Staff: {plan.max_staff != null ? plan.max_staff : "Ilimitado"}</li>
                   <li>🏢 Unidades: {plan.max_units}</li>
                   <li>⏱ Trial: {plan.trial_days} dias</li>
+                  {plan.price_monthly > 0 && (
+                    <li>📄 Contrato anual: {plan.contract_term_months} meses, multa {plan.early_termination_fee_percent}%</li>
+                  )}
                 </ul>
 
                 <div className="flex gap-2 mt-auto pt-2 border-t border-gray-50">
@@ -409,6 +450,23 @@ export default function AdminPlansPage() {
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Faixa mín. de alunos</label>
+                  <input type="number" min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.min_students}
+                    onChange={e => setForm(f => ({ ...f, min_students: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Faixa máx. de alunos</label>
+                  <input type="number" min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.max_students}
+                    onChange={e => setForm(f => ({ ...f, max_students: e.target.value }))}
+                    placeholder="vazio = ilimitado"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Preço mensal (R$) *</label>
                   <input type="number" min="0" step="0.01"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -417,23 +475,33 @@ export default function AdminPlansPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Preço anual (R$)</label>
-                  <input type="number" min="0" step="0.01"
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Desconto anual (%)</label>
+                  <input type="number" min="0" max="100" step="0.1"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={form.price_yearly}
-                    onChange={e => setForm(f => ({ ...f, price_yearly: e.target.value }))}
-                    placeholder="Opcional"
+                    value={form.annual_discount_percent}
+                    onChange={e => setForm(f => ({ ...f, annual_discount_percent: e.target.value }))}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Máx. alunos</label>
-                  <input type="number" min="0"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={form.max_students}
-                    onChange={e => setForm(f => ({ ...f, max_students: e.target.value }))}
-                    placeholder="vazio = ilimitado"
-                  />
-                </div>
+
+                {/* Preview do cálculo anual — nunca persistido, sempre derivado */}
+                {parseFloat(form.price_monthly) > 0 && (
+                  <div className="col-span-2 bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-1">
+                    {(() => {
+                      const pricing = computePlanPricing({
+                        price_monthly: parseFloat(form.price_monthly) || 0,
+                        annual_discount_percent: parseFloat(form.annual_discount_percent) || 0,
+                      });
+                      return (
+                        <>
+                          <p>Anual bruto (sem desconto): <strong>{fmtBRL(pricing.annualPriceGross)}</strong></p>
+                          <p>Anual com desconto: <strong className="text-green-600">{fmtBRL(pricing.annualPriceWithDiscount)}</strong></p>
+                          <p>Equivalente mensal no anual: <strong>{fmtBRL(pricing.annualMonthlyEquivalent)}</strong></p>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Máx. staff</label>
                   <input type="number" min="0"
@@ -476,6 +544,32 @@ export default function AdminPlansPage() {
                     <option value="active">Ativo</option>
                     <option value="inactive">Inativo</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Prazo contratual anual (meses)</label>
+                  <input type="number" min="1"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.contract_term_months}
+                    onChange={e => setForm(f => ({ ...f, contract_term_months: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Multa rescisória (%)</label>
+                  <input type="number" min="0" max="100" step="0.1"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.early_termination_fee_percent}
+                    onChange={e => setForm(f => ({ ...f, early_termination_fee_percent: e.target.value }))}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Observações de multa/rescisão</label>
+                  <textarea
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                    rows={2}
+                    value={form.early_termination_notes}
+                    onChange={e => setForm(f => ({ ...f, early_termination_notes: e.target.value }))}
+                    placeholder="Ex: regra sujeita a validação jurídica antes de aplicação em produção"
+                  />
                 </div>
               </div>
             </div>

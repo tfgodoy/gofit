@@ -15,6 +15,10 @@ interface SaasPlan {
   name: string;
   slug: string;
   price_monthly: number;
+  annual_discount_percent: number;
+  billing_cycles_allowed: string[];
+  contract_term_months: number;
+  early_termination_fee_percent: number;
 }
 
 interface ContractorInfo {
@@ -36,9 +40,16 @@ interface SubscriptionRow {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string;
+  billing_cycle: string;
+  contract_start: string | null;
+  contract_end: string | null;
+  annual_discount_percent: number | null;
+  early_termination_fee_percent: number | null;
   saas_plans: SaasPlan | null;
   contractors: ContractorInfo | null;
 }
+
+const BILLING_CYCLE_LABEL: Record<string, string> = { monthly: "Mensal", annual: "Anual" };
 
 const SUB_STATUS_LABEL: Record<string, string> = {
   trialing: "Trial",
@@ -94,6 +105,7 @@ export default function AdminSubscriptionsPage() {
   const [selectedSub, setSelectedSub] = useState<SubscriptionRow | null>(null);
   const [modalValue, setModalValue] = useState("");
   const [modalDate, setModalDate] = useState("");
+  const [modalBillingCycle, setModalBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -106,13 +118,14 @@ export default function AdminSubscriptionsPage() {
           .select(`
             id, contractor_id, plan_id, status, trial_start, trial_end,
             current_period_start, current_period_end, cancelled_at, created_at, updated_at,
-            saas_plans(id, name, slug, price_monthly),
+            billing_cycle, contract_start, contract_end, annual_discount_percent, early_termination_fee_percent,
+            saas_plans(id, name, slug, price_monthly, annual_discount_percent, billing_cycles_allowed, contract_term_months, early_termination_fee_percent),
             contractors(id, nome_fantasia, email, status)
           `)
           .order("created_at", { ascending: false }),
         supabase
           .from("saas_plans")
-          .select("id, name, slug, price_monthly")
+          .select("id, name, slug, price_monthly, annual_discount_percent, billing_cycles_allowed, contract_term_months, early_termination_fee_percent")
           .eq("status", "active")
           .order("sort_order"),
       ]);
@@ -143,7 +156,10 @@ export default function AdminSubscriptionsPage() {
     setModalMode(mode);
     setActionError(null);
     if (mode === "status") setModalValue(sub.status);
-    if (mode === "plan") setModalValue(sub.plan_id);
+    if (mode === "plan") {
+      setModalValue(sub.plan_id);
+      setModalBillingCycle(sub.billing_cycle === "annual" ? "annual" : "monthly");
+    }
     if (mode === "trial") {
       const trialEnd = sub.trial_end ? sub.trial_end.split("T")[0] : "";
       setModalDate(trialEnd);
@@ -219,26 +235,62 @@ export default function AdminSubscriptionsPage() {
   async function handlePlanChange() {
     if (!hasAdminPermission("subscriptions.manage")) { setActionError("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!selectedSub || !modalValue) return;
-    if (modalValue === selectedSub.plan_id) { setModalMode(null); return; }
-    setActionLoading(true);
-    setActionError(null);
+    const planChanged = modalValue !== selectedSub.plan_id;
+    const cycleChanged = modalBillingCycle !== (selectedSub.billing_cycle === "annual" ? "annual" : "monthly");
+    if (!planChanged && !cycleChanged) { setModalMode(null); return; }
 
     const newPlan = plans.find(p => p.id === modalValue);
     const oldPlan = selectedSub.saas_plans;
 
+    if (modalBillingCycle === "annual" && !(newPlan?.billing_cycles_allowed ?? []).includes("annual")) {
+      setActionError("Este plano não aceita contratação anual.");
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = { plan_id: modalValue, billing_cycle: modalBillingCycle, updated_at: nowIso };
+
+    if (modalBillingCycle === "annual") {
+      const contractStart = new Date();
+      const contractEnd = new Date(contractStart);
+      contractEnd.setMonth(contractEnd.getMonth() + (newPlan?.contract_term_months ?? 12));
+      updates.contract_start = contractStart.toISOString().slice(0, 10);
+      updates.contract_end = contractEnd.toISOString().slice(0, 10);
+      updates.annual_discount_percent = newPlan?.annual_discount_percent ?? 0;
+      updates.early_termination_fee_percent = newPlan?.early_termination_fee_percent ?? 0;
+    } else {
+      updates.contract_start = null;
+      updates.contract_end = null;
+      updates.annual_discount_percent = null;
+      updates.early_termination_fee_percent = null;
+    }
+
     const { error } = await supabase
       .from("saas_subscriptions")
-      .update({ plan_id: modalValue, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq("id", selectedSub.id);
 
     if (error) { setActionError(error.message); setActionLoading(false); return; }
 
-    await insertSubEvent(
-      selectedSub.id, selectedSub.contractor_id,
-      "SUBSCRIPTION_PLAN_CHANGED",
-      { plan_id: selectedSub.plan_id, plan_name: oldPlan?.name, price_monthly: oldPlan?.price_monthly },
-      { plan_id: modalValue, plan_name: newPlan?.name, price_monthly: newPlan?.price_monthly },
-    );
+    if (planChanged) {
+      await insertSubEvent(
+        selectedSub.id, selectedSub.contractor_id,
+        "SUBSCRIPTION_PLAN_CHANGED",
+        { plan_id: selectedSub.plan_id, plan_name: oldPlan?.name, price_monthly: oldPlan?.price_monthly },
+        { plan_id: modalValue, plan_name: newPlan?.name, price_monthly: newPlan?.price_monthly },
+      );
+    }
+    if (cycleChanged) {
+      await insertSubEvent(
+        selectedSub.id, selectedSub.contractor_id,
+        "SUBSCRIPTION_BILLING_CYCLE_CHANGED",
+        { billing_cycle: selectedSub.billing_cycle },
+        { billing_cycle: modalBillingCycle, contract_term_months: newPlan?.contract_term_months, annual_discount_percent: newPlan?.annual_discount_percent },
+      );
+    }
     await logAdminAudit({
       action: "SUBSCRIPTION_PLAN_CHANGED",
       adminUserId: user?.id,
@@ -248,6 +300,7 @@ export default function AdminSubscriptionsPage() {
       metadata: {
         old_plan: oldPlan?.name,
         new_plan: newPlan?.name,
+        billing_cycle: modalBillingCycle,
         nome_fantasia: selectedSub.contractors?.nome_fantasia,
       },
     });
@@ -468,6 +521,7 @@ export default function AdminSubscriptionsPage() {
                   <tr className="bg-gray-50 text-xs text-gray-500 font-semibold uppercase tracking-wide">
                     <th className="text-left px-5 py-3">Empresa</th>
                     <th className="text-left px-4 py-3">Plano</th>
+                    <th className="text-left px-4 py-3">Ciclo</th>
                     <th className="text-left px-4 py-3">Status</th>
                     <th className="text-left px-4 py-3">Trial até</th>
                     <th className="text-left px-4 py-3">Período</th>
@@ -495,6 +549,12 @@ export default function AdminSubscriptionsPage() {
                           <p className="text-xs text-gray-400 mt-0.5">
                             R$ {sub.saas_plans.price_monthly.toLocaleString("pt-BR")}/mês
                           </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="text-xs text-gray-600">{BILLING_CYCLE_LABEL[sub.billing_cycle] ?? "Mensal"}</span>
+                        {sub.billing_cycle === "annual" && sub.contract_end && (
+                          <p className="text-[10px] text-gray-400">até {new Date(sub.contract_end).toLocaleDateString("pt-BR")}</p>
                         )}
                       </td>
                       <td className="px-4 py-3.5">
@@ -597,21 +657,63 @@ export default function AdminSubscriptionsPage() {
                 </div>
               )}
 
-              {modalMode === "plan" && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Novo plano</label>
-                  <select
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={modalValue}
-                    onChange={e => setModalValue(e.target.value)}>
-                    {plans.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — R$ {p.price_monthly.toLocaleString("pt-BR")}/mês
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {modalMode === "plan" && (() => {
+                const chosenPlan = plans.find(p => p.id === modalValue);
+                const allowedCycles = chosenPlan?.billing_cycles_allowed ?? ["monthly"];
+                return (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Novo plano</label>
+                      <select
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        value={modalValue}
+                        onChange={e => {
+                          setModalValue(e.target.value);
+                          const p = plans.find(pp => pp.id === e.target.value);
+                          if (p && !(p.billing_cycles_allowed ?? []).includes(modalBillingCycle)) setModalBillingCycle("monthly");
+                        }}>
+                        {plans.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — R$ {p.price_monthly.toLocaleString("pt-BR")}/mês
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Ciclo de cobrança</label>
+                      <div className="flex gap-2">
+                        {(["monthly", "annual"] as const).map(cycle => (
+                          <button
+                            key={cycle}
+                            type="button"
+                            disabled={!allowedCycles.includes(cycle)}
+                            onClick={() => setModalBillingCycle(cycle)}
+                            className={`flex-1 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                              modalBillingCycle === cycle
+                                ? "bg-primary text-white border-primary"
+                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                            }`}
+                          >
+                            {BILLING_CYCLE_LABEL[cycle]}
+                          </button>
+                        ))}
+                      </div>
+                      {modalBillingCycle === "annual" && chosenPlan && (
+                        <div className="mt-2 bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-1">
+                          <p>Desconto anual: <strong>{chosenPlan.annual_discount_percent}%</strong></p>
+                          <p>Anual com desconto: <strong className="text-green-600">
+                            R$ {(chosenPlan.price_monthly * 12 * (1 - chosenPlan.annual_discount_percent / 100)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </strong></p>
+                          <p>Equivalente mensal: <strong>
+                            R$ {(chosenPlan.price_monthly * (1 - chosenPlan.annual_discount_percent / 100)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </strong></p>
+                          <p>Prazo contratual: {chosenPlan.contract_term_months} meses — multa de rescisão: {chosenPlan.early_termination_fee_percent}%</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
               {modalMode === "trial" && (
                 <div>

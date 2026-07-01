@@ -128,7 +128,7 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false }),
         supabase
           .from("saas_subscriptions")
-          .select("id, contractor_id, status, plan_id, created_at, trial_end, saas_plans(name, slug, price_monthly)"),
+          .select("id, contractor_id, status, plan_id, created_at, trial_end, billing_cycle, annual_discount_percent, saas_plans(name, slug, price_monthly)"),
         supabase
           .from("saas_subscription_events")
           .select("event_type, created_at")
@@ -143,12 +143,19 @@ export default function AdminDashboard() {
       const active       = contractorsData.filter(c => c.status === "active");
       const newMonth     = contractorsData.filter(c => new Date(c.created_at) >= startOfMonth);
 
-      // MRR real: soma dos preços mensais das assinaturas ativas
+      // MRR real: soma dos preços mensais das assinaturas ativas.
+      // Assinaturas anuais contam pelo equivalente mensal (anual com desconto / 12),
+      // que matematicamente é price_monthly * (1 - annual_discount_percent/100).
       const activeSubs = (subsData ?? []).filter(s => s.status === "active");
       const trialSubs  = (subsData ?? []).filter(s => s.status === "trialing");
       const mrr = activeSubs.reduce((sum, s) => {
         const plan = s.saas_plans as { price_monthly: number } | null;
-        return sum + (plan?.price_monthly ?? 0);
+        const priceMonthly = plan?.price_monthly ?? 0;
+        if (s.billing_cycle === "annual") {
+          const discount = s.annual_discount_percent ?? 0;
+          return sum + priceMonthly * (1 - discount / 100);
+        }
+        return sum + priceMonthly;
       }, 0);
 
       // Distribuição por plano (via assinaturas)

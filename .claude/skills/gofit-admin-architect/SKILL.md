@@ -314,6 +314,39 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
+### ✅ FASE 3.5 — Reestruturação comercial dos planos SaaS (CONCLUÍDA DEFINITIVAMENTE)
+
+**Status:** Concluída e validada em browser. tsc: OK. build: OK. lint: OK. Migration `054`.
+
+**Contexto:** os planos da Fase 3 eram um placeholder (trial/starter/profissional/empresarial com preços arbitrários). Esta fase reestrutura para a tabela comercial real da GoFit, baseada em faixas de quantidade de alunos (modelo NextFit).
+
+**O que foi implementado:**
+- Migration `20260701_054_saas_plans_commercial_tiers.sql`:
+  - Novas colunas em `saas_plans`: `min_students`, `annual_discount_percent`, `billing_cycles_allowed` (text[], só aceita `monthly`/`annual`), `contract_term_months`, `early_termination_fee_type`, `early_termination_fee_percent`, `early_termination_notes`
+  - Novas colunas em `saas_subscriptions`: `billing_cycle` (`monthly`/`annual`, CHECK constraint), `contract_start`, `contract_end`, `annual_discount_percent` (snapshot), `early_termination_fee_percent` (snapshot)
+  - Seed dos 7 planos comerciais: Free (0-5 alunos, grátis), Starter (0-50, R$424,90), Essencial (51-200, R$534,90), Profissional (201-300, R$614,90), Performance (301-500, R$784,90), Premium (501-800, R$1.154,90), Enterprise (801+, R$1.304,90) — todos com 10% de desconto anual e 20% de multa rescisória (placeholders configuráveis, sujeitos a validação jurídica)
+  - `starter` e `profissional` (slugs pré-existentes, sem assinaturas vinculadas) foram atualizados in-place; `empresarial` foi arquivado (`status='archived'`, não deletado); `trial` (usado como plano de período de trial, distinto do novo tier comercial `free`) foi preservado intacto por estar referenciado por assinatura ativa
+- `src/lib/saasPlanPricing.ts` — helper único de cálculo: `computePlanPricing()` deriva `annualPriceGross`, `annualPriceWithDiscount`, `annualMonthlyEquivalent` a partir de `price_monthly` + `annual_discount_percent`. **Nunca persistidos como colunas** — sempre calculados em runtime para não desalinhar se o desconto mudar
+- `AdminPlansPage.tsx`: formulário com faixa min/max de alunos, desconto anual, preview ao vivo do cálculo anual, prazo contratual e multa; `price_yearly` legado é recalculado automaticamente no save (cache de compatibilidade, nunca fonte de verdade)
+- `AdminSubscriptionsPage.tsx`: modal "Trocar Plano" ganhou seletor de ciclo (mensal/anual, desabilitado se o plano não aceitar); ao mudar para anual, grava snapshot de `contract_start/contract_end/annual_discount_percent/early_termination_fee_percent` na própria assinatura (não recalcula se o plano mudar depois); nova coluna "Ciclo" na tabela; novo evento `SUBSCRIPTION_BILLING_CYCLE_CHANGED`
+- `AdminDashboard.tsx`: MRR agora trata assinaturas com `billing_cycle='annual'` usando o equivalente mensal (`price_monthly * (1 - desconto/100)`) em vez do preço cheio
+
+**Regras canônicas (obrigatórias em todas as fases futuras):**
+- `annual_discount_percent`, `contract_term_months`, `early_termination_fee_percent` em `saas_plans` são o *default* do plano; `saas_subscriptions` guarda um *snapshot* desses valores no momento da contratação/troca — nunca reconsultar o plano para recalcular contratos já assinados
+- Nunca persistir `annual_price` ou `annual_monthly_equivalent` como coluna — sempre via `computePlanPricing()` de `src/lib/saasPlanPricing.ts`
+- `billing_cycles_allowed` só pode conter `'monthly'` e/ou `'annual'` — nunca criar ciclo trimestral/semestral
+- MRR de assinatura anual = `price_monthly * (1 - annual_discount_percent/100)`, nunca o preço mensal cheio
+- Invoices (`saas_invoices.amount`) continuam sendo a fonte real de receita recebida/prevista — não são afetadas pela estrutura de planos, pois sempre carregam o valor efetivamente cobrado
+- Nunca deletar um plano com assinaturas vinculadas — arquivar (`status='archived'`) em vez de deletar
+
+**O que NÃO deve ser alterado nas próximas fases:**
+- Não recriar a migration 054 nem o seed dos 7 planos comerciais
+- Não recriar `src/lib/saasPlanPricing.ts`
+- Não reintroduzir persistência de preço anual calculado como coluna
+- Não remover o seletor de ciclo de cobrança do modal de troca de plano
+
+---
+
 ### ✅ FASE 4 — Módulos e Feature Flags (CONCLUÍDA DEFINITIVAMENTE)
 
 **Status:** Concluída. tsc: OK. build: OK. lint: OK. Commits: `432b2aa11` (implementação) + ajuste de segurança (migration 048).
