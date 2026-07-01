@@ -277,7 +277,15 @@ Antes de escrever qualquer linha de código, sempre:
 - `adminAudit.ts`: 12 novos tipos de ação (PLAN_*, SUBSCRIPTION_*, TRIAL_*)
 - Sidebar de todos os pages admin atualizado com Planos e Assinaturas
 - Rotas `/admin/plans` e `/admin/subscriptions` com AdminGuard no App.tsx
-- Commit: `c1cfa1939`
+- Commit principal: `c1cfa1939`
+- Commit de ajustes pós-validação: `ea50f4455`
+
+**Padrões técnicos consolidados após ajustes obrigatórios:**
+- `saas_subscriptions.trial_end` é a fonte da verdade para trial
+- `contractors.trial_ends_at` é mantido em sincronia como campo legado (sempre atualizar AMBOS ao estender trial)
+- Qualquer extensão de trial deve inserir evento em `saas_subscription_events` + `logAdminAudit(TRIAL_EXTENDED)`
+- Dashboard: coluna Plano usa `subPlanMap` (saas_subscriptions → saas_plans.name); fallback para `contractors.plan` apenas se sem assinatura
+- Dashboard: alertas de trial usam `saas_subscriptions.status='trialing'` + `trial_end`
 
 **O que NÃO deve ser alterado nas próximas fases:**
 - Não recriar AdminPlansPage ou AdminSubscriptionsPage
