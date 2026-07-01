@@ -314,28 +314,47 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### 🔜 FASE 4 — Módulos e Feature Flags (PRÓXIMA FASE OFICIAL)
+### ✅ FASE 4 — Módulos e Feature Flags (CONCLUÍDA DEFINITIVAMENTE)
 
-**Objetivo:** Controlar quais recursos cada empresa pode usar.
+**Status:** Concluída. tsc: OK. build: OK. lint: OK. Commit: `432b2aa11`.
 
-**Tabelas existentes a reaproveitar:** `modules`, `company_modules`
-**Criar se não existir:** `feature_flags`, `company_feature_flags`
+**O que foi implementado:**
+- Migrations: `20260701_046_modules_admin_policies.sql` (write RLS para platform_owners em modules e company_modules), `20260701_047_modules_seed.sql` (10 módulos padrão + features por plano seed)
+- `src/lib/moduleAccess.ts`: helper centralizado com 6 regras de precedência para checar acesso a módulo
+- `AdminModulesPage.tsx` (`/admin/modules`): Tab Catálogo Global (criar/editar/toggle módulos), Tab Features por Plano (CRUD de saas_plan_features com limites)
+- `AdminCompanyDetailsPage.tsx`: seção Módulos expandida com toggle de override por empresa e botão para adicionar override
+- `adminAudit.ts`: 11 novos tipos de ação (MODULE_*, PLAN_FEATURE_*, COMPANY_MODULE_*)
+- Sidebar de todos os pages admin atualizado com "Módulos"
+- Rota `/admin/modules` com AdminGuard no App.tsx
 
-**Módulos sugeridos:** Agenda, Alunos, Contratos, Financeiro, Contas a Pagar/Receber, GoFit Pay, Relatórios, Avaliação Física, WhatsApp, IA, Multiunidade
+**Tabelas utilizadas (sem criar duplicatas):**
+- `modules` (existia): catálogo global de módulos
+- `company_modules` (existia): overrides por empresa
+- `saas_plan_features` (criada na Fase 3): features e limites por plano — feature_key usa o módulo slug como chave implícita
 
-**Telas:**
-- `/admin/modules` — listar módulos globais, ativar/desativar por empresa ou por plano
+**Regras de precedência de acesso (obrigatórias em todas as fases futuras):**
+1. `modules.status != 'active'` → sempre bloqueado (módulo global inativo)
+2. `company_modules.status = 'active'` → liberado por override manual
+3. `company_modules.status = 'cancelled'` → bloqueado por override manual
+4. `saas_plan_features.enabled = true` no plano ativo → liberado via plano
+5. Sem assinatura `active` ou `trialing` → bloqueado
+6. Feature ausente/desabilitada no plano → bloqueado
 
-**Regra central:** Toda checagem de módulo deve ser centralizada num hook/serviço — nunca espalhada em componentes.
+**Para integração futura com `/app/*`:**
+- `saas_subscriptions` precisará de policy SELECT para `contractor_auth`/`staff` antes de usar `getModuleAccess()` no /app/*
+- `company_modules` já tem policy SELECT para contractor_auth/staff (existia desde Fase 2 do app)
+- O helper `src/lib/moduleAccess.ts` está pronto — apenas as policies de banco precisam ser adicionadas
 
-**Critérios de aceite:**
-- Empresa sem módulo financeiro não vê financeiro
-- Alteração de módulo gera log
-- Módulos podem ser controlados por plano ou manualmente por empresa
+**O que NÃO deve ser alterado nas próximas fases:**
+- Não recriar AdminModulesPage
+- Não recriar migrations 046/047
+- Não recriar moduleAccess.ts
+- Não remover a seção de módulos expandida do AdminCompanyDetailsPage
+- Não alterar as regras de precedência sem revisar o helper
 
 ---
 
-### FASE 5 — Financeiro SaaS da GoFit
+### 🔜 FASE 5 — Financeiro SaaS da GoFit (PRÓXIMA FASE OFICIAL)
 
 **Objetivo:** Financeiro da GoFit separado do financeiro das academias clientes.
 
