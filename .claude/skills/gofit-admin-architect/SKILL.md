@@ -46,6 +46,139 @@ Estas duas áreas são **completamente separadas** em rota, autenticação, perm
 
 ---
 
+## Protocolo obrigatório de retomada de sessão
+
+Toda sessão nova, troca de contexto ou retomada após limite de uso **DEVE** começar assim, antes de escrever qualquer código:
+
+1. Ler esta skill (`gofit-admin-architect`) por completo.
+2. Identificar em qual fase o projeto está agora (ver "Resumo oficial do estado atual do projeto" abaixo).
+3. Verificar o estado **real** do banco — não confiar apenas no que a skill ou as migrations locais dizem.
+4. Comparar banco real vs. migrations locais (ver "Checklist obrigatório de sanidade do banco").
+5. Confirmar que as tabelas críticas de cada fase já concluída realmente existem no banco.
+6. **Nunca assumir que uma fase está válida só porque a migration existe no repositório** — migrations podem ter sido revertidas, ou o banco pode ter sofrido restore/rollback fora desta conversa (isso já aconteceu uma vez: as tabelas da Fase 5 sumiram do banco apesar dos arquivos `.sql` continuarem no repo).
+7. **Nunca codar em cima de uma tabela esperada sem confirmar que ela existe de fato no banco** (via MCP do Supabase, `information_schema.tables` ou equivalente).
+8. Se houver qualquer divergência entre o que a skill/migrations dizem e o que o banco realmente tem, **parar e perguntar ao usuário antes de prosseguir** — não seguir em frente silenciosamente.
+
+Este protocolo existe porque já ocorreu perda de estado do banco (Fase 5) que não estava refletido em nenhum lugar até o diagnóstico manual revelar o problema.
+
+---
+
+## Checklist obrigatório de sanidade do banco
+
+Antes de iniciar qualquer fase nova ou correção, rodar mentalmente (ou via query real) este checklist por fase concluída. Se qualquer item faltar, é uma divergência — não prosseguir sem resolver ou avisar (ver seção "Regra de divergência banco vs migration").
+
+**Fase 1 — Base segura do Admin GoFit:**
+- [ ] `platform_owners` existe
+- [ ] `admin_audit_logs` existe
+
+**Fase 2 — Gestão de Empresas/Academias:**
+- [ ] `contractors` existe
+- [ ] `staff` existe
+- [ ] `modules` existe
+- [ ] `company_modules` existe
+
+**Fase 3 — Planos, Assinaturas e Trials:**
+- [ ] `saas_plans` existe
+- [ ] `saas_plan_features` existe
+- [ ] `saas_subscriptions` existe
+- [ ] `saas_subscription_events` existe
+
+**Fase 3.5 — Reestruturação comercial dos planos:**
+- [ ] `saas_plans` tem `min_students`, `annual_discount_percent`, `billing_cycles_allowed`, `contract_term_months`, `early_termination_fee_type`, `early_termination_fee_percent`, `early_termination_notes`
+- [ ] `saas_subscriptions` tem `billing_cycle`, `contract_start`, `contract_end`, `annual_discount_percent`, `early_termination_fee_percent`
+- [ ] Os 7 planos comerciais existem: `free`, `starter`, `essencial`, `profissional`, `performance`, `premium`, `enterprise` (com `empresarial` arquivado, não deletado)
+
+**Fase 4 — Módulos e Feature Flags:**
+- [ ] `modules` existe
+- [ ] `company_modules` existe
+- [ ] `saas_plan_features` existe
+- [ ] Policies de `modules` não permitem DELETE físico (apenas mudança de `status`)
+
+**Fase 5 — Financeiro SaaS da GoFit:**
+- [ ] `saas_asaas_customers` existe
+- [ ] `saas_invoices` existe
+- [ ] `saas_payments` existe
+- [ ] `saas_billing_events` existe
+- [ ] Constraint UNIQUE em `saas_invoices.asaas_payment_id`
+- [ ] Constraint UNIQUE em `saas_payments.asaas_payment_id`
+- [ ] Edge Function `create-saas-payment` existe em `supabase/functions/`
+- [ ] Edge Function `asaas-saas-webhook` existe em `supabase/functions/`
+
+**Fase 6 — RBAC Administrativo (se já implementada):**
+- [ ] `admin_roles`, `admin_permissions`, `admin_users`, `admin_user_roles`, `admin_role_permissions` existem
+- [ ] Função `is_active_admin_user(uuid)` existe (evita recursão de RLS)
+- [ ] Owner atual está vinculado como `super_admin` em `admin_user_roles`
+
+---
+
+## Regra de divergência banco vs migration
+
+Se a migration existe localmente (`supabase/migrations/*.sql`) mas a tabela correspondente **não existe** no banco real:
+
+1. **O banco é a fonte de verdade operacional** — não o arquivo de migration local.
+2. **Parar a implementação** imediatamente.
+3. **Informar a divergência** ao usuário de forma clara e específica (quais tabelas, qual fase).
+4. **Sugerir** reaplicar a migration (se idempotente) ou confirmar se houve rollback/restauração intencional antes de prosseguir.
+5. **Nunca criar código novo que dependa de uma tabela ausente** — isso produz erros silenciosos em produção (já aconteceu: 500 por recursão de RLS após reaplicação apressada).
+6. **Nunca tentar resolver a divergência silenciosamente** sem avisar o usuário — mesmo que a correção pareça óbvia e segura.
+7. **Nunca sobrescrever produção sem diagnóstico completo primeiro** — sempre `SELECT` antes de `INSERT`/`UPDATE`/`DROP`.
+
+---
+
+## Regras permanentes de proteção
+
+- Sempre usar esta skill antes de qualquer fase ou correção no Admin GoFit.
+- Nunca avançar para uma fase nova sem validar que a fase anterior está de fato íntegra no banco.
+- Nunca assumir que `/app/*` pode ser alterado — é território das academias clientes, fora do escopo desta skill.
+- Nunca mexer em assinaturas de alunos quando estiver trabalhando no Admin SaaS.
+- Nunca mexer no financeiro interno da academia quando estiver trabalhando no Financeiro SaaS da GoFit.
+- Nunca usar `contractors.plan` como fonte de verdade de plano SaaS — usar `saas_subscriptions`.
+- Nunca usar `contractors.trial_ends_at` como fonte principal de trial — usar `saas_subscriptions.trial_end`.
+- Nunca usar service role no frontend.
+- Nunca usar chave Asaas no frontend.
+- Nunca criar policy aberta para `anon` em tabela sensível.
+- Nunca permitir DELETE físico em `modules` — apenas mudança de `status`.
+- Sempre registrar `admin_audit_logs` em toda ação administrativa sensível.
+- Sempre registrar `saas_subscription_events` em toda alteração de assinatura.
+- Sempre registrar `saas_billing_events` em todo evento financeiro SaaS.
+- Sempre validar idempotência de webhook e constraints UNIQUE antes de mexer em qualquer integração Asaas.
+
+---
+
+## Resumo oficial do estado atual do projeto
+
+**Fases concluídas:**
+- ✅ Fase 1 — Base segura do Admin GoFit: concluída.
+- ✅ Fase 2 — Gestão de Empresas/Academias: concluída.
+- ✅ Fase 3 — Planos, Assinaturas e Trials: concluída.
+- ✅ Fase 4 — Módulos e Feature Flags: concluída.
+- ✅ Fase 5 — Financeiro SaaS da GoFit com Asaas: concluída e **restaurada** após reaplicação das migrations 049/050 (as tabelas haviam sumido do banco por causa externa à sessão).
+
+**Tarefa em andamento:**
+- 🔄 Fase 3.5 — Correção comercial dos planos SaaS, inspirada na tabela de preços da NextFit: planos por faixa de alunos, contratação mensal ou anual apenas, desconto anual parametrizável, multa/rescisão contratual parametrizável.
+- **Não avançar para Fase 6 até esta correção estar concluída e validada.**
+
+**Próxima fase planejada:**
+- ⏭️ Fase 6 — RBAC Administrativo, somente depois que a correção comercial dos planos for concluída e validada.
+
+**Nota:** este resumo pode ficar desatualizado entre sessões — sempre validar contra o banco real usando o checklist de sanidade acima antes de confiar cegamente nele.
+
+---
+
+## Protocolo de encerramento quando a sessão estiver acabando
+
+Quando a sessão estiver próxima do limite de uso ou de contexto:
+
+- **Não** iniciar uma fase nova.
+- **Não** fazer refactor grande ou mudanças estruturais amplas.
+- **Não** criar migrations novas que não possam ser validadas na mesma sessão (aplicadas + conferidas).
+- **Priorizar** atualizar esta skill com o que foi descoberto/decidido.
+- **Priorizar** deixar um relatório claro do estado atual (o que foi feito, o que falta, o que foi validado).
+- **Priorizar** listar pendências exatas e acionáveis para a próxima sessão — não pendências vagas.
+- **Parar em um ponto seguro**: código compilando (`tsc`/`build` OK), sem migration pela metade, sem tabela criada mas não populada de forma inconsistente.
+
+---
+
 ## Autenticação do Admin GoFit
 
 O Owner/Admin autentica **exclusivamente** via:
