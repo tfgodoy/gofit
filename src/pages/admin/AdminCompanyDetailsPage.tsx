@@ -118,7 +118,7 @@ const navItems = [
   { icon: Package,    label: "Planos",       to: "/admin/plans",          active: true },
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",        active: true },
-  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: false },
+  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: true  },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];
@@ -134,6 +134,7 @@ export default function AdminCompanyDetailsPage() {
   const [allGlobalModules, setAllGlobalModules] = useState<GlobalModuleRow[]>([]);
   const [subscription, setSubscription] = useState<SaasSubscriptionRow | null>(null);
   const [subEvents, setSubEvents]       = useState<SubEventRow[]>([]);
+  const [recentInvoices, setRecentInvoices] = useState<{ id: string; amount: number; due_date: string; status: string; paid_at: string | null }[]>([]);
   const [loading, setLoading]           = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError]               = useState<string | null>(null);
@@ -184,6 +185,15 @@ export default function AdminCompanyDetailsPage() {
           .limit(6);
         setSubEvents((evtsData ?? []) as SubEventRow[]);
       }
+
+      const { data: invData } = await supabase
+        .from("saas_invoices")
+        .select("id, amount, due_date, status, paid_at")
+        .eq("contractor_id", id)
+        .order("due_date", { ascending: false })
+        .limit(5);
+      setRecentInvoices((invData ?? []) as { id: string; amount: number; due_date: string; status: string; paid_at: string | null }[]);
+
       setLoading(false);
 
       // Auditoria de visualização — useRef evita duplo disparo se user mudar referência
@@ -714,6 +724,36 @@ export default function AdminCompanyDetailsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Faturas SaaS */}
+              {recentInvoices.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-bold text-gray-900">Faturas SaaS</h2>
+                    <button onClick={() => navigate("/admin/billing/invoices")} className="text-xs font-semibold text-primary hover:underline">
+                      Ver todas →
+                    </button>
+                  </div>
+                  <ul className="space-y-2">
+                    {recentInvoices.map(inv => (
+                      <li key={inv.id} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">{new Date(inv.due_date + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                        <span className="font-medium text-gray-800">
+                          {Number(inv.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          inv.status === "paid"      ? "bg-green-50 text-green-700"   :
+                          inv.status === "pending"   ? "bg-yellow-50 text-yellow-700" :
+                          inv.status === "overdue"   ? "bg-red-50 text-red-600"      :
+                          "bg-gray-100 text-gray-500"
+                        }`}>
+                          {inv.status === "paid" ? "Pago" : inv.status === "pending" ? "Pendente" : inv.status === "overdue" ? "Vencido" : inv.status === "cancelled" ? "Cancelado" : inv.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Coluna direita — ações */}
               <div className="space-y-4">

@@ -43,7 +43,7 @@ const navItems = [
   { icon: Package,    label: "Planos",       to: "/admin/plans",          active: true },
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",        active: true },
-  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: false },
+  { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: true  },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];

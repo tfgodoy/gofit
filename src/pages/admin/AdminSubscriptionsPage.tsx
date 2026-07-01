@@ -68,7 +68,7 @@ const navItems = [
   { icon: Package,   label: "Planos",       to: "/admin/plans",           active: true },
   { icon: Layers,    label: "Assinaturas",  to: "/admin/subscriptions",   active: true },
   { icon: Boxes,     label: "Módulos",      to: "/admin/modules",         active: true },
-  { icon: CreditCard,label: "Financeiro",   to: "/admin/billing",         active: false },
+  { icon: CreditCard,label: "Financeiro",   to: "/admin/billing",         active: true  },
   { icon: FileText,  label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,  label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -402,9 +402,17 @@ export default function AdminSubscriptionsPage() {
 
       {/* MAIN */}
       <main className="flex-1 ml-56 p-8 min-h-screen">
-        <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900">Assinaturas</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Gerencie o status comercial de cada empresa</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900">Assinaturas</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Gerencie o status comercial de cada empresa</p>
+          </div>
+          <button
+            onClick={() => navigate("/admin/billing")}
+            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+          >
+            <CreditCard className="w-3.5 h-3.5" />Ver Financeiro SaaS →
+          </button>
         </div>
 
         {/* Status chips */}
