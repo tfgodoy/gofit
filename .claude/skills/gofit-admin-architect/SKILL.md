@@ -280,42 +280,41 @@ Antes de escrever qualquer linha de código, sempre:
 - Commit principal: `c1cfa1939`
 - Commit de ajustes pós-validação: `ea50f4455`
 
-**Padrões técnicos consolidados após ajustes obrigatórios:**
-- `saas_subscriptions.trial_end` é a fonte da verdade para trial
-- `contractors.trial_ends_at` é mantido em sincronia como campo legado (sempre atualizar AMBOS ao estender trial)
-- Qualquer extensão de trial deve inserir evento em `saas_subscription_events` + `logAdminAudit(TRIAL_EXTENDED)`
-- Dashboard: coluna Plano usa `subPlanMap` (saas_subscriptions → saas_plans.name); fallback para `contractors.plan` apenas se sem assinatura
-- Dashboard: alertas de trial usam `saas_subscriptions.status='trialing'` + `trial_end`
+**Arquitetura SaaS — regras canônicas (obrigatórias em todas as fases futuras):**
+
+**Fonte da verdade para assinaturas:**
+- `saas_subscriptions` é a fonte da verdade para status de assinatura SaaS de cada empresa
+- `saas_subscriptions.trial_end` é a fonte da verdade para data de término do trial
+- `contractors.trial_ends_at` é campo legado de compatibilidade — deve ser sempre mantido em sincronia, mas nunca usado como fonte principal
+- `contractors.plan` é campo legado — nunca usar como fonte principal de plano em novas telas
+
+**Regra de extensão de trial (obrigatória):** toda extensão de trial DEVE:
+1. Atualizar `saas_subscriptions.trial_end` (fonte da verdade)
+2. Inserir evento em `saas_subscription_events` (tipo `TRIAL_EXTENDED`)
+3. Registrar em `admin_audit_logs` via `logAdminAudit(TRIAL_EXTENDED)`
+4. Sincronizar `contractors.trial_ends_at` (compatibilidade legada)
+
+**Regras do AdminDashboard:**
+- Coluna Plano na tabela de empresas: usa `subPlanMap` derivado de `saas_subscriptions → saas_plans.name`; `contractors.plan` apenas como fallback explicitamente comentado para empresas sem assinatura
+- Alertas de trial expirando: usar `saas_subscriptions.status = 'trialing'` + `saas_subscriptions.trial_end`; nunca usar `contractors.status` ou `contractors.trial_ends_at` para esta finalidade
+- MRR: somar apenas `saas_subscriptions` com `status = 'active'`; trials, cancelled, expired, blocked e paused são excluídos
+
+**O que esta fase NÃO implementou (escopo preservado para fases futuras):**
+- Asaas, pagamentos, invoices, billing real e dunning → Fase 5
+- Assinaturas de alunos das academias → nunca alterar aqui
+- Financeiro interno das academias → nunca alterar aqui
+- `/app/*` → não foi alterado e não deve ser
 
 **O que NÃO deve ser alterado nas próximas fases:**
 - Não recriar AdminPlansPage ou AdminSubscriptionsPage
 - Não recriar as migrations 043/044/045
-- Não recriar os novos tipos de auditoria
+- Não recriar os tipos de auditoria da Fase 3
 - Não remover as seções de Assinatura SaaS do AdminCompanyDetailsPage
-
-**Objetivo:** Controle SaaS comercial da GoFit.
-
-**Tabelas a criar:**
-```sql
-saas_plans (id, name, slug, price_monthly, price_yearly, max_students, max_staff, features JSONB, active, created_at)
-saas_subscriptions (id, contractor_id, plan_id, status, trial_ends_at, current_period_start, current_period_end, cancelled_at, created_at)
-saas_subscription_events (id, subscription_id, contractor_id, event_type, metadata JSONB, created_by UUID, created_at)
-```
-
-**Status de assinatura:** `trialing` | `active` | `past_due` | `paused` | `blocked` | `cancelled` | `expired`
-
-**Telas:**
-- `/admin/plans` — criar, editar, ativar/inativar planos
-- `/admin/subscriptions` — vincular empresa a plano, trocar plano, estender trial, cancelar
-
-**Critérios de aceite:**
-- Uma empresa tem exatamente uma assinatura ativa por vez
-- Troca de plano gera evento em `saas_subscription_events`
-- Dados reais de MRR substituem os mocks do AdminDashboard (remover `// TODO Fase 3`)
+- Não reverter a lógica de subPlanMap e expiringTrials do AdminDashboard
 
 ---
 
-### FASE 4 — Módulos e Feature Flags
+### 🔜 FASE 4 — Módulos e Feature Flags (PRÓXIMA FASE OFICIAL)
 
 **Objetivo:** Controlar quais recursos cada empresa pode usar.
 
@@ -442,6 +441,51 @@ support_tickets (
 **Critérios de aceite:**
 - Toda impersonação rastreada com motivo, admin, empresa, início e fim
 - Banner sempre visível durante impersonação
+
+---
+
+## Regras permanentes para fases futuras
+
+Estas regras foram estabelecidas ao longo das Fases 1–3 e são obrigatórias em toda implementação futura:
+
+### Segurança e autenticação
+- Nunca usar `service_role` em variável `VITE_*`
+- Nunca usar `service_role` dentro de `src/`
+- Nunca adicionar aba/modo Owner em `/login`
+- Nunca usar `login()` para autenticar admin GoFit — sempre `adminLogin()`
+- Nunca usar `btoa()` para hash de senha
+- Toda rota `/admin/*` protegida por `AdminGuard`
+
+### Banco de dados e migrations
+- Toda migration deve ser idempotente (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`)
+- Nunca criar tabela nova sem verificar se já existe equivalente
+- Nunca criar campo novo em `contractors` sem verificar se já existe equivalente em tabelas SaaS
+- RLS obrigatória em toda tabela nova — nunca policy `USING (true)` para `anon`
+- Nunca bloquear academias reais sem regra clara, testada e reversível
+
+### Arquitetura SaaS
+- `saas_subscriptions` é a fonte da verdade para assinatura — nunca `contractors.plan`
+- `saas_subscriptions.trial_end` é a fonte da verdade para trial — nunca `contractors.trial_ends_at` sozinho
+- `contractors.plan` e `contractors.trial_ends_at` são campos legados de compatibilidade — sempre manter em sincronia, nunca usar como fonte principal
+- MRR conta apenas `status = 'active'`
+- Toda alteração de assinatura deve registrar em `saas_subscription_events`
+
+### Auditoria
+- Toda ação sensível registrada via `logAdminAudit()` de `src/lib/adminAudit.ts`
+- Toda alteração de assinatura registra também em `saas_subscription_events`
+- Toda extensão de trial atualiza AMBOS: `saas_subscriptions.trial_end` + `contractors.trial_ends_at`
+
+### Isolamento de escopo
+- Nunca alterar `/app/*` nas fases admin
+- Nunca alterar assinaturas de alunos das academias
+- Nunca alterar financeiro interno das academias clientes
+- Financeiro SaaS da GoFit (Fase 5+) é completamente separado do financeiro das academias
+
+### Padrões React
+- Estado de loading inicializado como `true`; nunca chamar `setLoading(true)` sincronamente no corpo do `useEffect`
+- Async data loading: definir função async dentro do `useEffect`, chamar sem `await`, setar estado apenas dentro da função (após pelo menos um `await`)
+- `refreshKey` pattern para recarregar dados após mutação (não `useCallback` + `useEffect([fn])`)
+- Tempo de referência: `const [now] = useState(() => Date.now())` — nunca `Date.now()` direto no render
 
 ---
 
