@@ -3,9 +3,10 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Search, Layers, AlertCircle, Boxes,
-  RefreshCcw, XCircle, CheckCircle2, Calendar,
+  RefreshCcw, XCircle, CheckCircle2, Calendar, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 
@@ -69,6 +70,8 @@ const navItems = [
   { icon: Layers,    label: "Assinaturas",  to: "/admin/subscriptions",   active: true },
   { icon: Boxes,     label: "Módulos",      to: "/admin/modules",         active: true },
   { icon: CreditCard,label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,  label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,  label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -77,6 +80,7 @@ type ModalMode = "status" | "plan" | "trial" | null;
 
 export default function AdminSubscriptionsPage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([]);
@@ -165,6 +169,7 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function handleStatusChange() {
+    if (!hasAdminPermission("subscriptions.manage")) { setActionError("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!selectedSub || !modalValue) return;
     if (modalValue === selectedSub.status) { setModalMode(null); return; }
     setActionLoading(true);
@@ -212,6 +217,7 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function handlePlanChange() {
+    if (!hasAdminPermission("subscriptions.manage")) { setActionError("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!selectedSub || !modalValue) return;
     if (modalValue === selectedSub.plan_id) { setModalMode(null); return; }
     setActionLoading(true);
@@ -252,6 +258,7 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function handleTrialExtend() {
+    if (!hasAdminPermission("subscriptions.manage")) { setActionError("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!selectedSub || !modalDate) return;
     setActionLoading(true);
     setActionError(null);
@@ -301,6 +308,7 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function handleCancel(sub: SubscriptionRow) {
+    if (!hasAdminPermission("subscriptions.manage")) { alert("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!window.confirm(`Cancelar a assinatura de "${sub.contractors?.nome_fantasia}"? Esta ação pode ser revertida.`)) return;
     const { error } = await supabase
       .from("saas_subscriptions")
@@ -321,6 +329,7 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function handleReactivate(sub: SubscriptionRow) {
+    if (!hasAdminPermission("subscriptions.manage")) { alert("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!window.confirm(`Reativar a assinatura de "${sub.contractors?.nome_fantasia}"?`)) return;
     const { error } = await supabase
       .from("saas_subscriptions")

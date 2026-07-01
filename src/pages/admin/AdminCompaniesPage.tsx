@@ -3,9 +3,10 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   Building2, Search, BarChart2, Package, CreditCard,
   FileText, Settings, LogOut, ShieldCheck, Dumbbell,
-  Filter, X, Users, Layers, Boxes,
+  Filter, X, Users, Layers, Boxes, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 
@@ -44,12 +45,15 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",        active: true },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];
 
 export default function AdminCompaniesPage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [companies, setCompanies]   = useState<ContractorRow[]>([]);
@@ -100,6 +104,9 @@ export default function AdminCompaniesPage() {
     auditAction: "COMPANY_BLOCKED" | "COMPANY_UNBLOCKED" | "COMPANY_CANCELLED",
     label: string,
   ) => {
+    const requiredPerm = auditAction === "COMPANY_BLOCKED" ? "companies.block"
+      : auditAction === "COMPANY_CANCELLED" ? "companies.cancel" : "companies.update";
+    if (!hasAdminPermission(requiredPerm)) { alert("Você não tem permissão para executar esta ação."); return; }
     if (!window.confirm(`Confirmar: ${label}?`)) return;
     setActionLoading(id + auditAction);
 
@@ -126,9 +133,10 @@ export default function AdminCompaniesPage() {
       prev.map(c => c.id === id ? { ...c, status: newStatus } : c)
     );
     setActionLoading(null);
-  }, [user]);
+  }, [user, hasAdminPermission]);
 
   const extendTrial = useCallback(async (id: string) => {
+    if (!hasAdminPermission("subscriptions.manage")) { alert("Você não tem permissão para executar esta ação."); return; }
     const current = companies.find(c => c.id === id);
     const base = current?.trial_ends_at
       ? new Date(Math.max(new Date(current.trial_ends_at).getTime(), Date.now()))
@@ -159,7 +167,7 @@ export default function AdminCompaniesPage() {
       prev.map(c => c.id === id ? { ...c, trial_ends_at: iso } : c)
     );
     setActionLoading(null);
-  }, [companies, user]);
+  }, [companies, user, hasAdminPermission]);
 
   function handleLogout() { logout(); navigate("/admin/login", { replace: true }); }
 

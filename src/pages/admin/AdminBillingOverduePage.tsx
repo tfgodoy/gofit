@@ -3,9 +3,10 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Layers, Boxes, AlertTriangle,
-  RefreshCcw, CheckCircle2, Ban, RotateCcw,
+  RefreshCcw, CheckCircle2, Ban, RotateCcw, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 import { toast } from "sonner";
@@ -31,6 +32,8 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",   active: true  },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",         active: true  },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -48,6 +51,7 @@ function daysOverdue(due: string, now: number) {
 
 export default function AdminBillingOverduePage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [invoices, setInvoices] = useState<OverdueInvoice[]>([]);
@@ -77,6 +81,7 @@ export default function AdminBillingOverduePage() {
   const totalOverdue = useMemo(() => invoices.reduce((s, i) => s + Number(i.amount), 0), [invoices]);
 
   async function handleMarkPaid(invoice: OverdueInvoice) {
+    if (!hasAdminPermission("billing.mark_paid")) { toast.error("Você não tem permissão para marcar faturas como pagas."); return; }
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como paga manualmente?`)) return;
     setSaving(true);
     const nowIso = new Date().toISOString();
@@ -115,6 +120,7 @@ export default function AdminBillingOverduePage() {
   }
 
   async function handleBlockSubscription(invoice: OverdueInvoice) {
+    if (!hasAdminPermission("billing.block_subscription")) { toast.error("Você não tem permissão para bloquear assinaturas."); return; }
     if (!invoice.subscription_id) { toast.error("Fatura sem assinatura vinculada."); return; }
     if (!window.confirm(`Bloquear assinatura de ${invoice.contractors?.nome_fantasia}? A empresa perderá acesso ao sistema.`)) return;
     setSaving(true);
@@ -138,6 +144,7 @@ export default function AdminBillingOverduePage() {
   }
 
   async function handleReactivate(invoice: OverdueInvoice) {
+    if (!hasAdminPermission("billing.reactivate_subscription")) { toast.error("Você não tem permissão para reativar assinaturas."); return; }
     if (!invoice.subscription_id) { toast.error("Fatura sem assinatura vinculada."); return; }
     if (!window.confirm(`Reativar assinatura de ${invoice.contractors?.nome_fantasia} sem pagamento?`)) return;
     setSaving(true);
@@ -160,6 +167,7 @@ export default function AdminBillingOverduePage() {
   }
 
   async function handleCreateAsaas(invoice: OverdueInvoice) {
+    if (!hasAdminPermission("billing.create_invoice")) { toast.error("Você não tem permissão para criar cobranças."); return; }
     setSaving(true);
     try {
       const session = await supabase.auth.getSession();

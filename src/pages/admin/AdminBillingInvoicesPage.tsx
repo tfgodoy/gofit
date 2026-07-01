@@ -3,9 +3,10 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Layers, Boxes, Search,
-  RefreshCcw, ExternalLink,
+  RefreshCcw, ExternalLink, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 import { toast } from "sonner";
@@ -36,6 +37,8 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",   active: true  },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",         active: true  },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -63,6 +66,7 @@ type ActionModal = { type: "asaas" | "paid_manual" | "cancel" | "overdue"; invoi
 
 export default function AdminBillingInvoicesPage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [invoices, setInvoices]     = useState<Invoice[]>([]);
@@ -101,6 +105,7 @@ export default function AdminBillingInvoicesPage() {
   }, [invoices, search, statusFilter]);
 
   async function handleMarkPaid(invoice: Invoice) {
+    if (!hasAdminPermission("billing.mark_paid")) { toast.error("Você não tem permissão para marcar faturas como pagas."); return; }
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como paga manualmente?`)) return;
     setSaving(true);
     const nowIso = new Date().toISOString();
@@ -140,6 +145,7 @@ export default function AdminBillingInvoicesPage() {
   }
 
   async function handleMarkOverdue(invoice: Invoice) {
+    if (!hasAdminPermission("billing.manage")) { toast.error("Você não tem permissão para marcar faturas como vencidas."); return; }
     if (!window.confirm(`Marcar fatura de ${invoice.contractors?.nome_fantasia} como vencida?`)) return;
     setSaving(true);
     const nowIso = new Date().toISOString();
@@ -173,6 +179,7 @@ export default function AdminBillingInvoicesPage() {
   }
 
   async function handleCancel(invoice: Invoice) {
+    if (!hasAdminPermission("billing.cancel_invoice")) { toast.error("Você não tem permissão para cancelar faturas."); return; }
     if (!window.confirm(`Cancelar fatura de ${invoice.contractors?.nome_fantasia}?`)) return;
     setSaving(true);
     const now = new Date().toISOString();
@@ -194,6 +201,7 @@ export default function AdminBillingInvoicesPage() {
   }
 
   async function handleCreateAsaas(invoice: Invoice, billingType: string) {
+    if (!hasAdminPermission("billing.create_invoice")) { toast.error("Você não tem permissão para criar cobranças."); return; }
     setSaving(true);
     try {
       const session = await supabase.auth.getSession();

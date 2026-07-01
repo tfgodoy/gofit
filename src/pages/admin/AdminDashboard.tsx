@@ -4,7 +4,7 @@ import {
   BarChart2, Building2, Users, Settings, LogOut, ShieldCheck,
   TrendingUp, AlertTriangle, CheckCircle2,
   Dumbbell, CreditCard, UserPlus, Clock, ChevronRight,
-  Activity, DollarSign, FileText, Package, Layers, Boxes,
+  Activity, DollarSign, FileText, Package, Layers, Boxes, KeyRound,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -59,6 +59,8 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",   active: true  },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",         active: true  },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",        active: false },
 ];

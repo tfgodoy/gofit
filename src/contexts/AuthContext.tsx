@@ -246,7 +246,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }
 
-  // Admin-specific login: only allows platform owners. Logs every attempt.
+  // Admin-specific login: allows platform owners (bootstrap/super admin, sempre
+  // aceito) OU admin_users ativos (RBAC — Fase 6). Logs every attempt.
   async function adminLogin(email: string, password: string): Promise<{ error?: string }> {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
@@ -267,12 +268,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("user_id", authData.user.id)
       .maybeSingle();
 
-    if (!ownerRow?.user_id) {
+    const isPlatformOwner = !!ownerRow?.user_id;
+
+    let isActiveAdminUser = false;
+    if (!isPlatformOwner) {
+      const { data: adminUserRow } = await supabase
+        .from("admin_users")
+        .select("id, status")
+        .eq("user_id", authData.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      isActiveAdminUser = !!adminUserRow?.id;
+    }
+
+    if (!isPlatformOwner && !isActiveAdminUser) {
       await supabase.auth.signOut();
       await logAdminAudit({
         action: "ADMIN_LOGIN_DENIED",
         adminUserId: authData.user.id,
-        metadata: { reason: "not_platform_owner" },
+        metadata: { reason: "not_platform_owner_or_admin_user" },
       });
       return { error: "Acesso não autorizado para esta área." };
     }
@@ -285,6 +299,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setUser(ownerUser);
     localStorage.setItem("fitcoresys_user", JSON.stringify(ownerUser));
+
+    await supabase
+      .from("admin_users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("user_id", authData.user.id);
 
     await logAdminAudit({
       action: "ADMIN_LOGIN_SUCCESS",

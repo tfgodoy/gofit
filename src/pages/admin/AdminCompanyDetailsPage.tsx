@@ -5,9 +5,10 @@ import {
   Settings, LogOut, ShieldCheck, Dumbbell, ArrowLeft,
   Users, Clock, Globe, Phone, Mail, MapPin, Hash,
   CheckCircle2, XCircle, AlertTriangle, Loader2, Layers,
-  Boxes, ToggleLeft, ToggleRight, Plus,
+  Boxes, ToggleLeft, ToggleRight, Plus, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 
@@ -119,6 +120,8 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",        active: true },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",        active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",       active: false },
 ];
@@ -127,6 +130,7 @@ export default function AdminCompanyDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
 
   const [company, setCompany]           = useState<ContractorDetail | null>(null);
   const [staff, setStaff]               = useState<StaffRow[]>([]);
@@ -213,6 +217,7 @@ export default function AdminCompanyDetailsPage() {
 
   /* ── Toggle override de módulo por empresa ────────────────────── */
   async function handleToggleCompanyModule(cm: CompanyModuleRow) {
+    if (!hasAdminPermission("company_modules.manage")) { alert("Você não tem permissão para gerenciar módulos da empresa."); return; }
     if (!company) return;
     const newStatus = cm.status === "active" ? "cancelled" : "active";
     const auditAction = newStatus === "active" ? "COMPANY_MODULE_ENABLED" : "COMPANY_MODULE_DISABLED";
@@ -243,6 +248,7 @@ export default function AdminCompanyDetailsPage() {
 
   /* ── Adicionar override de módulo para empresa ─────────────────── */
   async function handleAddModuleOverride(globalMod: GlobalModuleRow) {
+    if (!hasAdminPermission("company_modules.manage")) { alert("Você não tem permissão para gerenciar módulos da empresa."); return; }
     if (!company) return;
     if (!window.confirm(`Ativar o módulo "${globalMod.name}" manualmente para esta empresa?`)) return;
 
@@ -283,6 +289,9 @@ export default function AdminCompanyDetailsPage() {
     auditAction: "COMPANY_BLOCKED" | "COMPANY_UNBLOCKED" | "COMPANY_CANCELLED",
     label: string,
   ) {
+    const requiredPerm = auditAction === "COMPANY_BLOCKED" ? "companies.block"
+      : auditAction === "COMPANY_CANCELLED" ? "companies.cancel" : "companies.update";
+    if (!hasAdminPermission(requiredPerm)) { alert("Você não tem permissão para executar esta ação."); return; }
     if (!company || !window.confirm(`Confirmar: ${label}?`)) return;
     setActionLoading(auditAction);
 
@@ -306,6 +315,7 @@ export default function AdminCompanyDetailsPage() {
   }
 
   async function extendTrial() {
+    if (!hasAdminPermission("subscriptions.manage")) { alert("Você não tem permissão para gerenciar assinaturas."); return; }
     if (!company) return;
     const base = company.trial_ends_at
       ? new Date(Math.max(new Date(company.trial_ends_at).getTime(), Date.now()))

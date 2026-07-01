@@ -4,9 +4,10 @@ import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Boxes, Layers,
   CheckCircle2, XCircle, Pencil, Plus, Trash2, Loader2,
-  AlertCircle, ToggleLeft, ToggleRight, ChevronDown,
+  AlertCircle, ToggleLeft, ToggleRight, ChevronDown, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 
@@ -85,6 +86,8 @@ const navItems = [
   { icon: Layers,    label: "Assinaturas",  to: "/admin/subscriptions",  active: true },
   { icon: Boxes,     label: "Módulos",      to: "/admin/modules",        active: true },
   { icon: CreditCard,label: "Financeiro",   to: "/admin/billing",        active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,  label: "Auditoria",    to: "/admin/audit",          active: false },
   { icon: Settings,  label: "Configurações",to: "/admin/settings",       active: false },
 ];
@@ -92,6 +95,7 @@ const navItems = [
 /* ══════════════════════════════════════════════════════════════════ */
 export default function AdminModulesPage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<"catalog" | "plan_features">("catalog");
@@ -195,6 +199,7 @@ export default function AdminModulesPage() {
 
   /* ── Toggle status do módulo global ─────────────────────────── */
   async function handleToggleModuleStatus(mod: GlobalModule) {
+    if (!hasAdminPermission("modules.manage")) { alert("Você não tem permissão para gerenciar módulos."); return; }
     const newStatus = mod.status === "active" ? "coming_soon" : "active";
     const actionKey = mod.status === "active" ? "MODULE_GLOBAL_DISABLED" : "MODULE_GLOBAL_ENABLED";
     if (!window.confirm(
@@ -223,6 +228,7 @@ export default function AdminModulesPage() {
 
   /* ── Toggle visibilidade do módulo ──────────────────────────── */
   async function handleToggleVisible(mod: GlobalModule) {
+    if (!hasAdminPermission("modules.manage")) { alert("Você não tem permissão para gerenciar módulos."); return; }
     setActionLoading(mod.id + "_visible");
     await supabase
       .from("modules")
@@ -253,6 +259,7 @@ export default function AdminModulesPage() {
   }
 
   async function handleSaveMod() {
+    if (!hasAdminPermission("modules.manage")) { setModError("Você não tem permissão para gerenciar módulos."); return; }
     if (!modForm.name.trim() || !modForm.slug.trim()) {
       setModError("Nome e slug são obrigatórios.");
       return;
@@ -301,6 +308,7 @@ export default function AdminModulesPage() {
 
   /* ── Toggle feature por plano ────────────────────────────────── */
   async function handleToggleFeature(feat: PlanFeature) {
+    if (!hasAdminPermission("plan_features.manage")) { alert("Você não tem permissão para gerenciar features de plano."); return; }
     setActionLoading(feat.id);
     const { error } = await supabase
       .from("saas_plan_features")
@@ -327,6 +335,7 @@ export default function AdminModulesPage() {
 
   /* ── Alterar limite de feature ───────────────────────────────── */
   async function handleUpdateLimit(feat: PlanFeature, newLimit: string) {
+    if (!hasAdminPermission("plan_features.manage")) { alert("Você não tem permissão para gerenciar features de plano."); return; }
     const limitVal = newLimit === "" ? null : parseInt(newLimit);
     if (newLimit !== "" && isNaN(limitVal!)) return;
     setActionLoading(feat.id + "_limit");
@@ -356,6 +365,7 @@ export default function AdminModulesPage() {
 
   /* ── Remover feature do plano ────────────────────────────────── */
   async function handleRemoveFeature(feat: PlanFeature) {
+    if (!hasAdminPermission("plan_features.manage")) { alert("Você não tem permissão para gerenciar features de plano."); return; }
     const plan = plans.find(p => p.id === feat.plan_id);
     if (!window.confirm(`Remover a feature "${feat.feature_key}" do plano "${plan?.name}"?`)) return;
     setActionLoading(feat.id + "_remove");
@@ -375,6 +385,7 @@ export default function AdminModulesPage() {
 
   /* ── Adicionar feature ao plano ──────────────────────────────── */
   async function handleAddFeature() {
+    if (!hasAdminPermission("plan_features.manage")) { setFeatureError("Você não tem permissão para gerenciar features de plano."); return; }
     if (!addingFeatureKey.trim() || !selectedPlanId) return;
     const limitVal = addingFeatureLimit === "" ? null : parseInt(addingFeatureLimit);
     if (addingFeatureLimit !== "" && isNaN(limitVal!)) {

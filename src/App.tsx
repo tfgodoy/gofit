@@ -17,7 +17,10 @@ import AdminModulesPage          from "@/pages/admin/AdminModulesPage";
 import AdminBillingPage          from "@/pages/admin/AdminBillingPage";
 import AdminBillingInvoicesPage  from "@/pages/admin/AdminBillingInvoicesPage";
 import AdminBillingOverduePage   from "@/pages/admin/AdminBillingOverduePage";
+import AdminUsersPage            from "@/pages/admin/AdminUsersPage";
+import AdminRolesPage            from "@/pages/admin/AdminRolesPage";
 import AdminGuard                from "@/components/auth/AdminGuard";
+import RequireAdminPermission    from "@/components/auth/RequireAdminPermission";
 import ContractorDashboard    from "@/pages/ContractorDashboard";
 import AlunosPage             from "@/pages/app/AlunosPage";
 import AlunoFormPage          from "@/pages/app/AlunoFormPage";
@@ -139,15 +142,17 @@ export default function App() {
             {/* Admin GoFit — área administrativa da plataforma */}
             <Route path="/admin/login"     element={<AdminLoginPage />} />
             <Route path="/admin/dashboard"      element={<AdminGuard><AdminDashboard /></AdminGuard>} />
-            <Route path="/admin/companies"      element={<AdminGuard><AdminCompaniesPage /></AdminGuard>} />
-            <Route path="/admin/companies/:id"  element={<AdminGuard><AdminCompanyDetailsPage /></AdminGuard>} />
-            <Route path="/admin/plans"          element={<AdminGuard><AdminPlansPage /></AdminGuard>} />
-            <Route path="/admin/subscriptions"  element={<AdminGuard><AdminSubscriptionsPage /></AdminGuard>} />
-            <Route path="/admin/modules"        element={<AdminGuard><AdminModulesPage /></AdminGuard>} />
-            <Route path="/admin/billing"        element={<AdminGuard><AdminBillingPage /></AdminGuard>} />
-            <Route path="/admin/billing/invoices" element={<AdminGuard><AdminBillingInvoicesPage /></AdminGuard>} />
-            <Route path="/admin/billing/overdue"  element={<AdminGuard><AdminBillingOverduePage /></AdminGuard>} />
-            {/* Rotas admin futuras (Fases 6-7) ficam aqui — protegidas por AdminGuard */}
+            <Route path="/admin/companies"      element={<AdminGuard><RequireAdminPermission permission="companies.view"><AdminCompaniesPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/companies/:id"  element={<AdminGuard><RequireAdminPermission permission="companies.view"><AdminCompanyDetailsPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/plans"          element={<AdminGuard><RequireAdminPermission permission="plans.view"><AdminPlansPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/subscriptions"  element={<AdminGuard><RequireAdminPermission permission="subscriptions.view"><AdminSubscriptionsPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/modules"        element={<AdminGuard><RequireAdminPermission permission="modules.view"><AdminModulesPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/billing"        element={<AdminGuard><RequireAdminPermission permission="billing.view"><AdminBillingPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/billing/invoices" element={<AdminGuard><RequireAdminPermission permission="billing.view"><AdminBillingInvoicesPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/billing/overdue"  element={<AdminGuard><RequireAdminPermission permission="billing.view"><AdminBillingOverduePage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/users"          element={<AdminGuard><RequireAdminPermission permission="admin_users.view"><AdminUsersPage /></RequireAdminPermission></AdminGuard>} />
+            <Route path="/admin/roles"          element={<AdminGuard><RequireAdminPermission permission="admin_roles.view"><AdminRolesPage /></RequireAdminPermission></AdminGuard>} />
+            {/* Rotas admin futuras (Fase 7) ficam aqui — protegidas por AdminGuard */}
             <Route path="/admin/*"              element={<AdminGuard><Navigate to="/admin/dashboard" replace /></AdminGuard>} />
 
             {/* Owner legado — redireciona para /admin enquanto existir bookmarks antigos */}

@@ -3,9 +3,10 @@ import { useNavigate, NavLink } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Plus, Pencil, CheckCircle2,
-  XCircle, Layers, AlertCircle, Boxes,
+  XCircle, Layers, AlertCircle, Boxes, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { logAdminAudit } from "@/lib/adminAudit";
 
@@ -63,6 +64,8 @@ const navItems = [
   { icon: Layers,    label: "Assinaturas",  to: "/admin/subscriptions",   active: true },
   { icon: Boxes,     label: "Módulos",      to: "/admin/modules",         active: true },
   { icon: CreditCard,label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,  label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,  label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -73,6 +76,7 @@ function slugify(text: string) {
 
 export default function AdminPlansPage() {
   const { user, logout } = useAuth();
+  const { hasAdminPermission } = useAdminPermissions();
   const navigate = useNavigate();
 
   const [plans, setPlans] = useState<SaasPlan[]>([]);
@@ -134,6 +138,7 @@ export default function AdminPlansPage() {
   }
 
   async function handleSave() {
+    if (!hasAdminPermission("plans.manage")) { setError("Você não tem permissão para gerenciar planos."); return; }
     if (!form.name.trim() || !form.slug.trim()) {
       setError("Nome e slug são obrigatórios.");
       return;
@@ -191,6 +196,7 @@ export default function AdminPlansPage() {
   }
 
   async function toggleStatus(plan: SaasPlan) {
+    if (!hasAdminPermission("plans.manage")) { alert("Você não tem permissão para gerenciar planos."); return; }
     const newStatus = plan.status === "active" ? "inactive" : "active";
     const label = newStatus === "active" ? "ativar" : "inativar";
     if (!window.confirm(`Deseja ${label} o plano "${plan.name}"?`)) return;

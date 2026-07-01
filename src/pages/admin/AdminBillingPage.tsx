@@ -3,7 +3,7 @@ import { useNavigate, NavLink, Link } from "react-router-dom";
 import {
   BarChart2, Building2, Package, CreditCard, FileText, Settings,
   LogOut, ShieldCheck, Dumbbell, Layers, Boxes, TrendingUp,
-  AlertTriangle, CheckCircle2, Clock, XCircle,
+  AlertTriangle, CheckCircle2, Clock, XCircle, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +32,8 @@ const navItems = [
   { icon: Layers,     label: "Assinaturas",  to: "/admin/subscriptions",   active: true  },
   { icon: Boxes,      label: "Módulos",      to: "/admin/modules",         active: true  },
   { icon: CreditCard, label: "Financeiro",   to: "/admin/billing",         active: true  },
+  { icon: Users, label: "Usuários", to: "/admin/users", active: true },
+  { icon: KeyRound, label: "Papéis", to: "/admin/roles", active: true },
   { icon: FileText,   label: "Auditoria",    to: "/admin/audit",           active: false },
   { icon: Settings,   label: "Configurações",to: "/admin/settings",        active: false },
 ];
@@ -72,7 +74,6 @@ export default function AdminBillingPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
 
       const [sumRes, recentRes] = await Promise.all([
         supabase
