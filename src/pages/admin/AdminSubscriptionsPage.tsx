@@ -256,6 +256,8 @@ export default function AdminSubscriptionsPage() {
     setActionError(null);
 
     const newTrialEnd = new Date(modalDate + "T23:59:59Z").toISOString();
+
+    // 1. Atualiza fonte da verdade: saas_subscriptions.trial_end
     const { error } = await supabase
       .from("saas_subscriptions")
       .update({
@@ -266,6 +268,12 @@ export default function AdminSubscriptionsPage() {
       .eq("id", selectedSub.id);
 
     if (error) { setActionError(error.message); setActionLoading(false); return; }
+
+    // 2. Sincroniza campo legacy contractors.trial_ends_at (compatibilidade com alertas e companies page)
+    await supabase
+      .from("contractors")
+      .update({ trial_ends_at: newTrialEnd })
+      .eq("id", selectedSub.contractor_id);
 
     await insertSubEvent(
       selectedSub.id, selectedSub.contractor_id,

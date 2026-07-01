@@ -104,6 +104,10 @@ export default function AdminDashboard() {
   const [mrrHistory, setMrrHistory]     = useState<{ mes: string; mrr: number }[]>([]);
   const [signupsHistory, setSignupsHistory] = useState<{ mes: string; novos: number; churn: number }[]>([]);
   const [dataLoading, setDataLoading]   = useState(true);
+  // AJ-3: mapa contractor_id → nome do plano via saas_subscriptions (fonte da verdade)
+  const [subPlanMap, setSubPlanMap]     = useState<Record<string, string>>({});
+  // AJ-4: trials expirando em 7 dias via saas_subscriptions.trial_end (fonte da verdade)
+  const [expiringTrials, setExpiringTrials] = useState<{ id: string; nome_fantasia: string; trial_end: string }[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -121,7 +125,7 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false }),
         supabase
           .from("saas_subscriptions")
-          .select("id, contractor_id, status, plan_id, created_at, saas_plans(name, slug, price_monthly)"),
+          .select("id, contractor_id, status, plan_id, created_at, trial_end, saas_plans(name, slug, price_monthly)"),
         supabase
           .from("saas_subscription_events")
           .select("event_type, created_at")
@@ -179,6 +183,32 @@ export default function AdminDashboard() {
         }).length;
       });
 
+      // AJ-3: mapa contractor_id → nome do plano (saas_subscriptions é fonte da verdade)
+      const planMap: Record<string, string> = {};
+      (subsData ?? []).forEach(s => {
+        const planName = (s.saas_plans as { name: string } | null)?.name;
+        if (planName) planMap[s.contractor_id] = planName;
+      });
+
+      // AJ-4: alertas de trial via saas_subscriptions.trial_end (fonte da verdade)
+      const nowMs = Date.now();
+      const sevenDays = 7 * 86400000;
+      const contractorNameMap: Record<string, string> = {};
+      contractorsData.forEach(c => { contractorNameMap[c.id] = c.nome_fantasia; });
+      const expiring = (subsData ?? [])
+        .filter(s => {
+          if (s.status !== "trialing") return false;
+          const te = (s as { trial_end?: string | null }).trial_end;
+          if (!te) return false;
+          const delta = new Date(te).getTime() - nowMs;
+          return delta >= 0 && delta <= sevenDays;
+        })
+        .map(s => ({
+          id: s.contractor_id,
+          nome_fantasia: contractorNameMap[s.contractor_id] ?? s.contractor_id,
+          trial_end: (s as { trial_end: string }).trial_end,
+        }));
+
       setStats({
         mrr,
         activeCompanies: active.length,
@@ -191,6 +221,8 @@ export default function AdminDashboard() {
       setPlanDist(dist);
       setMrrHistory(months.map(({ mes, mrr: m }) => ({ mes, mrr: m })));
       setSignupsHistory(months.map(({ mes, novos, churn }) => ({ mes, novos, churn })));
+      setSubPlanMap(planMap);
+      setExpiringTrials(expiring);
       setDataLoading(false);
     }
     load();
@@ -203,12 +235,6 @@ export default function AdminDashboard() {
 
   // Capturado uma vez no mount — useState lazy initializer não é considerado render pelo linter
   const [now] = useState(() => Date.now());
-
-  const expiringTrials = companies.filter(c => {
-    if (c.status !== "trial" || !c.trial_ends_at) return false;
-    const days = (new Date(c.trial_ends_at).getTime() - now) / 86400000;
-    return days <= 7 && days >= 0;
-  });
 
   const today = new Date().toLocaleDateString("pt-BR", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -408,13 +434,13 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <ul className="space-y-3">
-                {expiringTrials.map(c => {
-                  const days = Math.ceil((new Date(c.trial_ends_at!).getTime() - now) / 86400000);
+                {expiringTrials.map(e => {
+                  const days = Math.ceil((new Date(e.trial_end).getTime() - now) / 86400000);
                   return (
-                    <li key={c.id} className="flex items-start gap-2.5 p-3 bg-yellow-50 rounded-xl">
+                    <li key={e.id} className="flex items-start gap-2.5 p-3 bg-yellow-50 rounded-xl">
                       <Clock className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-xs font-semibold text-gray-800">{c.nome_fantasia}</p>
+                        <p className="text-xs font-semibold text-gray-800">{e.nome_fantasia}</p>
                         <p className="text-xs text-yellow-700">Trial expira em {days} dia{days !== 1 ? "s" : ""}</p>
                       </div>
                     </li>
@@ -477,7 +503,8 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-4 py-3.5">
                         <span className="text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-                          {PLAN_LABELS[c.plan] ?? c.plan}
+                          {/* AJ-3: usa saas_subscriptions como fonte principal; contractors.plan é fallback legado */}
+                          {subPlanMap[c.id] ?? PLAN_LABELS[c.plan] ?? "Sem assinatura"}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">

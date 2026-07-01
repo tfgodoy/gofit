@@ -225,22 +225,47 @@ export default function AdminCompanyDetailsPage() {
     if (!window.confirm(`Estender trial por 14 dias (até ${newDate.toLocaleDateString("pt-BR")})?`)) return;
     setActionLoading("TRIAL");
 
-    const { error } = await supabase
+    // 1. Atualiza campo legacy em contractors (compatibilidade com alertas do dashboard)
+    const { error: e1 } = await supabase
       .from("contractors")
       .update({ trial_ends_at: iso })
       .eq("id", company.id);
 
-    if (error) { alert("Erro ao estender trial."); setActionLoading(null); return; }
+    if (e1) { alert("Erro ao estender trial."); setActionLoading(null); return; }
 
+    // 2. Atualiza fonte da verdade: saas_subscriptions.trial_end
+    if (subscription) {
+      await supabase
+        .from("saas_subscriptions")
+        .update({ trial_end: iso, updated_at: new Date().toISOString() })
+        .eq("id", subscription.id);
+
+      // 3. Registra evento imutável em saas_subscription_events
+      await supabase.from("saas_subscription_events").insert({
+        subscription_id: subscription.id,
+        contractor_id: company.id,
+        event_type: "TRIAL_EXTENDED",
+        old_value: { trial_end: subscription.trial_end },
+        new_value: { trial_end: iso },
+        metadata: { source: "admin_company_details", days_added: 14 },
+        created_by: user?.id ?? null,
+      });
+    }
+
+    // 4. Auditoria administrativa
     await logAdminAudit({
       action: "TRIAL_EXTENDED",
       adminUserId: user?.id,
       targetType: "contractor",
       targetId: company.id,
-      metadata: { nova_data: iso },
+      metadata: { nova_data: iso, subscription_id: subscription?.id },
     });
 
+    // 5. Atualiza estado local
     setCompany(prev => prev ? { ...prev, trial_ends_at: iso } : prev);
+    if (subscription) {
+      setSubscription(prev => prev ? { ...prev, trial_end: iso } : prev);
+    }
     setActionLoading(null);
   }
 
