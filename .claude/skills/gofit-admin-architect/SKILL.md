@@ -415,39 +415,51 @@ Antes de escrever qualquer linha de código, sempre:
 
 ---
 
-### FASE 6 — RBAC Administrativo
+### ✅ FASE 6 — RBAC Administrativo (CONCLUÍDA DEFINITIVAMENTE)
 
-**Objetivo:** Evoluir de Owner único para equipe administrativa com permissões.
+**Status:** Concluída e validada em browser real (login, /admin/users, /admin/roles). tsc: OK. build: OK. lint: OK. Commit: `63136da9f`.
 
-**Tabelas:**
-```sql
-admin_users (id, user_id UUID REFERENCES auth.users, name, email, role_id, active, created_at)
-admin_roles (id, name, slug, description, created_at)
-admin_permissions (id, key TEXT UNIQUE, description)
-admin_role_permissions (role_id, permission_key)
-```
+**O que foi implementado:**
+- Migration `20260701_051_admin_rbac.sql`: 5 tabelas com RLS completa
+  - `admin_roles` — papéis (super_admin, financeiro, comercial, suporte, operacoes, leitura), com `is_system_role` protegendo super_admin
+  - `admin_permissions` — 29 permissões seedadas, agrupadas por categoria (Empresas, Planos e Assinaturas, Módulos, Financeiro SaaS, Admin/RBAC, Auditoria, Suporte, Configurações)
+  - `admin_users` — vincula `auth.users` existente à área `/admin/*`; status `active/inactive/suspended`
+  - `admin_user_roles` — vínculo N:N usuário↔papel
+  - `admin_role_permissions` — vínculo N:N papel↔permissão, seedado por role conforme regras de negócio
+  - Bootstrap automático: todo `user_id` já em `platform_owners` vira `admin_users` ativo com role `super_admin` (idempotente)
+- Migration `20260701_052_admin_rbac_helpers.sql`: RPC `find_auth_user_by_email` (SECURITY DEFINER) — localiza usuário Supabase Auth existente pelo e-mail sem expor `auth.users` no frontend nem usar service role
+- Migration `20260701_053_admin_rbac_fix_recursion.sql`: **correção crítica** — as policies `*_admin_users_select` faziam `EXISTS (SELECT ... FROM admin_users ...)` diretamente, o que causa recursão infinita porque `admin_users` tem RLS habilitada com essa mesma policy (erro 500 em produção). Corrigido com função `SECURITY DEFINER is_active_admin_user(uuid)` que quebra a recursão.
+- `src/hooks/useAdminPermissions.ts` — hook central: resolve `isSuperAdmin`, `isPlatformOwner`, `roles`, `permissions` e expõe `hasAdminPermission()` / `hasAnyAdminPermission()` / `hasAllAdminPermissions()`. `platform_owners` é sempre super_admin implícito, mesmo sem linha em `admin_user_roles`.
+- `src/components/auth/RequireAdminPermission.tsx` — gate de rota/UI; bloqueia com mensagem amigável e registra `ADMIN_ACCESS_DENIED_BY_PERMISSION`
+- `AdminGuard` atualizado: revalida (a cada navegação) se o usuário é `platform_owner` OU `admin_users` com `status='active'`; se um admin_user for desativado, a sessão local é derrubada no próximo acesso a `/admin/*`
+- `adminLogin()` no `AuthContext` atualizado: aceita `platform_owners` OU `admin_users` ativos (antes só aceitava platform_owners); atualiza `last_login_at`
+- `/admin/users` — lista admins, cria vínculo por e-mail (via RPC), ativa/desativa, atribui/remove papel; protege contra remover o último `super_admin` ativo
+- `/admin/roles` — visualização de papéis e permissões (edição de permissões fica para Fase 7 — decisão consciente para reduzir risco de erro humano em produção; papéis são geridos via seed de migration)
+- Permissões aplicadas via `hasAdminPermission()` no início de todo handler sensível existente: `AdminCompaniesPage`, `AdminCompanyDetailsPage`, `AdminPlansPage`, `AdminSubscriptionsPage`, `AdminModulesPage`, `AdminBillingInvoicesPage`, `AdminBillingOverduePage`, `AdminUsersPage`
+- 12 novos eventos de auditoria: `ADMIN_USER_CREATED/UPDATED/ACTIVATED/DEACTIVATED`, `ADMIN_ROLE_ASSIGNED/REMOVED/CREATED/UPDATED/DEACTIVATED`, `ADMIN_PERMISSION_GRANTED/REVOKED`, `ADMIN_ACCESS_DENIED_BY_PERMISSION`
 
-**Papéis sugeridos:** Super Admin, Financeiro, Comercial, Suporte, Técnico/Ops, Leitura
+**Mapeamento de permissões por rota/ação (regra canônica):**
+| Recurso | View | Ações sensíveis |
+|---|---|---|
+| Empresas | `companies.view` | `companies.update`, `companies.block`, `companies.cancel` |
+| Planos | `plans.view` | `plans.manage` |
+| Assinaturas | `subscriptions.view` | `subscriptions.manage` (troca plano, status, trial, cancelar, reativar) |
+| Módulos | `modules.view` | `modules.manage`, `plan_features.manage`, `company_modules.manage` |
+| Financeiro SaaS | `billing.view` | `billing.create_invoice`, `billing.mark_paid`, `billing.manage` (marcar vencida), `billing.cancel_invoice`, `billing.block_subscription`, `billing.reactivate_subscription` |
+| RBAC | `admin_users.view`, `admin_roles.view` | `admin_users.manage` |
 
-**Permissões sugeridas:**
-```
-companies.view / companies.update / companies.block / companies.cancel
-billing.view / billing.manage / billing.refund
-plans.view / plans.manage
-modules.view / modules.manage
-admin_users.view / admin_users.manage
-support.impersonate
-audit_logs.view
-settings.update
-```
+**Regras de segurança RBAC (obrigatórias em todas as fases futuras):**
+- Nunca remover o último `super_admin` ativo (checado em `handleToggleStatus` e `handleRemoveRole` de `AdminUsersPage`)
+- `platform_owners` sempre bootstrap/fallback — nunca removido nem substituído
+- Toda checagem de permissão sensível deve ocorrer no handler (não só ocultar botão) — defesa em profundidade
+- RLS de tabelas RBAC nunca deve ter policy para `anon`
+- Qualquer nova policy SELECT em tabela RBAC que precise checar "sou admin ativo" DEVE usar `public.is_active_admin_user(auth.uid())` — nunca um `EXISTS (SELECT ... FROM admin_users ...)` inline, para não reintroduzir a recursão corrigida na migration 053
 
-**Telas:**
-- `/admin/users` — criar, editar, ativar/inativar, atribuir role
-
-**Critérios de aceite:**
-- Nem todo admin é Super Admin
-- Cada ação valida permissão específica antes de executar
-- Toda ação registrada em auditoria
+**O que NÃO deve ser alterado nas próximas fases:**
+- Não recriar as tabelas RBAC, RPCs ou as 3 migrations 051/052/053
+- Não recriar `useAdminPermissions`, `RequireAdminPermission`
+- Não reverter a checagem de `admin_users.status` no `AdminGuard`
+- Não editar permissões de `admin_roles` diretamente por UI ainda — fica para Fase 7
 
 ---
 
